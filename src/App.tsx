@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import { HashRouter, Routes, Route, useNavigate, useParams } from "react-router-dom";
 import { bridge, Session, Message } from "@/bridge";
-import { INITIAL_FOLDERS, INITIAL_MESSAGES, ProjectFolder } from "./mockData";
+import { INITIAL_PROJECT_NAMES } from "./mockData";
 import "./App.css";
 
 // --- Inline SVG Icons Helper ---
@@ -22,7 +23,7 @@ const Icons = {
     </svg>
   ),
   Folder: () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="#8a8a8f" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8a8a8f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
   ),
@@ -188,20 +189,11 @@ function renderMarkdown(text: string) {
   return elements;
 }
 
-// Inline formatting helper (handles bold **, code `, and files links [name](file://))
+// Inline formatting helper
 function parseInlineMarkdown(text: string): React.ReactNode[] {
-  // Simple tokenizer for bold and inline code
   const parts: React.ReactNode[] = [];
-  let tempText = text;
-
-  // Regexes
-  // Bold (**text**)
-  // Inline code (`code`)
-  // File link ([name](file://path))
-  
-  // We can do a character level or simple token split to keep it easy
   const tokenRegex = /(\*\*.*?\*\*|`.*?`|\[.*?\]\(file:\/\/.*?\))/g;
-  const splitParts = tempText.split(tokenRegex);
+  const splitParts = text.split(tokenRegex);
 
   splitParts.forEach((part, index) => {
     if (part.startsWith("**") && part.endsWith("**")) {
@@ -230,32 +222,39 @@ function parseInlineMarkdown(text: string): React.ReactNode[] {
   return parts;
 }
 
-// --- Main Application Component ---
-function App() {
-  const [folders, setFolders] = useState<ProjectFolder[]>(INITIAL_FOLDERS);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>("session-deepseek-1");
+// --- Main Dashboard Implementation ---
+function MainDashboard() {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [rightPanelTab, setRightPanelTab] = useState<string>("Overview");
 
-  // Track folder expansion state
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    "deepseek-code": true,
-    "imGateway-saas": true,
+  const [expandedFolders] = useState<Record<string, boolean>>({
+    "deepseek-code": false,
   });
 
-  // Track files changed and artifacts of the active message
+  // Toast notification state
+  const [toast, setToast] = useState<{ visible: boolean; message: string }>({
+    visible: false,
+    message: "",
+  });
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  // Active message details for right overview panel
   const [activeFilesChanged, setActiveFilesChanged] = useState<Array<{ name: string; path: string }>>([]);
   const [activeArtifacts, setActiveArtifacts] = useState<Array<{ name: string; type: string }>>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize DB and load initial seed data if empty
+  // Initialize DB and load sessions list
   useEffect(() => {
     async function init() {
       try {
         await bridge.initDb();
-        await loadDatabase();
+        await loadSessions();
       } catch (err) {
         console.error("Database initialization failed:", err);
       }
@@ -263,70 +262,49 @@ function App() {
     init();
   }, []);
 
-  // Scroll to bottom when messages load
+  // Load message logs when session ID changes
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Load active session messages
-  useEffect(() => {
-    if (activeSessionId) {
-      loadMessages(activeSessionId);
+    if (id) {
+      loadMessages(id);
     } else {
       setMessages([]);
       setActiveFilesChanged([]);
       setActiveArtifacts([]);
     }
-  }, [activeSessionId]);
+  }, [id]);
 
-  // Load database sessions and seed if empty
-  async function loadDatabase() {
+  // Scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Trigger Toast Notification
+  function showToast(message: string) {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToast({ visible: true, message });
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast({ visible: false, message: "" });
+    }, 1800);
+  }
+
+  // Load sessions from SQLite/localStorage
+  async function loadSessions() {
     try {
       const dbSessions = await bridge.getSessions();
-      
-      if (dbSessions.length === 0) {
-        // Seeding database with INITIAL_FOLDERS sessions and messages
-        console.log("[Bridge] Database is empty. Seeding initial mockup dataset...");
-        for (const folder of INITIAL_FOLDERS) {
-          for (const s of folder.sessions) {
-            await bridge.saveSession(s);
-            const msgs = INITIAL_MESSAGES[s.id] || [];
-            for (const m of msgs) {
-              await bridge.saveMessage(m);
-            }
-          }
-        }
-        // Query again after seeding
-        const seededSessions = await bridge.getSessions();
-        buildFoldersTree(seededSessions);
-      } else {
-        buildFoldersTree(dbSessions);
-      }
+      setSessions(dbSessions);
     } catch (error) {
-      console.error("Failed to load sessions from database:", error);
+      console.error("Failed to load sessions:", error);
     }
   }
 
-  // Group database sessions by project folders
-  function buildFoldersTree(dbSessions: Session[]) {
-    const updatedFolders = INITIAL_FOLDERS.map((folder) => {
-      // Find all database sessions belonging to this folder/project
-      const folderSessions = dbSessions.filter((s) => s.projectName === folder.name);
-      return {
-        ...folder,
-        sessions: folderSessions,
-      };
-    });
-    setFolders(updatedFolders);
-  }
-
-  // Load messages from SQLite/localStorage for active session
+  // Load messages from SQLite/localStorage
   async function loadMessages(sessionId: string) {
     try {
       const dbMsgs = await bridge.getMessages(sessionId);
       setMessages(dbMsgs);
 
-      // Extract files changed and artifacts from the latest assistant message to populate the right panel
       const lastAssistantMsg = [...dbMsgs].reverse().find((m) => m.role === "assistant");
       if (lastAssistantMsg) {
         setActiveFilesChanged(lastAssistantMsg.filesChanged || []);
@@ -340,38 +318,31 @@ function App() {
     }
   }
 
-  // Create a new session
-  async function createNewSession(projectName: string, initialTitle: string) {
-    const newSessionId = `session-${Date.now()}`;
-    const newSession: Session = {
-      id: newSessionId,
-      title: initialTitle.length > 25 ? initialTitle.substring(0, 25) + "..." : initialTitle,
-      lastMessage: initialTitle,
-      updatedAt: new Date().toISOString(),
-      projectName: projectName,
-    };
-
-    await bridge.saveSession(newSession);
-    await loadDatabase();
-    setActiveSessionId(newSessionId);
-    return newSessionId;
-  }
-
-  // Handle user prompt submission
+  // Handle user send prompt
   async function handleSend() {
     if (!inputText.trim()) return;
 
     const userText = inputText;
     setInputText("");
 
-    let currentSessionId = activeSessionId;
+    let currentSessionId = id;
 
-    // 1. If empty state (no active session), create a new session under deepseek-code first
+    // 1. If currently on new conversation page (no id), create a new session
     if (!currentSessionId) {
-      currentSessionId = await createNewSession("deepseek-code", userText);
+      currentSessionId = `session-${Date.now()}`;
+      const newSession: Session = {
+        id: currentSessionId,
+        title: userText.length > 25 ? userText.substring(0, 25) + "..." : userText,
+        lastMessage: userText,
+        updatedAt: new Date().toISOString(),
+        projectName: "deepseek-code",
+      };
+      await bridge.saveSession(newSession);
+      // Navigate to the session route
+      navigate(`/session/${currentSessionId}`);
     }
 
-    // 2. Save and append User message
+    // 2. Save User message to SQLite/localStorage
     const userMsgId = `msg-user-${Date.now()}`;
     const userMsg: Message = {
       id: userMsgId,
@@ -382,10 +353,10 @@ function App() {
     };
 
     await bridge.saveMessage(userMsg);
-    
-    // Update lastMessage and updatedAt for the session
-    const sessions = await bridge.getSessions();
-    const currentSession = sessions.find((s) => s.id === currentSessionId);
+
+    // Update session timestamp & last message
+    const dbSessions = await bridge.getSessions();
+    const currentSession = dbSessions.find((s) => s.id === currentSessionId);
     if (currentSession) {
       currentSession.lastMessage = userText;
       currentSession.updatedAt = new Date().toISOString();
@@ -393,37 +364,27 @@ function App() {
     }
 
     await loadMessages(currentSessionId);
-    await loadDatabase();
+    await loadSessions();
 
     // 3. Trigger mock response after a short delay
     setTimeout(async () => {
       const assistantMsgId = `msg-agent-${Date.now()}`;
       
-      // Dynamic mock response contents matching the SQLite query
-      let replyContent = `I have received your request: "${userText}". Here is the status code report:`;
+      let replyContent = `我已收到您的输入："${userText}"。根据您的指令，我已经完成了分析并为您提供底层壳能力的相关输出。`;
       let mockFiles: Array<{ name: string; path: string }> = [];
       let mockArtifacts: Array<{ name: string; type: string }> = [];
 
       if (userText.toLowerCase().includes("readme") || userText.includes("宪法")) {
-        replyContent = `我已成功生成项目的 \`README.md\` 并设定了开发宪法规范，同时创建了 \`docs/route-map.md\`。
+        replyContent = `我已为您生成并配置了项目的开发宪法：
         
-### 修改内容：
-- **README.md**：加入了开发宪法规范与安装编译命令说明。
-- **route-map.md**：设计并描述了系统前后端架构。
+### 宪法条款更新：
+1. 双端测试通过后，自动进行 \`git commit\` 提交。
+2. 优先通过 Web 端（Mock 效果）进行调试提速。
 
-已成功提交基线版本并打上 \`v0.0.1\` 标签。`;
-        mockFiles = [
-          { name: "README.md", path: "/Users/yudong22/Documents/deepseek-code" },
-          { name: "route-map.md", path: "docs" }
-        ];
+已更新 [README.md](file:///Users/yudong22/Documents/deepseek-code/README.md) 并执行了本地测试！`;
+        mockFiles = [{ name: "README.md", path: "/Users/yudong22/Documents/deepseek-code" }];
         mockArtifacts = [{ name: "Walkthrough", type: "walkthrough" }];
       } else {
-        replyContent = `我已为您处理完成！根据您的要求，对相关的模块进行了分析和编写。
-        
-### 详细步骤：
-1. 分析当前文件夹架构与配置文件。
-2. 封装门面对象并重构前端视图。
-3. 成功通过了 \`bun run build\` 编译打包验证。`;
         mockFiles = [
           { name: "App.tsx", path: "src" },
           { name: "route-map.md", path: "docs" }
@@ -446,7 +407,6 @@ function App() {
 
       await bridge.saveMessage(assistantMsg);
 
-      // Update session lastMessage
       if (currentSession) {
         currentSession.lastMessage = replyContent.substring(0, 30) + "...";
         currentSession.updatedAt = new Date().toISOString();
@@ -454,58 +414,73 @@ function App() {
       }
 
       await loadMessages(currentSessionId!);
-      await loadDatabase();
+      await loadSessions();
     }, 1000);
   }
 
-  // Toggle Folder Collapsing
-  function toggleFolder(folderName: string) {
-    setExpandedFolders((prev) => ({
-      ...prev,
-      [folderName]: !prev[folderName],
-    }));
-  }
 
-  // Active session title
-  const activeSession = folders
-    .flatMap((f) => f.sessions)
-    .find((s) => s.id === activeSessionId);
+  // Active session title details
+  const activeSession = sessions.find((s) => s.id === id);
+
+  // Helper to format timestamps dynamically (updatedAt to relative/absolute representation)
+  function getSessionTimeLabel(updatedAt: string): string {
+    const diffMs = Date.now() - new Date(updatedAt).getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSecs < 60) return "now";
+    if (diffMins < 60) return `${diffMins}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    return `${diffDays}d`;
+  }
 
   return (
     <div className="app-container">
+      {/* Global Toast component */}
+      {toast.visible && (
+        <div className="toast-container">
+          <div className="toast-bubble">
+            <span style={{ fontSize: "14px" }}>⚠️</span>
+            <span>{toast.message}</span>
+          </div>
+        </div>
+      )}
+
       {/* 1. LEFT SIDEBAR */}
       <aside className="left-sidebar">
-        {/* Windows titlebar circles */}
+        {/* Windows titlebar dots */}
         <div className="window-controls">
           <div className="window-dot red" />
           <div className="window-dot yellow" />
           <div className="window-dot green" />
         </div>
 
-        {/* Toolbar */}
+        {/* Toolbar navigation */}
         <div className="sidebar-toolbar">
           <button className="sidebar-tool-btn">
             <Icons.SidebarToggle />
           </button>
-          <button className="sidebar-tool-btn">
+          <button className="sidebar-tool-btn" onClick={() => navigate(-1)}>
             <Icons.ChevronLeft />
           </button>
-          <button className="sidebar-tool-btn">
+          <button className="sidebar-tool-btn" onClick={() => navigate(1)}>
             <Icons.ChevronRight />
           </button>
         </div>
 
-        {/* Action: New Conversation Button */}
+        {/* Action button: New Conversation */}
         <div className="new-conv-btn-container">
-          <button className="new-conv-btn" onClick={() => setActiveSessionId(null)}>
+          <button className="new-conv-btn" onClick={() => navigate("/")}>
             <Icons.Plus />
             New Conversation
           </button>
         </div>
 
-        {/* Static Navigation Items */}
+        {/* Static navigation */}
         <div className="sidebar-nav">
-          <div className={`nav-item ${!activeSessionId ? "active" : ""}`} onClick={() => setActiveSessionId(null)}>
+          <div className={`nav-item ${!id ? "active" : ""}`} onClick={() => navigate("/")}>
             <Icons.History />
             Conversation History
           </div>
@@ -515,9 +490,10 @@ function App() {
           </div>
         </div>
 
-        {/* Dynamic Project Folders Tree */}
+        {/* Sidebar scroll content */}
         <div className="sidebar-scroll">
-          <div className="section-title">
+          {/* Projects section - Clicking triggers Toast */}
+          <div className="section-title" onClick={() => showToast("暂未开通")}>
             <span>Projects</span>
             <div className="section-title-tools">
               <Icons.Filter />
@@ -526,43 +502,48 @@ function App() {
           </div>
 
           <div style={{ padding: "4px 8px" }}>
-            {folders.map((folder) => {
-              const isExpanded = expandedFolders[folder.name];
+            {INITIAL_PROJECT_NAMES.map((name) => {
+              const isExpanded = expandedFolders[name];
               return (
-                <div key={folder.name} className="folder-item">
-                  <div className="folder-header" onClick={() => toggleFolder(folder.name)}>
+                <div key={name} className="folder-item">
+                  <div className="folder-header" onClick={() => showToast("暂未开通")}>
                     <span style={{ display: "inline-flex", transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.15s" }}>
                       <Icons.ChevronDown />
                     </span>
                     <Icons.Folder />
-                    <span style={{ fontSize: "12px", color: "#3a3a3c" }}>{folder.name}</span>
+                    <span style={{ fontSize: "12px", color: "#3a3a3c" }}>{name}</span>
                   </div>
-
-                  {isExpanded && (
-                    <div className="folder-sessions">
-                      {folder.sessions.map((s) => (
-                        <div
-                          key={s.id}
-                          className={`session-link ${activeSessionId === s.id ? "active" : ""}`}
-                          onClick={() => setActiveSessionId(s.id)}
-                        >
-                          {/* Active Blue dot for GATEWAY-1 active mockup session */}
-                          {s.id === "session-gateway-1" && <span className="active-dot" />}
-                          <span className="session-title-text">{s.title}</span>
-                          <span className="session-time">
-                            {s.id === "session-deepseek-1" ? "5m" : "14d"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               );
             })}
           </div>
+
+          {/* Conversations Section (New) - SQLite dynamic list */}
+          <div className="conversations-section">
+            <div className="conversations-title">Conversations</div>
+            <div className="conversations-list">
+              {sessions.map((s) => (
+                <div
+                  key={s.id}
+                  className={`session-link ${id === s.id ? "active" : ""}`}
+                  onClick={() => navigate(`/session/${s.id}`)}
+                >
+                  <span className="session-title-text" style={{ fontWeight: id === s.id ? "500" : "normal" }}>
+                    {s.title}
+                  </span>
+                  <span className="session-time">{getSessionTimeLabel(s.updatedAt)}</span>
+                </div>
+              ))}
+              {sessions.length === 0 && (
+                <div style={{ padding: "8px 12px", fontSize: "11px", color: "#8a8a8f" }}>
+                  暂无历史会话
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Footer Settings */}
+        {/* Footer settings */}
         <div className="sidebar-footer">
           <div className="nav-item">
             <Icons.Settings />
@@ -573,12 +554,12 @@ function App() {
 
       {/* 2. MIDDLE CHAT PANEL */}
       <main className="middle-panel">
-        {activeSessionId && activeSession ? (
-          // Active Chat view
+        {id && activeSession ? (
+          // Active Chat logs
           <>
             <div className="chat-header">
               <div className="chat-title">
-                <span>{activeSession.projectName}</span>
+                <span>deepseek-code</span>
                 <span>/</span>
                 <span className="chat-title-main">{activeSession.title}</span>
               </div>
@@ -588,7 +569,7 @@ function App() {
               </button>
             </div>
 
-            {/* Chat message feed */}
+            {/* Message stream */}
             <div className="chat-messages-feed">
               {messages.map((msg) => (
                 <div key={msg.id} className="message-wrapper">
@@ -602,7 +583,7 @@ function App() {
                   <div className="message-body">
                     {renderMarkdown(msg.content)}
 
-                    {/* Files changed container */}
+                    {/* Files changed list */}
                     {msg.filesChanged && msg.filesChanged.length > 0 && (
                       <div className="files-changed-summary">
                         <div className="files-summary-header">
@@ -659,7 +640,7 @@ function App() {
             </div>
           </>
         ) : (
-          // Empty state view / New Conversation
+          // Empty State / New Conversation prompt box
           <div className="empty-state-container">
             <div className="empty-state-header">
               <Icons.Folder />
@@ -695,10 +676,9 @@ function App() {
         )}
       </main>
 
-      {/* 3. RIGHT SIDEBAR OVERVIEW PANEL (Rendered only during active chat) */}
-      {activeSessionId && (
+      {/* 3. RIGHT SIDEBAR OVERVIEW PANEL (Rendered only on active conversation history) */}
+      {id && (
         <aside className="right-panel">
-          {/* Panel Tabs */}
           <div className="right-panel-tabs">
             <button
               className={`panel-tab ${rightPanelTab === "Overview" ? "active" : ""}`}
@@ -717,11 +697,9 @@ function App() {
             <button className="panel-tab">default.json</button>
           </div>
 
-          {/* Tab Content */}
           <div className="right-panel-content">
             {rightPanelTab === "Overview" ? (
               <>
-                {/* Subagents */}
                 <div className="panel-section">
                   <div className="panel-section-header">
                     <span>Subagents</span>
@@ -729,7 +707,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Files Changed */}
                 <div className="panel-section">
                   <div className="panel-section-header">
                     <span>Files Changed</span>
@@ -757,7 +734,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Artifacts */}
                 <div className="panel-section">
                   <div className="panel-section-header">
                     <span>Artifacts</span>
@@ -775,7 +751,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* Background Tasks */}
                 <div className="panel-section" style={{ borderBottom: "none" }}>
                   <div className="panel-section-header">
                     <span>Background Tasks</span>
@@ -784,7 +759,7 @@ function App() {
                 </div>
               </>
             ) : (
-              // Task Tab Content
+              // Task checklist
               <div className="panel-section-content">
                 <div className="checklist-item">
                   <input type="checkbox" className="checklist-checkbox" defaultChecked />
@@ -808,6 +783,18 @@ function App() {
         </aside>
       )}
     </div>
+  );
+}
+
+// --- Root Component Wrapping HashRouter ---
+function App() {
+  return (
+    <HashRouter>
+      <Routes>
+        <Route path="/" element={<MainDashboard />} />
+        <Route path="/session/:id" element={<MainDashboard />} />
+      </Routes>
+    </HashRouter>
   );
 }
 

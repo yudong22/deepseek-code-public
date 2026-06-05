@@ -1,5 +1,5 @@
-import { describe, expect, test, beforeEach, spyOn } from "bun:test";
-import { isTauriEnv, bridge } from "./index";
+import { describe, expect, test, beforeEach } from "bun:test";
+import { isTauriEnv } from "./index";
 import { mockBridge } from "./mock";
 import { Session, Message } from "./types";
 
