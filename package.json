@@ -10,7 +10,7 @@
     "tauri": "tauri",
     "test": "cargo check --manifest-path src-tauri/Cargo.toml && bun test",
     "build:mac": "tauri build",
-    "preview:mac": "open src-tauri/target/release/bundle/macos/deepseek-code.app"
+    "preview:mac": "tauri build && open src-tauri/target/release/bundle/macos/deepseek-code.app"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
