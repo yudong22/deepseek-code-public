@@ -1,4 +1,4 @@
-import { IBridge, UpdateResult, Session, Message } from "./types";
+import { IBridge, UpdateResult, Session, Message, AgentEvent } from "./types";
 
 const LOCAL_STORAGE_KEY = "bridge_mock_sessions";
 const LOCAL_MESSAGES_KEY = "bridge_mock_messages";
@@ -118,6 +118,34 @@ export const mockBridge: IBridge = {
   async deleteSetting(key: string): Promise<void> {
     console.warn(`[Bridge Mock] deleteSetting called for key: ${key}`);
     localStorage.removeItem(`bridge_mock_setting_${key}`);
+  },
+
+  async runAgent(
+    _apiKey: string,
+    _model: string,
+    _messages: any[],
+    _workspaceRoot: string,
+    onEvent: (event: AgentEvent) => void
+  ): Promise<void> {
+    console.warn("[Bridge Mock] runAgent called. Simulating agent events.");
+    onEvent({ type: "Thinking", payload: "Thinking: 正在扫描工作区..." });
+    await new Promise((r) => setTimeout(r, 400));
+    onEvent({
+      type: "ToolCall",
+      payload: { name: "Glob", args: JSON.stringify({ pattern: "**/*.tsx" }) },
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    onEvent({
+      type: "ToolResult",
+      payload: { name: "Glob", result: JSON.stringify({ files: ["src/App.tsx", "src/main.tsx"] }) },
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    onEvent({ type: "Thinking", payload: "Thinking: 已经找到 App.tsx，准备提供答复。" });
+    await new Promise((r) => setTimeout(r, 400));
+    onEvent({ type: "Text", payload: "你好！这是来自浏览器 Mock 环境的模拟回复。\n\n" });
+    onEvent({ type: "Text", payload: "在原生桌面端运行此应用时，我将加载真实的 6 大核心工具（FileRead, FileWrite, FileEdit, Grep, Glob, Bash）并代表您执行真实的任务。" });
+    await new Promise((r) => setTimeout(r, 400));
+    onEvent({ type: "Finished", payload: null });
   },
 };
 

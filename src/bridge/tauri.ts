@@ -1,6 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, Channel } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
-import { IBridge, UpdateResult, Session, Message } from "./types";
+import { IBridge, UpdateResult, Session, Message, AgentEvent } from "./types";
 
 let dbInstance: Database | null = null;
 
@@ -48,10 +48,16 @@ export const tauriBridge: IBridge = {
           role TEXT NOT NULL,
           content TEXT NOT NULL,
           createdAt TEXT NOT NULL,
+          reasoningContent TEXT,
           filesChanged TEXT,
           artifacts TEXT
         );
       `);
+      try {
+        await db.execute("ALTER TABLE messages ADD COLUMN reasoningContent TEXT");
+      } catch (e) {
+        // column may already exist
+      }
       await db.execute(`
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
@@ -105,13 +111,14 @@ export const tauriBridge: IBridge = {
     try {
       const db = await getDb();
       await db.execute(
-        "INSERT OR REPLACE INTO messages (id, sessionId, role, content, createdAt, filesChanged, artifacts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO messages (id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
           msg.id,
           msg.sessionId,
           msg.role,
           msg.content,
           msg.createdAt,
+          msg.reasoning_content || null,
           msg.filesChanged ? JSON.stringify(msg.filesChanged) : null,
           msg.artifacts ? JSON.stringify(msg.artifacts) : null,
         ]
@@ -128,14 +135,15 @@ export const tauriBridge: IBridge = {
       interface DbMessage {
         id: string;
         sessionId: string;
-        role: "user" | "assistant";
+        role: "user" | "assistant" | "tool";
         content: string;
         createdAt: string;
+        reasoningContent: string | null;
         filesChanged: string | null;
         artifacts: string | null;
       }
       const rows = await db.select<DbMessage[]>(
-        "SELECT id, sessionId, role, content, createdAt, filesChanged, artifacts FROM messages WHERE sessionId = ? ORDER BY createdAt ASC",
+        "SELECT id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts FROM messages WHERE sessionId = ? ORDER BY createdAt ASC",
         [sessionId]
       );
       return rows.map((row) => ({
@@ -144,6 +152,7 @@ export const tauriBridge: IBridge = {
         role: row.role,
         content: row.content,
         createdAt: row.createdAt,
+        reasoning_content: row.reasoningContent || undefined,
         filesChanged: row.filesChanged ? JSON.parse(row.filesChanged) : undefined,
         artifacts: row.artifacts ? JSON.parse(row.artifacts) : undefined,
       }));
@@ -193,6 +202,31 @@ export const tauriBridge: IBridge = {
       await db.execute("DELETE FROM settings WHERE key = ?", [key]);
     } catch (error) {
       console.error(`Failed to delete setting ${key}:`, error);
+      throw error;
+    }
+  },
+
+  async runAgent(
+    apiKey: string,
+    model: string,
+    messages: any[],
+    workspaceRoot: string,
+    onEvent: (event: AgentEvent) => void
+  ): Promise<void> {
+    try {
+      const channel = new Channel<AgentEvent>();
+      channel.onmessage = (event: AgentEvent) => {
+        onEvent(event);
+      };
+      await invoke("run_agent_loop", {
+        apiKey,
+        model,
+        messages,
+        workspaceRoot,
+        onEvent: channel,
+      });
+    } catch (error) {
+      console.error("Tauri runAgent invocation failed:", error);
       throw error;
     }
   },
