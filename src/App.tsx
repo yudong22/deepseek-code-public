@@ -638,12 +638,6 @@ function MainDashboard() {
 
       {/* 1. LEFT SIDEBAR */}
       <aside className="left-sidebar">
-        {/* Windows titlebar dots */}
-        <div className="window-controls">
-          <div className="window-dot red" />
-          <div className="window-dot yellow" />
-          <div className="window-dot green" />
-        </div>
 
         {/* Toolbar navigation */}
         <div className="sidebar-toolbar">
@@ -748,45 +742,46 @@ function MainDashboard() {
             {/* Message stream */}
             <div className="chat-messages-feed">
               {messages.map((msg) => (
-                <div key={msg.id} className="message-wrapper">
-                  <div className="message-header">
-                    <div className={`message-avatar ${msg.role === "assistant" ? "assistant" : ""}`}>
-                      {msg.role === "assistant" ? "A" : "U"}
+                <div key={msg.id} className={`message-wrapper ${msg.role}`}>
+                  {msg.role === "user" ? (
+                    <div className="message-bubble-user">
+                      {msg.content}
                     </div>
-                    <span>{msg.role === "assistant" ? "AI Assistant" : "User"}</span>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="message-body">
+                        {renderMarkdown(msg.content)}
 
-                  <div className="message-body">
-                    {renderMarkdown(msg.content)}
-
-                    {/* Files changed list */}
-                    {msg.filesChanged && msg.filesChanged.length > 0 && (
-                      <div className="files-changed-summary">
-                        <div className="files-summary-header">
-                          <span>Files Changed ({msg.filesChanged.length})</span>
-                          <Icons.ChevronDown />
-                        </div>
-                        <div className="files-summary-list">
-                          {msg.filesChanged.map((f, idx) => (
-                            <div key={idx} className="file-item-chip">
-                              <a href={`file://${f.path}/${f.name}`} className="file-item-left">
-                                <Icons.FileCode />
-                                {f.name}
-                              </a>
-                              <span className="file-path-desc">{f.path}</span>
+                        {/* Files changed list */}
+                        {msg.filesChanged && msg.filesChanged.length > 0 && (
+                          <div className="files-changed-summary">
+                            <div className="files-summary-header">
+                              <span>Files Changed ({msg.filesChanged.length})</span>
+                              <Icons.ChevronDown />
                             </div>
-                          ))}
-                        </div>
+                            <div className="files-summary-list">
+                              {msg.filesChanged.map((f, idx) => (
+                                <div key={idx} className="file-item-chip">
+                                  <a href={`file://${f.path}/${f.name}`} className="file-item-left">
+                                    <Icons.FileCode />
+                                    {f.name}
+                                  </a>
+                                  <span className="file-path-desc">{f.path}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="message-footer">
-                    <span>14:41</span>
-                    <button className="message-action-icon"><Icons.Like /></button>
-                    <button className="message-action-icon"><Icons.Dislike /></button>
-                    <button className="message-action-icon"><Icons.Copy /></button>
-                  </div>
+                      <div className="message-footer">
+                        <span>14:41</span>
+                        <button className="message-action-icon"><Icons.Like /></button>
+                        <button className="message-action-icon"><Icons.Dislike /></button>
+                        <button className="message-action-icon"><Icons.Copy /></button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
               <div ref={messagesEndRef} />
