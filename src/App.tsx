@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { HashRouter, Routes, Route, useNavigate, useParams } from "react-router-dom";
 import { bridge, Session, Message } from "@/bridge";
-import { INITIAL_PROJECT_NAMES } from "./mockData";
 import "./App.css";
 
 // --- Inline SVG Icons Helper ---
@@ -230,7 +229,6 @@ function MainDashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
-  const [rightPanelTab, setRightPanelTab] = useState<string>("Overview");
 
   // API Key & Model Selection States
   const [apiKey, setApiKey] = useState("");
@@ -239,20 +237,12 @@ function MainDashboard() {
   const [selectedModel, setSelectedModel] = useState("deepseek-v4-flash");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
 
-  const [expandedFolders] = useState<Record<string, boolean>>({
-    "deepseek-code": false,
-  });
-
   // Toast notification state
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({
     visible: false,
     message: "",
   });
   const toastTimeoutRef = useRef<number | null>(null);
-
-  // Active message details for right overview panel
-  const [activeFilesChanged, setActiveFilesChanged] = useState<Array<{ name: string; path: string }>>([]);
-  const [activeArtifacts, setActiveArtifacts] = useState<Array<{ name: string; type: string }>>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -295,8 +285,6 @@ function MainDashboard() {
       loadMessages(id);
     } else {
       setMessages([]);
-      setActiveFilesChanged([]);
-      setActiveArtifacts([]);
     }
   }, [id]);
 
@@ -345,6 +333,23 @@ function MainDashboard() {
     }
   }
 
+  async function handleClearHistory() {
+    try {
+      const allSessions = await bridge.getSessions();
+      for (const s of allSessions) {
+        await bridge.deleteSession(s.id);
+      }
+      showToast("历史会话已全部清空");
+      setIsSettingsOpen(false);
+      navigate("/");
+      await loadSessions();
+    } catch (err) {
+      console.error("清空历史会话失败:", err);
+      showToast("清空失败，请重试");
+    }
+  }
+
+
 
   // Load sessions from SQLite/localStorage
   async function loadSessions() {
@@ -361,15 +366,6 @@ function MainDashboard() {
     try {
       const dbMsgs = await bridge.getMessages(sessionId);
       setMessages(dbMsgs);
-
-      const lastAssistantMsg = [...dbMsgs].reverse().find((m) => m.role === "assistant");
-      if (lastAssistantMsg) {
-        setActiveFilesChanged(lastAssistantMsg.filesChanged || []);
-        setActiveArtifacts(lastAssistantMsg.artifacts || []);
-      } else {
-        setActiveFilesChanged([]);
-        setActiveArtifacts([]);
-      }
     } catch (error) {
       console.error(`Failed to load messages for session ${sessionId}:`, error);
     }
@@ -396,7 +392,7 @@ function MainDashboard() {
       };
       await bridge.saveSession(newSession);
       // Navigate to the session route
-      navigate(`/session/${currentSessionId}`);
+      navigate(`/chat/s/${currentSessionId}`);
     }
 
     // 2. Save User message to SQLite/localStorage
@@ -623,6 +619,9 @@ function MainDashboard() {
               </div>
             </div>
             <div className="settings-modal-footer">
+              <button className="btn-danger" style={{ background: "#ff3b30", color: "#fff", border: "none", marginRight: "auto" }} onClick={handleClearHistory}>
+                Clear History
+              </button>
               {savedApiKey && (
                 <button className="btn-secondary" onClick={handleClearApiKey}>
                   Clear
@@ -669,11 +668,11 @@ function MainDashboard() {
 
         {/* Static navigation */}
         <div className="sidebar-nav">
-          <div className={`nav-item ${!id ? "active" : ""}`} onClick={() => navigate("/")}>
+          <div className="nav-item" onClick={() => showToast("待开发")}>
             <Icons.History />
             Conversation History
           </div>
-          <div className="nav-item">
+          <div className="nav-item" onClick={() => showToast("待开发")}>
             <Icons.Tasks />
             Scheduled Tasks
           </div>
@@ -691,20 +690,7 @@ function MainDashboard() {
           </div>
 
           <div style={{ padding: "4px 8px" }}>
-            {INITIAL_PROJECT_NAMES.map((name) => {
-              const isExpanded = expandedFolders[name];
-              return (
-                <div key={name} className="folder-item">
-                  <div className="folder-header" onClick={() => showToast("暂未开通")}>
-                    <span style={{ display: "inline-flex", transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.15s" }}>
-                      <Icons.ChevronDown />
-                    </span>
-                    <Icons.Folder />
-                    <span style={{ fontSize: "12px", color: "#3a3a3c" }}>{name}</span>
-                  </div>
-                </div>
-              );
-            })}
+            {/* 发布前清空项目文件夹列表 */}
           </div>
 
           {/* Conversations Section (New) - SQLite dynamic list */}
@@ -715,8 +701,9 @@ function MainDashboard() {
                 <div
                   key={s.id}
                   className={`session-link ${id === s.id ? "active" : ""}`}
-                  onClick={() => navigate(`/session/${s.id}`)}
+                  onClick={() => navigate(`/chat/s/${s.id}`)}
                 >
+
                   <span className="session-title-text" style={{ fontWeight: id === s.id ? "500" : "normal" }}>
                     {s.title}
                   </span>
@@ -749,15 +736,14 @@ function MainDashboard() {
           <>
             <div className="chat-header">
               <div className="chat-title">
-                <span>deepseek-code</span>
-                <span>/</span>
                 <span className="chat-title-main">{activeSession.title}</span>
               </div>
-              <button className="header-action-btn">
+              <button className="header-action-btn" onClick={() => showToast("待开发")}>
                 <Icons.IDE />
                 Open IDE
               </button>
             </div>
+
 
             {/* Message stream */}
             <div className="chat-messages-feed">
@@ -916,112 +902,6 @@ function MainDashboard() {
         )}
       </main>
 
-      {/* 3. RIGHT SIDEBAR OVERVIEW PANEL (Rendered only on active conversation history) */}
-      {id && (
-        <aside className="right-panel">
-          <div className="right-panel-tabs">
-            <button
-              className={`panel-tab ${rightPanelTab === "Overview" ? "active" : ""}`}
-              onClick={() => setRightPanelTab("Overview")}
-            >
-              Overview
-            </button>
-            <button
-              className={`panel-tab ${rightPanelTab === "Task" ? "active" : ""}`}
-              onClick={() => setRightPanelTab("Task")}
-            >
-              Task
-            </button>
-            <button className="panel-tab">route-map.md</button>
-            <button className="panel-tab">Cargo.toml</button>
-            <button className="panel-tab">default.json</button>
-          </div>
-
-          <div className="right-panel-content">
-            {rightPanelTab === "Overview" ? (
-              <>
-                <div className="panel-section">
-                  <div className="panel-section-header">
-                    <span>Subagents</span>
-                    <span>0 &gt;</span>
-                  </div>
-                </div>
-
-                <div className="panel-section">
-                  <div className="panel-section-header">
-                    <span>Files Changed</span>
-                    <span style={{ fontSize: "11px", fontWeight: "normal", color: "#8e8e93" }}>
-                      {activeFilesChanged.length} v
-                    </span>
-                  </div>
-                  <div className="panel-section-content">
-                    <div className="panel-file-list">
-                      {activeFilesChanged.slice(0, 5).map((f, idx) => (
-                        <div key={idx} className="panel-file-item">
-                          <a href={`file://${f.path}/${f.name}`} className="panel-file-name">
-                            <Icons.FileCode />
-                            {f.name}
-                          </a>
-                          <span className="panel-file-path">{f.path.substring(0, 15)}...</span>
-                        </div>
-                      ))}
-                    </div>
-                    {activeFilesChanged.length > 5 && (
-                      <a href="#see-all" className="see-all-link">
-                        See all ({activeFilesChanged.length})
-                      </a>
-                    )}
-                  </div>
-                </div>
-
-                <div className="panel-section">
-                  <div className="panel-section-header">
-                    <span>Artifacts</span>
-                    <span style={{ fontSize: "11px", fontWeight: "normal", color: "#8e8e93" }}>
-                      {activeArtifacts.length} v
-                    </span>
-                  </div>
-                  <div className="panel-section-content">
-                    {activeArtifacts.map((art, idx) => (
-                      <div key={idx} className="checklist-item">
-                        <input type="checkbox" className="checklist-checkbox" defaultChecked />
-                        <span>{art.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="panel-section" style={{ borderBottom: "none" }}>
-                  <div className="panel-section-header">
-                    <span>Background Tasks</span>
-                    <span>0 &gt;</span>
-                  </div>
-                </div>
-              </>
-            ) : (
-              // Task checklist
-              <div className="panel-section-content">
-                <div className="checklist-item">
-                  <input type="checkbox" className="checklist-checkbox" defaultChecked />
-                  <span>Configure SQLite in Tauri Backend</span>
-                </div>
-                <div className="checklist-item">
-                  <input type="checkbox" className="checklist-checkbox" defaultChecked />
-                  <span>Install Frontend SQL Plugin Package</span>
-                </div>
-                <div className="checklist-item">
-                  <input type="checkbox" className="checklist-checkbox" defaultChecked />
-                  <span>Extend Bridge Facade Layer</span>
-                </div>
-                <div className="checklist-item">
-                  <input type="checkbox" className="checklist-checkbox" defaultChecked />
-                  <span>Verify SQLite execution in Tauri dev shell</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </aside>
-      )}
     </div>
   );
 }
@@ -1032,7 +912,7 @@ function App() {
     <HashRouter>
       <Routes>
         <Route path="/" element={<MainDashboard />} />
-        <Route path="/session/:id" element={<MainDashboard />} />
+        <Route path="/chat/s/:id" element={<MainDashboard />} />
       </Routes>
     </HashRouter>
   );
