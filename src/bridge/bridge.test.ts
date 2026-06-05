@@ -154,4 +154,18 @@ describe("JS Bridge - Mock Fallback APIs", () => {
     expect((await mockBridge.getSessions()).length).toBe(0);
     expect((await mockBridge.getMessages("session-1")).length).toBe(0);
   });
+
+  test("saveSetting(), getSetting(), deleteSetting() should manage configuration settings", async () => {
+    const initial = await mockBridge.getSetting("test_key");
+    expect(initial).toBeNull();
+
+    await mockBridge.saveSetting("test_key", "test_value");
+    const val = await mockBridge.getSetting("test_key");
+    expect(val).toBe("test_value");
+
+    await mockBridge.deleteSetting("test_key");
+    const deleted = await mockBridge.getSetting("test_key");
+    expect(deleted).toBeNull();
+  });
 });
+

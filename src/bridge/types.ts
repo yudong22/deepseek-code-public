@@ -65,4 +65,20 @@ export interface IBridge {
    * 获取某会话下的所有历史消息
    */
   getMessages(sessionId: string): Promise<Message[]>;
+
+  /**
+   * 获取指定的配置项
+   */
+  getSetting(key: string): Promise<string | null>;
+
+  /**
+   * 保存配置项
+   */
+  saveSetting(key: string, value: string): Promise<void>;
+
+  /**
+   * 删除指定的配置项
+   */
+  deleteSetting(key: string): Promise<void>;
 }
+

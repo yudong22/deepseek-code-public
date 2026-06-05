@@ -232,6 +232,13 @@ function MainDashboard() {
   const [inputText, setInputText] = useState("");
   const [rightPanelTab, setRightPanelTab] = useState<string>("Overview");
 
+  // API Key & Model Selection States
+  const [apiKey, setApiKey] = useState("");
+  const [savedApiKey, setSavedApiKey] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("deepseek-v4-flash");
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+
   const [expandedFolders] = useState<Record<string, boolean>>({
     "deepseek-code": false,
   });
@@ -249,18 +256,38 @@ function MainDashboard() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize DB and load sessions list
+  // Initialize DB, load sessions and saved DeepSeek API key
   useEffect(() => {
     async function init() {
       try {
         await bridge.initDb();
         await loadSessions();
+        const storedKey = await bridge.getSetting("deepseek_api_key");
+        setSavedApiKey(storedKey);
+        if (storedKey) {
+          setApiKey(storedKey);
+        }
       } catch (err) {
         console.error("Database initialization failed:", err);
       }
     }
     init();
   }, []);
+
+  // Click outside model selector to close dropdown
+  useEffect(() => {
+    if (!isModelDropdownOpen) return;
+    const handleClose = () => {
+      setIsModelDropdownOpen(false);
+    };
+    const timer = setTimeout(() => {
+      document.addEventListener("click", handleClose);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("click", handleClose);
+    };
+  }, [isModelDropdownOpen]);
 
   // Load message logs when session ID changes
   useEffect(() => {
@@ -272,6 +299,7 @@ function MainDashboard() {
       setActiveArtifacts([]);
     }
   }, [id]);
+
 
   // Scroll to bottom
   useEffect(() => {
@@ -288,6 +316,35 @@ function MainDashboard() {
       setToast({ visible: false, message: "" });
     }, 1800);
   }
+
+  async function handleSaveApiKey() {
+    try {
+      if (!apiKey.trim()) {
+        showToast("API Key 不能为空");
+        return;
+      }
+      await bridge.saveSetting("deepseek_api_key", apiKey.trim());
+      setSavedApiKey(apiKey.trim());
+      showToast("API Key 保存成功");
+      setIsSettingsOpen(false);
+    } catch (err) {
+      console.error("保存 API Key 失败:", err);
+      showToast("保存失败，请重试");
+    }
+  }
+
+  async function handleClearApiKey() {
+    try {
+      await bridge.deleteSetting("deepseek_api_key");
+      setApiKey("");
+      setSavedApiKey(null);
+      showToast("API Key 已清除");
+    } catch (err) {
+      console.error("清除 API Key 失败:", err);
+      showToast("清除失败，请重试");
+    }
+  }
+
 
   // Load sessions from SQLite/localStorage
   async function loadSessions() {
@@ -366,57 +423,143 @@ function MainDashboard() {
     await loadMessages(currentSessionId);
     await loadSessions();
 
-    // 3. Trigger mock response after a short delay
-    setTimeout(async () => {
-      const assistantMsgId = `msg-agent-${Date.now()}`;
-      
-      let replyContent = `我已收到您的输入："${userText}"。根据您的指令，我已经完成了分析并为您提供底层壳能力的相关输出。`;
-      let mockFiles: Array<{ name: string; path: string }> = [];
-      let mockArtifacts: Array<{ name: string; type: string }> = [];
+    // 3. Trigger API response or mock response
+    if (savedApiKey) {
+      try {
+        const historyMsgs = await bridge.getMessages(currentSessionId);
+        const apiMessages = [
+          { role: "system", content: "You are a helpful programming assistant." },
+          ...historyMsgs.map(m => ({
+            role: m.role,
+            content: m.content
+          }))
+        ];
 
-      if (userText.toLowerCase().includes("readme") || userText.includes("宪法")) {
-        replyContent = `我已为您生成并配置了项目的开发宪法：
+        const response = await fetch("https://api.deepseek.com/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${savedApiKey}`
+          },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: apiMessages,
+            stream: false
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMsg = errorData.error?.message || `HTTP ${response.status} ${response.statusText}`;
+          throw new Error(errorMsg);
+        }
+
+        const resData = await response.json();
+        const assistantReply = resData.choices?.[0]?.message?.content || "API 返回了空响应。";
+
+        const assistantMsgId = `msg-agent-${Date.now()}`;
+        const assistantMsg: Message = {
+          id: assistantMsgId,
+          sessionId: currentSessionId,
+          role: "assistant",
+          content: assistantReply,
+          createdAt: new Date().toISOString()
+        };
+        await bridge.saveMessage(assistantMsg);
+
+        if (currentSession) {
+          currentSession.lastMessage = assistantReply.substring(0, 30) + (assistantReply.length > 30 ? "..." : "");
+          currentSession.updatedAt = new Date().toISOString();
+          await bridge.saveSession(currentSession);
+        }
+
+        await loadMessages(currentSessionId);
+        await loadSessions();
+      } catch (err: any) {
+        console.error("DeepSeek API request failed:", err);
+        showToast(`API 请求失败: ${err.message}`);
+
+        const errReply = `❌ **DeepSeek API 调用失败**
+
+错误原因: \`${err.message}\`
+
+请检查：
+1. 您在 **Settings** 中设置的 API Key 是否有效。
+2. 网络是否能正常连接到 \`api.deepseek.com\` 域名。
+3. 如果是在普通浏览器调试环境中，请确保未被跨域 (CORS) 策略拦截（推荐在原生客户端中测试真实 API，或使用跨域助手）。`;
         
+        const assistantMsgId = `msg-agent-${Date.now()}`;
+        const assistantMsg: Message = {
+          id: assistantMsgId,
+          sessionId: currentSessionId,
+          role: "assistant",
+          content: errReply,
+          createdAt: new Date().toISOString()
+        };
+        await bridge.saveMessage(assistantMsg);
+
+        if (currentSession) {
+          currentSession.lastMessage = "API 调用失败...";
+          currentSession.updatedAt = new Date().toISOString();
+          await bridge.saveSession(currentSession);
+        }
+
+        await loadMessages(currentSessionId);
+        await loadSessions();
+      }
+    } else {
+      setTimeout(async () => {
+        const assistantMsgId = `msg-agent-${Date.now()}`;
+        
+        let replyContent = `我已收到您的输入："${userText}"。根据您的指令，我已经完成了分析并为您提供底层壳能力的相关输出。`;
+        let mockFiles: Array<{ name: string; path: string }> = [];
+        let mockArtifacts: Array<{ name: string; type: string }> = [];
+
+        if (userText.toLowerCase().includes("readme") || userText.includes("宪法")) {
+          replyContent = `我已为您生成并配置了项目的开发宪法：
+          
 ### 宪法条款更新：
 1. 双端测试通过后，自动进行 \`git commit\` 提交。
 2. 优先通过 Web 端（Mock 效果）进行调试提速。
 
 已更新 [README.md](file:///Users/yudong22/Documents/deepseek-code/README.md) 并执行了本地测试！`;
-        mockFiles = [{ name: "README.md", path: "/Users/yudong22/Documents/deepseek-code" }];
-        mockArtifacts = [{ name: "Walkthrough", type: "walkthrough" }];
-      } else {
-        mockFiles = [
-          { name: "App.tsx", path: "src" },
-          { name: "route-map.md", path: "docs" }
-        ];
-        mockArtifacts = [
-          { name: "Walkthrough", type: "walkthrough" },
-          { name: "Task", type: "task" }
-        ];
-      }
+          mockFiles = [{ name: "README.md", path: "/Users/yudong22/Documents/deepseek-code" }];
+          mockArtifacts = [{ name: "Walkthrough", type: "walkthrough" }];
+        } else {
+          mockFiles = [
+            { name: "App.tsx", path: "src" },
+            { name: "route-map.md", path: "docs" }
+          ];
+          mockArtifacts = [
+            { name: "Walkthrough", type: "walkthrough" },
+            { name: "Task", type: "task" }
+          ];
+        }
 
-      const assistantMsg: Message = {
-        id: assistantMsgId,
-        sessionId: currentSessionId!,
-        role: "assistant",
-        content: replyContent,
-        createdAt: new Date().toISOString(),
-        filesChanged: mockFiles,
-        artifacts: mockArtifacts,
-      };
+        const assistantMsg: Message = {
+          id: assistantMsgId,
+          sessionId: currentSessionId!,
+          role: "assistant",
+          content: replyContent,
+          createdAt: new Date().toISOString(),
+          filesChanged: mockFiles,
+          artifacts: mockArtifacts,
+        };
 
-      await bridge.saveMessage(assistantMsg);
+        await bridge.saveMessage(assistantMsg);
 
-      if (currentSession) {
-        currentSession.lastMessage = replyContent.substring(0, 30) + "...";
-        currentSession.updatedAt = new Date().toISOString();
-        await bridge.saveSession(currentSession);
-      }
+        if (currentSession) {
+          currentSession.lastMessage = replyContent.substring(0, 30) + "...";
+          currentSession.updatedAt = new Date().toISOString();
+          await bridge.saveSession(currentSession);
+        }
 
-      await loadMessages(currentSessionId!);
-      await loadSessions();
-    }, 1000);
+        await loadMessages(currentSessionId!);
+        await loadSessions();
+      }, 1000);
+    }
   }
+
 
 
   // Active session title details
@@ -447,6 +590,52 @@ function MainDashboard() {
           </div>
         </div>
       )}
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="settings-modal-overlay" onClick={() => setIsSettingsOpen(false)}>
+          <div className="settings-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-modal-header">
+              <h3>Client Settings</h3>
+              <button className="close-btn" onClick={() => setIsSettingsOpen(false)}>×</button>
+            </div>
+            <div className="settings-modal-body">
+              <div className="form-group">
+                <label>DeepSeek API Key</label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter your sk-... API Key"
+                  className="settings-input"
+                />
+                <p className="settings-hint">
+                  {savedApiKey ? (
+                    <span style={{ color: "#34c759", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      ● Active: Web client will query api.deepseek.com directly.
+                    </span>
+                  ) : (
+                    <span style={{ color: "#8e8e93" }}>
+                      ○ Inactive: Client queries will fallback to standard Mock responses.
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="settings-modal-footer">
+              {savedApiKey && (
+                <button className="btn-secondary" onClick={handleClearApiKey}>
+                  Clear
+                </button>
+              )}
+              <button className="btn-primary" onClick={handleSaveApiKey}>
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* 1. LEFT SIDEBAR */}
       <aside className="left-sidebar">
@@ -545,11 +734,12 @@ function MainDashboard() {
 
         {/* Footer settings */}
         <div className="sidebar-footer">
-          <div className="nav-item">
+          <div className="nav-item" onClick={() => setIsSettingsOpen(true)}>
             <Icons.Settings />
             Settings
           </div>
         </div>
+
       </aside>
 
       {/* 2. MIDDLE CHAT PANEL */}
@@ -619,10 +809,35 @@ function MainDashboard() {
             {/* Bottom active chat input */}
             <div className="active-chat-input-container">
               <div className="active-chat-box">
-                <button className="sidebar-tool-btn" style={{ padding: "0 4px" }}>
-                  <span style={{ fontSize: "11px", fontWeight: "600", color: "#555" }}>+ Gemini 3.5 Flash (Medium)</span>
-                  <Icons.ChevronDown />
-                </button>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <button className="sidebar-tool-btn" style={{ padding: "0 4px" }} onClick={(e) => { e.stopPropagation(); setIsModelDropdownOpen(!isModelDropdownOpen); }}>
+                    <span style={{ fontSize: "11px", fontWeight: "600", color: "#555" }}>{selectedModel}</span>
+                    <Icons.ChevronDown />
+                  </button>
+                  {isModelDropdownOpen && (
+                    <div className="model-dropdown bottom-aligned">
+                      <div
+                        className={`model-dropdown-item ${selectedModel === "deepseek-v4-flash" ? "active" : ""}`}
+                        onClick={() => {
+                          setSelectedModel("deepseek-v4-flash");
+                          setIsModelDropdownOpen(false);
+                        }}
+                      >
+                        deepseek-v4-flash
+                      </div>
+                      <div
+                        className={`model-dropdown-item ${selectedModel === "deepseek-v4-pro" ? "active" : ""}`}
+                        onClick={() => {
+                          setSelectedModel("deepseek-v4-pro");
+                          setIsModelDropdownOpen(false);
+                        }}
+                      >
+                        deepseek-v4-pro
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <input
                   className="active-chat-textarea"
                   value={inputText}
@@ -657,14 +872,39 @@ function MainDashboard() {
                 placeholder="Ask anything, @ to mention, / for actions"
               />
               <div className="prompt-toolbar">
-                <button className="model-selector-pill">
-                  <span>+ Gemini 3.5 Flash (Medium)</span>
-                  <Icons.ChevronDown />
-                </button>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <button className="model-selector-pill" onClick={(e) => { e.stopPropagation(); setIsModelDropdownOpen(!isModelDropdownOpen); }}>
+                    <span>{selectedModel}</span>
+                    <Icons.ChevronDown />
+                  </button>
+                  {isModelDropdownOpen && (
+                    <div className="model-dropdown">
+                      <div
+                        className={`model-dropdown-item ${selectedModel === "deepseek-v4-flash" ? "active" : ""}`}
+                        onClick={() => {
+                          setSelectedModel("deepseek-v4-flash");
+                          setIsModelDropdownOpen(false);
+                        }}
+                      >
+                        deepseek-v4-flash
+                      </div>
+                      <div
+                        className={`model-dropdown-item ${selectedModel === "deepseek-v4-pro" ? "active" : ""}`}
+                        onClick={() => {
+                          setSelectedModel("deepseek-v4-pro");
+                          setIsModelDropdownOpen(false);
+                        }}
+                      >
+                        deepseek-v4-pro
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button className="sidebar-tool-btn" style={{ color: "#8a8a8f" }}>
                   <Icons.Mic />
                 </button>
               </div>
+
             </div>
 
             <button className="local-indicator-pill">
