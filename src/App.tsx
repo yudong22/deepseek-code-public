@@ -690,42 +690,24 @@ function MainDashboard() {
           </div>
         </div>
       )}
-
       {/* Custom Title Bar */}
       <div className="custom-titlebar" data-tauri-drag-region>
         <div className={`titlebar-left ${isLeftSidebarOpen ? "" : "collapsed"}`} data-tauri-drag-region>
-          {isLeftSidebarOpen && (
-            <div className="titlebar-left-controls" data-tauri-drag-region>
-              <button className="titlebar-btn" style={{ marginLeft: "80px" }} onClick={() => setIsLeftSidebarOpen(false)}>
-                <Icons.SidebarToggle />
-              </button>
-              <button className="titlebar-btn" onClick={() => navigate(-1)}>
-                <Icons.ChevronLeft />
-              </button>
-              <button className="titlebar-btn" onClick={() => navigate(1)}>
-                <Icons.ChevronRight />
-              </button>
-            </div>
-          )}
+          <div className="titlebar-left-controls" data-tauri-drag-region>
+            <button className="titlebar-btn" onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}>
+              <Icons.SidebarToggle />
+            </button>
+            <button className="titlebar-btn" onClick={() => navigate(-1)}>
+              <Icons.ChevronLeft />
+            </button>
+            <button className="titlebar-btn" onClick={() => navigate(1)}>
+              <Icons.ChevronRight />
+            </button>
+          </div>
         </div>
-        <div className="titlebar-right" data-tauri-drag-region>
+        <div className={`titlebar-right ${isLeftSidebarOpen ? "" : "collapsed"}`} data-tauri-drag-region>
           <div className="titlebar-right-left-group" data-tauri-drag-region>
-            {!isLeftSidebarOpen && (
-              <div className="titlebar-left-controls-shifted" data-tauri-drag-region>
-                <button className="titlebar-btn" onClick={() => setIsLeftSidebarOpen(true)}>
-                  <Icons.SidebarToggle />
-                </button>
-                <button className="titlebar-btn" onClick={() => navigate(-1)}>
-                  <Icons.ChevronLeft />
-                </button>
-                <button className="titlebar-btn" onClick={() => navigate(1)}>
-                  <Icons.ChevronRight />
-                </button>
-              </div>
-            )}
             <div className="titlebar-breadcrumbs" data-tauri-drag-region>
-              <span className="titlebar-breadcrumb-project">{activeSession?.projectName || "deepseek-code"}</span>
-              <span className="titlebar-breadcrumb-separator">/</span>
               <span className="titlebar-breadcrumb-session">{activeSession ? activeSession.title : "New Conversation"}</span>
             </div>
           </div>
@@ -738,52 +720,12 @@ function MainDashboard() {
               </button>
             )}
 
-            {/* Model Selector Pill */}
-            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-              <button
-                className="titlebar-model-selector"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsModelDropdownOpen(!isModelDropdownOpen);
-                }}
-              >
-                <span>{selectedModel}</span>
-                <Icons.ChevronDown />
+            {/* Right Sidebar toggle - Only display when session is active */}
+            {id && activeSession && (
+              <button className={`titlebar-btn ${isRightSidebarOpen ? "active" : ""}`} onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}>
+                <Icons.RightSidebarToggle />
               </button>
-              {isModelDropdownOpen && (
-                <div className="model-dropdown" style={{ top: "28px", right: "0" }}>
-                  <div
-                    className={`model-dropdown-item ${selectedModel === "deepseek-v4-flash" ? "active" : ""}`}
-                    onClick={() => {
-                      setSelectedModel("deepseek-v4-flash");
-                      setIsModelDropdownOpen(false);
-                    }}
-                  >
-                    deepseek-v4-flash
-                  </div>
-                  <div
-                    className={`model-dropdown-item ${selectedModel === "deepseek-v4-pro" ? "active" : ""}`}
-                    onClick={() => {
-                      setSelectedModel("deepseek-v4-pro");
-                      setIsModelDropdownOpen(false);
-                    }}
-                  >
-                    deepseek-v4-pro
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Settings Button */}
-            <button className="titlebar-btn" onClick={() => setIsSettingsOpen(true)}>
-              <Icons.Settings />
-              Settings
-            </button>
-
-            {/* Right Sidebar toggle */}
-            <button className={`titlebar-btn ${isRightSidebarOpen ? "active" : ""}`} onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}>
-              <Icons.RightSidebarToggle />
-            </button>
+            )}
           </div>
         </div>
       </div>
