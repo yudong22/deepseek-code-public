@@ -6,11 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
+    "preview": "tauri dev",
     "tauri": "tauri",
     "test": "export PATH=\"$PATH:/Users/yudong22/.bun/bin\" && cargo check --manifest-path src-tauri/Cargo.toml && bun test",
-    "build:mac": "tauri build && (killall deepseek-code || true) && cp -rf src-tauri/target/release/bundle/macos/deepseek-code.app /Applications/",
-    "preview:mac": "open src-tauri/target/release/bundle/macos/deepseek-code.app"
+    "build:mac": "tauri build && (killall deepseek-code || true) && cp -rf src-tauri/target/release/bundle/macos/deepseek-code.app /Applications/"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
