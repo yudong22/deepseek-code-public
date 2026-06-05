@@ -16,6 +16,11 @@ pub enum AgentEvent {
     Error(String),
 }
 
+#[derive(serde::Deserialize, Debug)]
+struct MyChatCompletionChunk {
+    pub choices: Vec<ds_api::raw::ChunkChoice>,
+}
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -64,11 +69,8 @@ async fn run_agent_loop(
             ds_api::raw::Model::DeepseekChat
         };
 
-        let mut req_builder = ds_api::Request::builder()
-            .model(model_type)
-            .messages(current_history.clone());
-
         // 2. 注册工具 schema
+        let mut tools = Vec::new();
         for t in &tools_list {
             let api_tool = ds_api::raw::Tool {
                 r#type: ds_api::raw::ToolType::Function,
@@ -79,12 +81,26 @@ async fn run_agent_loop(
                     strict: Some(true),
                 }
             };
-            req_builder = req_builder.add_tool(api_tool);
+            tools.push(api_tool);
         }
 
+        let request_payload = ds_api::raw::ChatCompletionRequest {
+            messages: current_history.clone(),
+            model: model_type,
+            stream: Some(true),
+            tools: if tools.is_empty() { None } else { Some(tools) },
+            ..Default::default()
+        };
+
         // 3. 发送流式 API 请求
-        let stream = match req_builder.execute_client_streaming(&client, &api_key).await {
-            Ok(s) => s,
+        let response = match client
+            .post("https://api.deepseek.com/chat/completions")
+            .bearer_auth(&api_key)
+            .json(&request_payload)
+            .send()
+            .await
+        {
+            Ok(res) => res,
             Err(e) => {
                 let err_msg = format!("LLM API 请求错误：{}", e);
                 let _ = on_event.send(AgentEvent::Error(err_msg.clone()));
@@ -92,8 +108,19 @@ async fn run_agent_loop(
             }
         };
 
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            let err_msg = format!("HTTP 错误 {}: {}", status, error_text);
+            let _ = on_event.send(AgentEvent::Error(err_msg.clone()));
+            return Err(err_msg);
+        }
+
+        use eventsource_stream::Eventsource;
         use futures::StreamExt;
-        let mut stream = Box::pin(stream);
+
+        let event_stream = response.bytes_stream().eventsource();
+        let mut stream = Box::pin(event_stream);
 
         let mut thinking_accumulated = String::new();
         let mut text_accumulated = String::new();
@@ -106,11 +133,24 @@ async fn run_agent_loop(
         let mut accumulated_tool_calls: std::collections::BTreeMap<u32, AccumulatedToolCall> = std::collections::BTreeMap::new();
 
         // 4. 消费流式响应
-        while let Some(chunk_res) = stream.next().await {
-            let chunk = match chunk_res {
-                Ok(c) => c,
+        while let Some(event_result) = stream.next().await {
+            let event = match event_result {
+                Ok(e) => e,
                 Err(e) => {
                     let err_msg = format!("流式响应读取失败：{}", e);
+                    let _ = on_event.send(AgentEvent::Error(err_msg.clone()));
+                    return Err(err_msg);
+                }
+            };
+
+            if event.data == "[DONE]" {
+                break;
+            }
+
+            let chunk: MyChatCompletionChunk = match serde_json::from_str(&event.data) {
+                Ok(c) => c,
+                Err(e) => {
+                    let err_msg = format!("流式响应 JSON 解析失败：{}", e);
                     let _ = on_event.send(AgentEvent::Error(err_msg.clone()));
                     return Err(err_msg);
                 }
