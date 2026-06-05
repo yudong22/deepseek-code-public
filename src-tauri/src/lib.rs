@@ -36,7 +36,11 @@ async fn run_agent_loop(
     on_event: Channel<AgentEvent>,
 ) -> Result<(), String> {
     let workspace_path = if workspace_root.is_empty() || workspace_root == "." {
-        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        let default_sandbox = std::path::PathBuf::from("backend/sandbox_workspace");
+        if !default_sandbox.exists() {
+            let _ = std::fs::create_dir_all(&default_sandbox);
+        }
+        default_sandbox
     } else {
         std::path::PathBuf::from(&workspace_root)
     };
