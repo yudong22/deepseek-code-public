@@ -104,4 +104,20 @@ export const mockBridge: IBridge = {
     const messages = getLocalMessages();
     return messages.filter((m) => m.sessionId === sessionId);
   },
+
+  async getSetting(key: string): Promise<string | null> {
+    console.warn(`[Bridge Mock] getSetting called for key: ${key}`);
+    return localStorage.getItem(`bridge_mock_setting_${key}`);
+  },
+
+  async saveSetting(key: string, value: string): Promise<void> {
+    console.warn(`[Bridge Mock] saveSetting called for key: ${key}`);
+    localStorage.setItem(`bridge_mock_setting_${key}`, value);
+  },
+
+  async deleteSetting(key: string): Promise<void> {
+    console.warn(`[Bridge Mock] deleteSetting called for key: ${key}`);
+    localStorage.removeItem(`bridge_mock_setting_${key}`);
+  },
 };
+

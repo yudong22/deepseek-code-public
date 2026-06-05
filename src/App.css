@@ -809,3 +809,207 @@ body {
   padding: 4px 8px;
 }
 
+/* --- Model Selector Dropdown styling --- */
+.model-dropdown {
+  position: absolute;
+  top: 105%;
+  left: 0;
+  z-index: 1000;
+  width: 160px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+  animation: dropdownFadeIn 0.15s ease-out;
+}
+
+.model-dropdown.bottom-aligned {
+  top: auto;
+  bottom: 105%;
+  left: 0;
+}
+
+.model-dropdown-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #333;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.model-dropdown-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.model-dropdown-item.active {
+  background: #007aff;
+  color: #fff;
+  font-weight: 500;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Settings Modal styling --- */
+.settings-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlayFadeIn 0.2s ease-out;
+}
+
+.settings-modal-card {
+  width: 400px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cardScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-modal-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.settings-modal-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #8e8e93;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.settings-modal-header .close-btn:hover {
+  color: #1d1d1f;
+}
+
+.settings-modal-body {
+  padding: 20px;
+}
+
+.settings-modal-body .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-modal-body label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #515154;
+}
+
+.settings-input {
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.settings-input:focus {
+  border-color: #007aff;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+  background: #fff;
+}
+
+.settings-hint {
+  font-size: 11px;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.settings-modal-footer {
+  padding: 14px 20px;
+  background: rgba(0, 0, 0, 0.02);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-primary, .btn-secondary {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn-primary {
+  background: #007aff;
+  color: #fff;
+  border: none;
+}
+
+.btn-primary:hover {
+  background: #0062cc;
+}
+
+.btn-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.btn-secondary:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cardScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+

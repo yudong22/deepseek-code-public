@@ -52,6 +52,12 @@ export const tauriBridge: IBridge = {
           artifacts TEXT
         );
       `);
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+      `);
       console.log("Tauri SQLite database tables initialized successfully.");
     } catch (error) {
       console.error("Failed to initialize SQLite database:", error);
@@ -146,4 +152,49 @@ export const tauriBridge: IBridge = {
       return [];
     }
   },
+
+  async getSetting(key: string): Promise<string | null> {
+    try {
+      const db = await getDb();
+      interface DbSetting {
+        key: string;
+        value: string;
+      }
+      const rows = await db.select<DbSetting[]>(
+        "SELECT value FROM settings WHERE key = ?",
+        [key]
+      );
+      if (rows && rows.length > 0) {
+        return rows[0].value;
+      }
+      return null;
+    } catch (error) {
+      console.error(`Failed to retrieve setting for key ${key}:`, error);
+      return null;
+    }
+  },
+
+  async saveSetting(key: string, value: string): Promise<void> {
+    try {
+      const db = await getDb();
+      await db.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        [key, value]
+      );
+    } catch (error) {
+      console.error(`Failed to save setting ${key}:`, error);
+      throw error;
+    }
+  },
+
+  async deleteSetting(key: string): Promise<void> {
+    try {
+      const db = await getDb();
+      await db.execute("DELETE FROM settings WHERE key = ?", [key]);
+    } catch (error) {
+      console.error(`Failed to delete setting ${key}:`, error);
+      throw error;
+    }
+  },
 };
+
