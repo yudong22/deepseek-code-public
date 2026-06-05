@@ -60,9 +60,10 @@ impl AgentTool for BashTool {
             // 强制将工作目录限制在工作区根路径下
             cmd.current_dir(&self.workspace_root);
 
-            // 捕获 stdout 和 stderr
-            match cmd.output().await {
-                Ok(output) => {
+            // 捕获 stdout 和 stderr，带 30 秒超时保护
+            let timeout_duration = std::time::Duration::from_secs(30);
+            match tokio::time::timeout(timeout_duration, cmd.output()).await {
+                Ok(Ok(output)) => {
                     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
                     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
                     let exit_code = output.status.code();
@@ -74,9 +75,14 @@ impl AgentTool for BashTool {
                         "success": output.status.success()
                     })
                 }
-                Err(e) => {
+                Ok(Err(e)) => {
                     json!({
                         "error": format!("命令行进程启动或执行失败：{}", e)
+                    })
+                }
+                Err(_) => {
+                    json!({
+                        "error": "Command timed out after 30 seconds"
                     })
                 }
             }
