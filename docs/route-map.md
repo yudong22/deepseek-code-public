@@ -34,14 +34,14 @@ deepseek-code/
 ```bash
 src/
 ├── main.tsx                 # 前端入口文件，挂载 React 根节点
-├── App.tsx                  # 核心 React 根组件（集成了单行自定义标题栏、左右侧边栏折叠及 Mermaid Markdown 预览）
-├── App.css                  # 自定义标题栏、折叠侧边栏过渡动画及 Mermaid 预览渲染样式
+├── App.tsx                  # 核心 React 根组件（集成了单行自定义标题栏、左右侧边栏折叠、Mermaid 渲染以及 Agent 流式对话渲染）
+├── App.css                  # 自定义标题栏、折叠侧边栏过渡动画及 Mermaid 预览、思维链、工具日志渲染样式
 ├── assets/                  # 静态资源（图片、字体等）
 ├── bridge/                  # 统一的 JS Bridge 门面层（封装底层壳交互，支持多端适配）
 │   ├── index.ts             # 桥接层入口（环境检测与分发）
-│   ├── types.ts             # 桥接层 TypeScript 接口定义
-│   ├── tauri.ts             # 原生 Tauri 壳能力实现
-│   └── mock.ts              # 浏览器环境 Mock/降级实现
+│   ├── types.ts             # 桥接层 TypeScript 接口与类型定义（如 runAgent、AgentEvent 等）
+│   ├── tauri.ts             # 原生 Tauri 壳能力实现（对接 SQLite 与底层 run_agent_loop，支持思维链存储）
+│   └── mock.ts              # 浏览器环境 Mock/降级实现（模拟 Agent 事件流）
 └── vite-env.d.ts            # Vite 环境变量类型声明
 ```
 
@@ -55,13 +55,22 @@ src/
 ### 后端目录 (Backend: `src-tauri/`)
 ```bash
 src-tauri/
-├── Cargo.toml               # Rust 依赖与包管理配置文件
+├── Cargo.toml               # Rust 依赖与包管理配置文件（集成了 ds-api, tokio, regex, ignore, globset 等库）
 ├── tauri.conf.json          # Tauri 核心配置文件（窗口、权限、构建指令等）
 ├── capabilities/            # 权限与功能配置文件（Tauri v2 新增）
 │   └── default.json         # 默认允许的应用权限与功能配置
 ├── src/
 │   ├── main.rs              # 应用程序启动入口，调用 lib.rs 中的 run 函数
-│   └── lib.rs               # 后端核心业务逻辑，定义 Tauri Builder、命令（commands）和插件初始化
+│   ├── lib.rs               # 后端核心业务逻辑，注册并实现了 run_agent_loop Tauri 指令
+│   ├── safety.rs            # [NEW] 安全拦截器，提供工作区路径防越界（Path Jail）校验
+│   └── tools/               # [NEW] 核心本地 Agent 工具集目录
+│       ├── mod.rs           # 统一特质声明 (AgentTool) 与子模块导出
+│       ├── file_read.rs     # 读文件工具，支持指定行范围与分页格式化
+│       ├── file_write.rs    # 新建文件工具，防覆盖保护
+│       ├── file_edit.rs     # 精准单次匹配替换工具
+│       ├── grep.rs          # 正则全文搜索工具（遵循 .gitignore）
+│       ├── glob.rs          # 文件模式搜索工具（遵循 .gitignore）
+│       └── bash.rs          # 异步 Bash 命令运行工具
 └── icons/                   # 应用程序图标（支持多平台格式）
 ```
 

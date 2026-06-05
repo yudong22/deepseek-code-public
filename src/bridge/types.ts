@@ -16,9 +16,10 @@ export interface Session {
 export interface Message {
   id: string;
   sessionId: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "tool"; // 支持 tool 角色
   content: string;
   createdAt: string;
+  reasoning_content?: string; // 推理思维链字段
   // 壳状态模拟字段
   filesChanged?: Array<{ name: string; path: string }>;
   artifacts?: Array<{ name: string; type: string }>;
@@ -80,5 +81,22 @@ export interface IBridge {
    * 删除指定的配置项
    */
   deleteSetting(key: string): Promise<void>;
+
+  /**
+   * 调起带 tools 的 agent 循环
+   */
+  runAgent(
+    apiKey: string,
+    model: string,
+    messages: any[],
+    workspaceRoot: string,
+    onEvent: (event: AgentEvent) => void
+  ): Promise<void>;
 }
+
+export interface AgentEvent {
+  type: "Thinking" | "Text" | "ToolCall" | "ToolResult" | "Finished" | "Error";
+  payload: any;
+}
+
 

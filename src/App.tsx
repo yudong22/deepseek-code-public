@@ -299,6 +299,7 @@ function MainDashboard() {
     message: "",
   });
   const toastTimeoutRef = useRef<number | null>(null);
+  const activeStreamingSessionRef = useRef<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -338,6 +339,10 @@ function MainDashboard() {
   // Load message logs when session ID changes
   useEffect(() => {
     if (id) {
+      if (activeStreamingSessionRef.current === id) {
+        // Skip loading from DB because we are currently streaming/handling this session
+        return;
+      }
       loadMessages(id);
     } else {
       setMessages([]);
@@ -475,141 +480,173 @@ function MainDashboard() {
     await loadMessages(currentSessionId);
     await loadSessions();
 
-    // 3. Trigger API response or mock response
-    if (savedApiKey) {
-      try {
-        const historyMsgs = await bridge.getMessages(currentSessionId);
-        const apiMessages = [
-          { role: "system", content: "You are a helpful programming assistant." },
-          ...historyMsgs.map(m => ({
-            role: m.role,
-            content: m.content
-          }))
-        ];
+    // 3. Trigger Agent loop
+    try {
+      activeStreamingSessionRef.current = currentSessionId;
+      const historyMsgs = await bridge.getMessages(currentSessionId);
+      const apiMessages = [
+        { role: "system", content: "You are a helpful programming assistant. You have access to local file read, write, edit, grep, glob, and bash execution tools. Use them to investigate issues, write code, run commands, and accomplish the task. You run autonomously without requiring user approval." },
+        ...historyMsgs.map(m => ({
+          role: m.role,
+          content: m.content,
+          reasoning_content: m.reasoning_content || null
+        }))
+      ];
 
-        const response = await fetch("https://api.deepseek.com/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${savedApiKey}`
-          },
-          body: JSON.stringify({
-            model: selectedModel,
-            messages: apiMessages,
-            stream: false
-          })
-        });
+      const assistantMsgId = `msg-agent-${Date.now()}`;
+      
+      // 先插入一条空的 assistant 消息
+      const initialAssistantMsg: Message = {
+        id: assistantMsgId,
+        sessionId: currentSessionId,
+        role: "assistant",
+        content: "",
+        createdAt: new Date().toISOString(),
+      };
+      
+      setMessages((prev) => [...prev, initialAssistantMsg]);
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          const errorMsg = errorData.error?.message || `HTTP ${response.status} ${response.statusText}`;
-          throw new Error(errorMsg);
+      let currentContent = "";
+      let currentThinking = "";
+      let currentFilesChanged: Array<{ name: string; path: string }> = [];
+
+      await bridge.runAgent(
+        savedApiKey || "",
+        selectedModel,
+        apiMessages,
+        ".", // 工作区根路径，由后端自动识别 CWD
+        async (event) => {
+          if (event.type === "Thinking") {
+            currentThinking += event.payload;
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === assistantMsgId);
+              if (idx > -1) {
+                const updated = [...prev];
+                updated[idx] = {
+                  ...updated[idx],
+                  content: currentContent,
+                  reasoning_content: currentThinking,
+                };
+                return updated;
+              }
+              return prev;
+            });
+          } else if (event.type === "Text") {
+            currentContent += event.payload;
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === assistantMsgId);
+              if (idx > -1) {
+                const updated = [...prev];
+                updated[idx] = {
+                  ...updated[idx],
+                  content: currentContent,
+                  reasoning_content: currentThinking || undefined,
+                };
+                return updated;
+              }
+              return prev;
+            });
+          } else if (event.type === "ToolCall") {
+            const toolName = event.payload.name;
+            const toolArgs = event.payload.args;
+            
+            // 我们在内容中追加工具调用记录
+            currentContent += `\n\n🔧 **正在调用工具 \`${toolName}\`...**\n`;
+            
+            try {
+              const parsed = JSON.parse(toolArgs);
+              if (parsed.path) {
+                const parts = parsed.path.split(/[/\\]/);
+                const name = parts[parts.length - 1];
+                const path = parts.slice(0, -1).join("/") || "./";
+                if (!currentFilesChanged.some(f => f.name === name && f.path === path)) {
+                  currentFilesChanged.push({ name, path });
+                }
+              }
+            } catch {}
+
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === assistantMsgId);
+              if (idx > -1) {
+                const updated = [...prev];
+                updated[idx] = {
+                  ...updated[idx],
+                  content: currentContent,
+                  filesChanged: currentFilesChanged.length > 0 ? currentFilesChanged : undefined,
+                };
+                return updated;
+              }
+              return prev;
+            });
+          } else if (event.type === "ToolResult") {
+            const toolName = event.payload.name;
+            currentContent += `\n✅ **工具 \`${toolName}\` 执行完成。**\n`;
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === assistantMsgId);
+              if (idx > -1) {
+                const updated = [...prev];
+                updated[idx] = {
+                  ...updated[idx],
+                  content: currentContent,
+                };
+                return updated;
+              }
+              return prev;
+            });
+          } else if (event.type === "Error") {
+            activeStreamingSessionRef.current = null;
+            currentContent += `\n\n❌ **运行出错：** \`${event.payload}\`\n`;
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === assistantMsgId);
+              if (idx > -1) {
+                const updated = [...prev];
+                updated[idx] = {
+                  ...updated[idx],
+                  content: currentContent,
+                };
+                return updated;
+              }
+              return prev;
+            });
+          } else if (event.type === "Finished") {
+            activeStreamingSessionRef.current = null;
+            // 保存最终消息到本地数据库
+            const finalMsg: Message = {
+              id: assistantMsgId,
+              sessionId: currentSessionId!,
+              role: "assistant",
+              content: currentContent,
+              createdAt: new Date().toISOString(),
+            };
+            if (currentThinking) {
+              finalMsg.reasoning_content = currentThinking;
+            }
+            if (currentFilesChanged.length > 0) {
+              finalMsg.filesChanged = currentFilesChanged;
+            }
+            if (currentContent.includes("```mermaid")) {
+              finalMsg.artifacts = [{ name: "Architecture Diagram", type: "architecture" }];
+            }
+
+            await bridge.saveMessage(finalMsg);
+            
+            if (currentSession) {
+              currentSession.lastMessage = currentContent.substring(0, 30) + (currentContent.length > 30 ? "..." : "");
+              currentSession.updatedAt = new Date().toISOString();
+              await bridge.saveSession(currentSession);
+            }
+
+            await loadMessages(currentSessionId!);
+            await loadSessions();
+          }
         }
-
-        const resData = await response.json();
-        const assistantReply = resData.choices?.[0]?.message?.content || "API 返回了空响应。";
-
-        const assistantMsgId = `msg-agent-${Date.now()}`;
-        const assistantMsg: Message = {
-          id: assistantMsgId,
-          sessionId: currentSessionId,
-          role: "assistant",
-          content: assistantReply,
-          createdAt: new Date().toISOString()
-        };
-        await bridge.saveMessage(assistantMsg);
-
-        if (currentSession) {
-          currentSession.lastMessage = assistantReply.substring(0, 30) + (assistantReply.length > 30 ? "..." : "");
-          currentSession.updatedAt = new Date().toISOString();
-          await bridge.saveSession(currentSession);
-        }
-
-        await loadMessages(currentSessionId);
-        await loadSessions();
-      } catch (err: any) {
-        console.error("DeepSeek API request failed:", err);
-        showToast(`API 请求失败: ${err.message}`);
-
-        const errReply = `❌ **DeepSeek API 调用失败**
-
-错误原因: \`${err.message}\`
-
-请检查：
-1. 您在 **Settings** 中设置的 API Key 是否有效。
-2. 网络是否能正常连接到 \`api.deepseek.com\` 域名。
-3. 如果是在普通浏览器调试环境中，请确保未被跨域 (CORS) 策略拦截（推荐在原生客户端中测试真实 API，或使用跨域助手）。`;
-        
-        const assistantMsgId = `msg-agent-${Date.now()}`;
-        const assistantMsg: Message = {
-          id: assistantMsgId,
-          sessionId: currentSessionId,
-          role: "assistant",
-          content: errReply,
-          createdAt: new Date().toISOString()
-        };
-        await bridge.saveMessage(assistantMsg);
-
-        if (currentSession) {
-          currentSession.lastMessage = "API 调用失败...";
-          currentSession.updatedAt = new Date().toISOString();
-          await bridge.saveSession(currentSession);
-        }
-
-        await loadMessages(currentSessionId);
-        await loadSessions();
-      }
-    } else {
-      setTimeout(async () => {
-        const assistantMsgId = `msg-agent-${Date.now()}`;
-        
-        let replyContent = `我已收到您的输入："${userText}"。根据您的指令，我已经完成了分析并为您提供底层壳能力的相关输出。`;
-        let mockFiles: Array<{ name: string; path: string }> = [];
-        let mockArtifacts: Array<{ name: string; type: string }> = [];
-
-        if (userText.toLowerCase().includes("readme") || userText.includes("宪法")) {
-          replyContent = `我已为您生成并配置了项目的开发宪法：
-          
-### 宪法条款更新：
-1. 双端测试通过后，自动进行 \`git commit\` 提交。
-2. 优先通过 Web 端（Mock 效果）进行调试提速。
-
-已更新 [README.md](./README.md) 并执行了本地测试！`;
-          mockFiles = [{ name: "README.md", path: "./" }];
-          mockArtifacts = [{ name: "Walkthrough", type: "walkthrough" }];
-        } else {
-          mockFiles = [
-            { name: "App.tsx", path: "src" },
-            { name: "route-map.md", path: "docs" }
-          ];
-          mockArtifacts = [
-            { name: "Walkthrough", type: "walkthrough" },
-            { name: "Task", type: "task" }
-          ];
-        }
-
-        const assistantMsg: Message = {
-          id: assistantMsgId,
-          sessionId: currentSessionId!,
-          role: "assistant",
-          content: replyContent,
-          createdAt: new Date().toISOString(),
-          filesChanged: mockFiles,
-          artifacts: mockArtifacts,
-        };
-
-        await bridge.saveMessage(assistantMsg);
-
-        if (currentSession) {
-          currentSession.lastMessage = replyContent.substring(0, 30) + "...";
-          currentSession.updatedAt = new Date().toISOString();
-          await bridge.saveSession(currentSession);
-        }
-
-        await loadMessages(currentSessionId!);
-        await loadSessions();
-      }, 1000);
+      );
+    } catch (err: any) {
+      activeStreamingSessionRef.current = null;
+      console.error("Agent execution failed:", err);
+      showToast(`Agent 执行失败: ${err.message}`);
     }
+
   }
 
 
@@ -820,9 +857,54 @@ function MainDashboard() {
                     <div className="message-bubble-user">
                       {msg.content}
                     </div>
+                  ) : msg.role === "tool" ? (
+                    <div className="message-tool-log" style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "8px 12px",
+                      margin: "6px 0",
+                      fontSize: "12px",
+                      color: "#8a8a8f",
+                      background: "rgba(0, 0, 0, 0.02)",
+                      borderRadius: "6px",
+                      borderLeft: "2px solid #8e8e93"
+                    }}>
+                      <span style={{ fontSize: "14px" }}>⚙️</span>
+                      <span><strong>工具执行完成</strong></span>
+                      <details style={{ marginLeft: "auto", cursor: "pointer" }}>
+                        <summary style={{ outline: "none", color: "#007aff", fontSize: "11px" }}>查看输出</summary>
+                        <pre style={{
+                          marginTop: "6px",
+                          background: "#f8f8f8",
+                          padding: "8px",
+                          borderRadius: "4px",
+                          fontSize: "11px",
+                          color: "#333",
+                          maxHeight: "200px",
+                          overflow: "auto",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-all"
+                        }}>{msg.content}</pre>
+                      </details>
+                    </div>
                   ) : (
                     <>
                       <div className="message-body">
+                        {msg.reasoning_content && (
+                          <div className="message-reasoning-block" style={{
+                            background: "rgba(0, 0, 0, 0.02)",
+                            borderLeft: "3px solid #8e8e93",
+                            padding: "8px 12px",
+                            marginBottom: "12px",
+                            borderRadius: "4px",
+                            fontSize: "12px",
+                            color: "#555"
+                          }}>
+                            <div style={{ fontWeight: "600", fontSize: "11px", color: "#8e8e93", marginBottom: "4px" }}>思维链 (Thinking):</div>
+                            <div style={{ whiteSpace: "pre-wrap" }}>{msg.reasoning_content}</div>
+                          </div>
+                        )}
                         {renderMarkdown(msg.content)}
 
                         {/* Files changed list */}
