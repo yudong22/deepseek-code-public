@@ -50,11 +50,17 @@ export const tauriBridge: IBridge = {
           createdAt TEXT NOT NULL,
           reasoningContent TEXT,
           filesChanged TEXT,
-          artifacts TEXT
+          artifacts TEXT,
+          toolCalls TEXT
         );
       `);
       try {
         await db.execute("ALTER TABLE messages ADD COLUMN reasoningContent TEXT");
+      } catch (e) {
+        // column may already exist
+      }
+      try {
+        await db.execute("ALTER TABLE messages ADD COLUMN toolCalls TEXT");
       } catch (e) {
         // column may already exist
       }
@@ -111,7 +117,7 @@ export const tauriBridge: IBridge = {
     try {
       const db = await getDb();
       await db.execute(
-        "INSERT OR REPLACE INTO messages (id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO messages (id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts, toolCalls) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           msg.id,
           msg.sessionId,
@@ -121,6 +127,7 @@ export const tauriBridge: IBridge = {
           msg.reasoning_content || null,
           msg.filesChanged ? JSON.stringify(msg.filesChanged) : null,
           msg.artifacts ? JSON.stringify(msg.artifacts) : null,
+          msg.toolCalls ? JSON.stringify(msg.toolCalls) : null,
         ]
       );
     } catch (error) {
@@ -141,9 +148,10 @@ export const tauriBridge: IBridge = {
         reasoningContent: string | null;
         filesChanged: string | null;
         artifacts: string | null;
+        toolCalls: string | null;
       }
       const rows = await db.select<DbMessage[]>(
-        "SELECT id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts FROM messages WHERE sessionId = ? ORDER BY createdAt ASC",
+        "SELECT id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts, toolCalls FROM messages WHERE sessionId = ? ORDER BY createdAt ASC",
         [sessionId]
       );
       return rows.map((row) => ({
@@ -155,6 +163,7 @@ export const tauriBridge: IBridge = {
         reasoning_content: row.reasoningContent || undefined,
         filesChanged: row.filesChanged ? JSON.parse(row.filesChanged) : undefined,
         artifacts: row.artifacts ? JSON.parse(row.artifacts) : undefined,
+        toolCalls: row.toolCalls ? JSON.parse(row.toolCalls) : undefined,
       }));
     } catch (error) {
       console.error(`Failed to retrieve messages for session ${sessionId}:`, error);

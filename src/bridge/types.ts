@@ -23,6 +23,7 @@ export interface Message {
   // 壳状态模拟字段
   filesChanged?: Array<{ name: string; path: string }>;
   artifacts?: Array<{ name: string; type: string }>;
+  toolCalls?: Array<{ name: string; args: string; result?: string; isError?: boolean }>;
 }
 
 export interface IBridge {

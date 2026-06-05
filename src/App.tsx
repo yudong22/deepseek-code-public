@@ -282,6 +282,42 @@ function MainDashboard() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
 
+  // Right panel tabs state
+  const [tabs, setTabs] = useState<Array<{ id: string; title: string; type: string; content: string; language?: string }>>([
+    { id: "overview", title: "Overview", type: "overview", content: "" }
+  ]);
+  const [activeTabId, setActiveTabId] = useState<string>("overview");
+
+  const openTab = (tab: { id: string; title: string; type: string; content: string; language?: string }) => {
+    setTabs((prev) => {
+      if (prev.some(t => t.id === tab.id)) {
+        return prev;
+      }
+      const titleIdx = prev.findIndex(t => t.title === tab.title);
+      if (titleIdx > -1) {
+        const next = [...prev];
+        next[titleIdx] = tab;
+        return next;
+      }
+      return [...prev, tab];
+    });
+    setActiveTabId(tab.id);
+    setIsRightSidebarOpen(true);
+  };
+
+  const closeTab = (tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (tabId === "overview") return;
+    setTabs((prev) => {
+      const nextTabs = prev.filter(t => t.id !== tabId);
+      if (activeTabId === tabId) {
+        const last = nextTabs[nextTabs.length - 1];
+        setActiveTabId(last ? last.id : "overview");
+      }
+      return nextTabs;
+    });
+  };
+
   // API Key & Model Selection States
   const [apiKey, setApiKey] = useState("");
   const [savedApiKey, setSavedApiKey] = useState<string | null>(null);
@@ -338,6 +374,8 @@ function MainDashboard() {
 
   // Load message logs when session ID changes
   useEffect(() => {
+    setTabs([{ id: "overview", title: "Overview", type: "overview", content: "" }]);
+    setActiveTabId("overview");
     if (id) {
       if (activeStreamingSessionRef.current === id) {
         // Skip loading from DB because we are currently streaming/handling this session
@@ -508,7 +546,6 @@ function MainDashboard() {
 
       let currentContent = "";
       let currentThinking = "";
-      let currentFilesChanged: Array<{ name: string; path: string }> = [];
 
       await bridge.runAgent(
         savedApiKey || "",
@@ -550,29 +587,16 @@ function MainDashboard() {
             const toolName = event.payload.name;
             const toolArgs = event.payload.args;
             
-            // 我们在内容中追加工具调用记录
-            currentContent += `\n\n🔧 **正在调用工具 \`${toolName}\`...**\n`;
-            
-            try {
-              const parsed = JSON.parse(toolArgs);
-              if (parsed.path) {
-                const parts = parsed.path.split(/[/\\]/);
-                const name = parts[parts.length - 1];
-                const path = parts.slice(0, -1).join("/") || "./";
-                if (!currentFilesChanged.some(f => f.name === name && f.path === path)) {
-                  currentFilesChanged.push({ name, path });
-                }
-              }
-            } catch {}
-
             setMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === assistantMsgId);
               if (idx > -1) {
                 const updated = [...prev];
+                const msg = updated[idx];
+                const toolCalls = msg.toolCalls ? [...msg.toolCalls] : [];
+                toolCalls.push({ name: toolName, args: toolArgs });
                 updated[idx] = {
-                  ...updated[idx],
-                  content: currentContent,
-                  filesChanged: currentFilesChanged.length > 0 ? currentFilesChanged : undefined,
+                  ...msg,
+                  toolCalls,
                 };
                 return updated;
               }
@@ -580,14 +604,42 @@ function MainDashboard() {
             });
           } else if (event.type === "ToolResult") {
             const toolName = event.payload.name;
-            currentContent += `\n✅ **工具 \`${toolName}\` 执行完成。**\n`;
+            const toolResult = event.payload.result;
+            
+            let isError = false;
+            try {
+              const parsed = JSON.parse(toolResult);
+              if (parsed && (parsed.error !== undefined || parsed.success === false)) {
+                isError = true;
+              }
+            } catch {}
+
             setMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === assistantMsgId);
               if (idx > -1) {
                 const updated = [...prev];
+                const msg = updated[idx];
+                const toolCalls = msg.toolCalls ? [...msg.toolCalls] : [];
+                const tcIdx = toolCalls.map(tc => tc.name === toolName && tc.result === undefined).lastIndexOf(true);
+                if (tcIdx > -1) {
+                  toolCalls[tcIdx] = {
+                    ...toolCalls[tcIdx],
+                    result: toolResult,
+                    isError,
+                  };
+                } else {
+                  const lastIdx = toolCalls.findIndex(tc => tc.name === toolName);
+                  if (lastIdx > -1) {
+                    toolCalls[lastIdx] = {
+                      ...toolCalls[lastIdx],
+                      result: toolResult,
+                      isError,
+                    };
+                  }
+                }
                 updated[idx] = {
-                  ...updated[idx],
-                  content: currentContent,
+                  ...msg,
+                  toolCalls,
                 };
                 return updated;
               }
@@ -610,6 +662,15 @@ function MainDashboard() {
             });
           } else if (event.type === "Finished") {
             activeStreamingSessionRef.current = null;
+            let finalToolCalls: any[] = [];
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === assistantMsgId);
+              if (idx > -1) {
+                finalToolCalls = prev[idx].toolCalls || [];
+              }
+              return prev;
+            });
+
             // 保存最终消息到本地数据库
             const finalMsg: Message = {
               id: assistantMsgId,
@@ -617,12 +678,10 @@ function MainDashboard() {
               role: "assistant",
               content: currentContent,
               createdAt: new Date().toISOString(),
+              toolCalls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
             };
             if (currentThinking) {
               finalMsg.reasoning_content = currentThinking;
-            }
-            if (currentFilesChanged.length > 0) {
-              finalMsg.filesChanged = currentFilesChanged;
             }
             if (currentContent.includes("```mermaid")) {
               finalMsg.artifacts = [{ name: "Architecture Diagram", type: "architecture" }];
@@ -742,28 +801,100 @@ function MainDashboard() {
             </button>
           </div>
         </div>
-        <div className={`titlebar-right ${isLeftSidebarOpen ? "" : "collapsed"}`} data-tauri-drag-region>
-          <div className="titlebar-right-left-group" data-tauri-drag-region>
-            <div className="titlebar-breadcrumbs" data-tauri-drag-region>
+        <div className={`titlebar-right ${isLeftSidebarOpen ? "" : "collapsed"}`} data-tauri-drag-region style={{ display: "flex", padding: 0, alignItems: "center" }}>
+          {/* Middle part (above middle chat) */}
+          <div className="titlebar-middle" data-tauri-drag-region>
+            <div className="titlebar-breadcrumbs" data-tauri-drag-region style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               <span className="titlebar-breadcrumb-session">{activeSession ? activeSession.title : "New Conversation"}</span>
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "100%" }}>
+              {id && activeSession && (
+                <button className="titlebar-btn" style={{ background: "#f2f2f7", border: "1px solid #e3e3e3" }} onClick={() => showToast("待开发")}>
+                  <Icons.IDE />
+                  Open IDE
+                </button>
+              )}
+            </div>
           </div>
-          <div className="titlebar-actions">
-            {/* Open IDE Button */}
-            {id && activeSession && (
-              <button className="titlebar-btn" style={{ background: "#f2f2f7", border: "1px solid #e3e3e3" }} onClick={() => showToast("待开发")}>
-                <Icons.IDE />
-                Open IDE
-              </button>
-            )}
 
-            {/* Right Sidebar toggle - Only display when session is active */}
-            {id && activeSession && (
-              <button className={`titlebar-btn ${isRightSidebarOpen ? "active" : ""}`} onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}>
+          {/* Right part (above right panel, visible only when right sidebar is open) */}
+          {id && activeSession && isRightSidebarOpen && (
+            <div className="titlebar-right-panel-header" data-tauri-drag-region>
+              {/* Tabs Container */}
+              <div className="right-panel-tabs">
+                {tabs.map((tab, index) => {
+                  const isActive = activeTabId === tab.id;
+                  
+                  // Helper function to get tab icon
+                  let tabIcon = null;
+                  if (tab.id === "overview") {
+                    tabIcon = (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12" />
+                        <line x1="3" y1="6" x2="21" y2="6" />
+                        <line x1="3" y1="18" x2="21" y2="18" />
+                      </svg>
+                    );
+                  } else if (tab.title === "Walkthrough") {
+                    tabIcon = (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                      </svg>
+                    );
+                  } else if (tab.title.endsWith(".rs")) {
+                    tabIcon = (
+                      <span className="rust-tab-icon">R</span>
+                    );
+                  } else {
+                    tabIcon = <Icons.FileCode />;
+                  }
+
+                  return (
+                    <React.Fragment key={tab.id}>
+                      {index > 0 && !isActive && activeTabId !== tabs[index - 1].id && (
+                        <div className="tab-separator" />
+                      )}
+                      <div 
+                        className={`panel-tab ${isActive ? "active" : ""}`}
+                        onClick={() => setActiveTabId(tab.id)}
+                      >
+                        {tabIcon}
+                        <span>{tab.title}</span>
+                        {tab.id !== "overview" && (
+                          <span 
+                            onClick={(e) => closeTab(tab.id, e)} 
+                            className="close-tab-btn"
+                          >
+                            ✕
+                          </span>
+                        )}
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+
+              {/* Action Buttons (Gear & Toggle) */}
+              <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0, paddingLeft: "6px" }}>
+                <button className="titlebar-btn" onClick={() => setIsSettingsOpen(true)} style={{ padding: "4px" }}>
+                  <Icons.Settings />
+                </button>
+                <button className={`titlebar-btn ${isRightSidebarOpen ? "active" : ""}`} onClick={() => setIsRightSidebarOpen(false)} style={{ padding: "4px" }}>
+                  <Icons.RightSidebarToggle />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Right Sidebar toggle - When right sidebar is closed, render it in the middle part's actions */}
+          {id && activeSession && !isRightSidebarOpen && (
+            <div className="titlebar-actions" style={{ paddingRight: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <button className="titlebar-btn" onClick={() => setIsRightSidebarOpen(true)}>
                 <Icons.RightSidebarToggle />
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -907,24 +1038,127 @@ function MainDashboard() {
                         )}
                         {renderMarkdown(msg.content)}
 
-                        {/* Files changed list */}
-                        {msg.filesChanged && msg.filesChanged.length > 0 && (
-                          <div className="files-changed-summary">
-                            <div className="files-summary-header">
-                              <span>Files Changed ({msg.filesChanged.length})</span>
-                              <Icons.ChevronDown />
-                            </div>
-                            <div className="files-summary-list">
-                              {msg.filesChanged.map((f, idx) => (
-                                <div key={idx} className="file-item-chip">
-                                  <a href={`file://${f.path}/${f.name}`} className="file-item-left">
-                                    <Icons.FileCode />
-                                    {f.name}
-                                  </a>
-                                  <span className="file-path-desc">{f.path}</span>
+                        {/* Interactive Tool Calls list */}
+                        {msg.toolCalls && msg.toolCalls.length > 0 && (
+                          <div className="message-tool-calls-list" style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {msg.toolCalls.map((tc, idx) => {
+                              let argsPreview = "";
+                              try {
+                                const parsed = JSON.parse(tc.args);
+                                if (parsed.path) {
+                                  argsPreview = parsed.path;
+                                } else if (parsed.command) {
+                                  argsPreview = parsed.command;
+                                } else if (parsed.pattern) {
+                                  argsPreview = parsed.pattern;
+                                } else {
+                                  argsPreview = JSON.stringify(parsed);
+                                }
+                              } catch {
+                                argsPreview = tc.args;
+                              }
+                              
+                              // Parse the result dynamically to check for error,
+                              // ensuring correctness for historical messages where tc.isError wasn't correctly persisted.
+                              let currentIsError = tc.isError;
+                              if (tc.result !== undefined && !currentIsError) {
+                                try {
+                                  const parsed = JSON.parse(tc.result);
+                                  if (parsed && (parsed.error !== undefined || parsed.success === false)) {
+                                    currentIsError = true;
+                                  }
+                                } catch {}
+                              }
+
+                              const statusIcon = tc.result === undefined 
+                                ? "⚙️" 
+                                : currentIsError 
+                                  ? "❌" 
+                                  : "✅";
+                                  
+                              const statusText = tc.result === undefined 
+                                ? "正在执行..." 
+                                : currentIsError 
+                                  ? "执行失败" 
+                                  : "执行完成";
+
+                              return (
+                                <div 
+                                  key={idx}
+                                  className={`tool-call-card ${currentIsError ? "error" : ""}`}
+                                  onClick={() => {
+                                    if (tc.result !== undefined) {
+                                      let language = "json";
+                                      let contentToShow = tc.result;
+                                      
+                                      if (tc.name === "FileRead") {
+                                        try {
+                                          const parsedRes = JSON.parse(tc.result);
+                                          if (parsedRes.content !== undefined) {
+                                            contentToShow = parsedRes.content;
+                                            const ext = argsPreview.split(".").pop();
+                                            language = ext || "text";
+                                          }
+                                        } catch {}
+                                      } else if (tc.name === "Bash") {
+                                        try {
+                                          const parsedRes = JSON.parse(tc.result);
+                                          contentToShow = parsedRes.stdout || parsedRes.stderr || tc.result;
+                                          language = "bash";
+                                        } catch {}
+                                      } else if (tc.name === "Glob" || tc.name === "Grep") {
+                                        language = "json";
+                                        try {
+                                          contentToShow = JSON.stringify(JSON.parse(tc.result), null, 2);
+                                        } catch {}
+                                      }
+
+                                      let filename = tc.name;
+                                      if (tc.name === "FileRead" || tc.name === "FileWrite" || tc.name === "FileEdit") {
+                                        filename = argsPreview.split(/[/\\]/).pop() || tc.name;
+                                      } else if (tc.name === "Bash") {
+                                        filename = argsPreview.length > 12 ? argsPreview.substring(0, 12) + "..." : argsPreview;
+                                      } else if (tc.name === "Glob" || tc.name === "Grep") {
+                                        filename = `${tc.name}: ${argsPreview.length > 8 ? argsPreview.substring(0, 8) + "..." : argsPreview}`;
+                                      }
+
+                                      openTab({
+                                        id: `tool-${msg.id}-${idx}`,
+                                        title: filename,
+                                        type: "tool_result",
+                                        content: contentToShow,
+                                        language,
+                                      });
+                                    }
+                                  }}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "10px",
+                                    padding: "8px 12px",
+                                    background: "rgba(0, 0, 0, 0.03)",
+                                    borderRadius: "6px",
+                                    borderLeft: tc.result === undefined 
+                                      ? "3px solid #007aff" 
+                                      : currentIsError 
+                                        ? "3px solid #ff3b30" 
+                                        : "3px solid #34c759",
+                                    cursor: tc.result !== undefined ? "pointer" : "default",
+                                    fontSize: "13px",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                >
+                                  <span style={{ fontSize: "16px" }}>{statusIcon}</span>
+                                  <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                                    <span style={{ fontWeight: "500" }}>{tc.name} <span style={{ color: "#8a8a8f", fontWeight: "normal", fontFamily: "monospace" }}>({argsPreview})</span></span>
+                                    <span style={{ fontSize: "11px", color: "#8a8a8f" }}>{statusText}</span>
+                                  </div>
+                                  {tc.result !== undefined && (
+                                    <span style={{ fontSize: "11px", color: "#007aff" }}>点击在右侧面板查看 ➔</span>
+                                  )}
                                 </div>
-                              ))}
-                            </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -1054,31 +1288,55 @@ function MainDashboard() {
 
       {/* 3. RIGHT SIDEBAR PANEL */}
       <aside className={`right-panel ${isRightSidebarOpen ? "" : "collapsed"}`}>
-        <div className="right-panel-tabs">
-          <button className="panel-tab active">Overview</button>
-        </div>
         {(() => {
-          const assistantMessages = messages.filter((m) => m.role === "assistant");
-          const latestAssistantMessage = assistantMessages.length > 0 ? assistantMessages[assistantMessages.length - 1] : null;
-          const rightPanelMarkdownContent = latestAssistantMessage ? latestAssistantMessage.content : "";
+          const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
           
-          if (rightPanelMarkdownContent) {
+          if (activeTab.type === "overview") {
+            const assistantMessages = messages.filter((m) => m.role === "assistant");
+            const latestAssistantMessage = assistantMessages.length > 0 ? assistantMessages[assistantMessages.length - 1] : null;
+            const rightPanelMarkdownContent = latestAssistantMessage ? latestAssistantMessage.content : "";
+            
+            if (rightPanelMarkdownContent) {
+              return (
+                <div className="right-panel-markdown" style={{ height: "100%", boxSizing: "border-box" }}>
+                  {renderMarkdown(rightPanelMarkdownContent)}
+                </div>
+              );
+            } else {
+              return (
+                <div className="right-panel-empty" style={{ height: "100%" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span>No document generated yet.</span>
+                </div>
+              );
+            }
+          } else if (activeTab.type === "tool_result") {
             return (
-              <div className="right-panel-markdown">
-                {renderMarkdown(rightPanelMarkdownContent)}
-              </div>
-            );
-          } else {
-            return (
-              <div className="right-panel-empty">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                </svg>
-                <span>No document generated yet.</span>
+              <div className="right-panel-content" style={{ padding: "16px", height: "100%", boxSizing: "border-box", overflow: "hidden" }}>
+                <pre style={{
+                  margin: 0,
+                  padding: "16px",
+                  background: "#f6f8fa",
+                  borderRadius: "6px",
+                  border: "1px solid #d0d7de",
+                  overflow: "auto",
+                  height: "100%",
+                  boxSizing: "border-box",
+                  fontFamily: 'SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace',
+                  fontSize: "12px",
+                  lineHeight: "1.5",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all"
+                }}>
+                  <code>{activeTab.content}</code>
+                </pre>
               </div>
             );
           }
+          return null;
         })()}
       </aside>
       </div>

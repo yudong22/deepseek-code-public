@@ -1239,4 +1239,136 @@ body {
   gap: 12px;
 }
 
+/* Titlebar Main Right Layout wrapper */
+.titlebar-main-right {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Titlebar Middle (above middle chat) */
+.titlebar-middle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  min-width: 0;
+  height: 100%;
+}
+
+/* Titlebar Panel Header & Tabs */
+.titlebar-right-panel-header {
+  width: 320px;
+  min-width: 320px;
+  border-left: 1px solid #e3e3e3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  padding: 0 8px 0 0;
+  background-color: #f6f6f6;
+  box-sizing: border-box;
+}
+
+.titlebar-right-panel-header .right-panel-tabs {
+  display: flex;
+  overflow-x: auto;
+  height: 100%;
+  align-items: center;
+  flex: 1;
+  border-bottom: none;
+  background: transparent;
+  padding-left: 4px;
+  scrollbar-width: none;
+}
+
+.titlebar-right-panel-header .right-panel-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.titlebar-right-panel-header .panel-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  margin: 0 2px;
+  cursor: pointer;
+  border-radius: 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: normal;
+  color: #555;
+  white-space: nowrap;
+  height: 24px;
+  transition: all 0.15s ease;
+  box-shadow: none;
+}
+
+.titlebar-right-panel-header .panel-tab:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #111;
+}
+
+.titlebar-right-panel-header .panel-tab.active {
+  background-color: #ffffff;
+  border-color: #e3e3e3;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  font-weight: 500;
+  color: #1d1d1f;
+}
+
+.titlebar-right-panel-header .panel-tab.active:hover {
+  background-color: #ffffff;
+}
+
+/* Tab separator line */
+.titlebar-right-panel-header .tab-separator {
+  width: 1px;
+  height: 12px;
+  background-color: rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* Rust Tab Icon */
+.rust-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #e05d44;
+  color: white;
+  font-size: 8px;
+  font-weight: bold;
+  font-family: sans-serif;
+  line-height: 1;
+}
+
+/* Close Tab Button */
+.titlebar-right-panel-header .close-tab-btn {
+  font-size: 9px;
+  font-weight: bold;
+  color: #8a8a8f;
+  margin-left: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+}
+
+.titlebar-right-panel-header .close-tab-btn:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+  color: #ff3b30;
+}
+
+
 
