@@ -25,7 +25,9 @@ deepseek-code/
 ├── docs/                    # 项目设计与维护文档目录
 │   └── route-map.md         # [当前文件] 代码结构与路径说明文档
 ├── src/                     # 前端 React 源码目录
-└── src-tauri/               # 后端 Rust 源码与 Tauri 配置目录
+├── src-tauri/               # 后端 Rust 源码与 Tauri 配置目录
+└── backend/                 # 沙箱运行环境与临时目录
+    └── sandbox_workspace/   # 默认沙箱生成和解析临时文件的保存位置
 ```
 
 ---
