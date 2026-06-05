@@ -34,8 +34,8 @@ deepseek-code/
 ```bash
 src/
 ├── main.tsx                 # 前端入口文件，挂载 React 根节点
-├── App.tsx                  # 核心 React 根组件（主界面逻辑与视图）
-├── App.css                  # 全局或 App 组件样式
+├── App.tsx                  # 核心 React 根组件（集成了单行自定义标题栏、左右侧边栏折叠及 Mermaid Markdown 预览）
+├── App.css                  # 自定义标题栏、折叠侧边栏过渡动画及 Mermaid 预览渲染样式
 ├── assets/                  # 静态资源（图片、字体等）
 ├── bridge/                  # 统一的 JS Bridge 门面层（封装底层壳交互，支持多端适配）
 │   ├── index.ts             # 桥接层入口（环境检测与分发）
@@ -47,6 +47,8 @@ src/
 
 #### 关键路径与通信：
 - **通信桥梁**：前端组件统一导入并调用 `@/bridge`（例如 `bridge.greet(name)` 或数据库接口 `bridge.initDb()`）进行交互，不再直接依赖 `@tauri-apps/api`。内部会自动识别执行环境，若在 Tauri 内则调用 Rust 后端 Command 或使用 `tauri-plugin-sql` 访问本地 SQLite 数据库（`deepseek_code.db`）；若在标准浏览器内则自动使用 `localStorage` 作为模拟数据库进行数据存取，避免出现运行时未定义报错。
+- **自定义单行标题栏与双折叠侧边栏**：实现了高度集成的单行自定义标题栏，左侧预留了 80px (折叠) / 260px (展开) 的 mac 交通灯控制键安全边距。支持左侧边栏、右侧侧边栏的独立折叠（具有平滑的 CSS 过渡动画）。
+- **右侧 Overview 动态 Markdown 与 Mermaid 渲染**：右侧折叠面板展开时，会动态提取当前会话历史中最新的助手 Markdown 文档，并通过 `mermaid` 模块自动在页面上将 ` ```mermaid ` 代码块编译渲染为交互式 SVG 架构流程图。
 
 ---
 

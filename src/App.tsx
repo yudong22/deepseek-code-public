@@ -1,7 +1,47 @@
 import React, { useState, useEffect, useRef } from "react";
 import { HashRouter, Routes, Route, useNavigate, useParams } from "react-router-dom";
 import { bridge, Session, Message } from "@/bridge";
+import mermaid from "mermaid";
 import "./App.css";
+
+mermaid.initialize({
+  startOnLoad: false,
+  theme: "neutral",
+  securityLevel: "loose",
+});
+
+function Mermaid({ chart }: { chart: string }) {
+  const [svg, setSvg] = useState<string>("");
+  const id = useRef(`mermaid-${Math.floor(Math.random() * 1000000)}`);
+
+  useEffect(() => {
+    let active = true;
+    async function renderChart() {
+      try {
+        const { svg: renderedSvg } = await mermaid.render(id.current, chart);
+        if (active) {
+          setSvg(renderedSvg);
+        }
+      } catch (err) {
+        console.error("Mermaid render error:", err);
+      }
+    }
+    renderChart();
+    return () => {
+      active = false;
+    };
+  }, [chart]);
+
+  if (!svg) {
+    return (
+      <div className="mermaid" id={id.current} style={{ display: "flex", justifyContent: "center", padding: "12px", color: "#8a8a8f", fontSize: "11px" }}>
+        Rendering diagram...
+      </div>
+    );
+  }
+
+  return <div className="mermaid" dangerouslySetInnerHTML={{ __html: svg }} />;
+}
 
 // --- Inline SVG Icons Helper ---
 const Icons = {
@@ -114,6 +154,12 @@ const Icons = {
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
+  ),
+  RightSidebarToggle: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <line x1="15" y1="3" x2="15" y2="21" />
+    </svg>
   )
 };
 
@@ -132,11 +178,17 @@ function renderMarkdown(text: string) {
     if (line.startsWith("```")) {
       if (inCodeBlock) {
         // End of code block
-        elements.push(
-          <pre key={`code-${i}`}>
-            <code className={codeBlockLang}>{codeBlockContent.join("\n")}</code>
-          </pre>
-        );
+        if (codeBlockLang === "mermaid") {
+          elements.push(
+            <Mermaid key={`mermaid-${i}`} chart={codeBlockContent.join("\n")} />
+          );
+        } else {
+          elements.push(
+            <pre key={`code-${i}`}>
+              <code className={codeBlockLang}>{codeBlockContent.join("\n")}</code>
+            </pre>
+          );
+        }
         codeBlockContent = [];
         inCodeBlock = false;
       } else {
@@ -236,6 +288,10 @@ function MainDashboard() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState("deepseek-v4-flash");
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+
+  // Sidebar fold states
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
 
   // Toast notification state
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({
@@ -635,22 +691,106 @@ function MainDashboard() {
         </div>
       )}
 
-
-      {/* 1. LEFT SIDEBAR */}
-      <aside className="left-sidebar">
-
-        {/* Toolbar navigation */}
-        <div className="sidebar-toolbar">
-          <button className="sidebar-tool-btn">
-            <Icons.SidebarToggle />
-          </button>
-          <button className="sidebar-tool-btn" onClick={() => navigate(-1)}>
-            <Icons.ChevronLeft />
-          </button>
-          <button className="sidebar-tool-btn" onClick={() => navigate(1)}>
-            <Icons.ChevronRight />
-          </button>
+      {/* Custom Title Bar */}
+      <div className="custom-titlebar" data-tauri-drag-region>
+        <div className={`titlebar-left ${isLeftSidebarOpen ? "" : "collapsed"}`} data-tauri-drag-region>
+          {isLeftSidebarOpen && (
+            <div className="titlebar-left-controls" data-tauri-drag-region>
+              <button className="titlebar-btn" style={{ marginLeft: "80px" }} onClick={() => setIsLeftSidebarOpen(false)}>
+                <Icons.SidebarToggle />
+              </button>
+              <button className="titlebar-btn" onClick={() => navigate(-1)}>
+                <Icons.ChevronLeft />
+              </button>
+              <button className="titlebar-btn" onClick={() => navigate(1)}>
+                <Icons.ChevronRight />
+              </button>
+            </div>
+          )}
         </div>
+        <div className="titlebar-right" data-tauri-drag-region>
+          <div className="titlebar-right-left-group" data-tauri-drag-region>
+            {!isLeftSidebarOpen && (
+              <div className="titlebar-left-controls-shifted" data-tauri-drag-region>
+                <button className="titlebar-btn" onClick={() => setIsLeftSidebarOpen(true)}>
+                  <Icons.SidebarToggle />
+                </button>
+                <button className="titlebar-btn" onClick={() => navigate(-1)}>
+                  <Icons.ChevronLeft />
+                </button>
+                <button className="titlebar-btn" onClick={() => navigate(1)}>
+                  <Icons.ChevronRight />
+                </button>
+              </div>
+            )}
+            <div className="titlebar-breadcrumbs" data-tauri-drag-region>
+              <span className="titlebar-breadcrumb-project">{activeSession?.projectName || "deepseek-code"}</span>
+              <span className="titlebar-breadcrumb-separator">/</span>
+              <span className="titlebar-breadcrumb-session">{activeSession ? activeSession.title : "New Conversation"}</span>
+            </div>
+          </div>
+          <div className="titlebar-actions">
+            {/* Open IDE Button */}
+            {id && activeSession && (
+              <button className="titlebar-btn" style={{ background: "#f2f2f7", border: "1px solid #e3e3e3" }} onClick={() => showToast("待开发")}>
+                <Icons.IDE />
+                Open IDE
+              </button>
+            )}
+
+            {/* Model Selector Pill */}
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <button
+                className="titlebar-model-selector"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsModelDropdownOpen(!isModelDropdownOpen);
+                }}
+              >
+                <span>{selectedModel}</span>
+                <Icons.ChevronDown />
+              </button>
+              {isModelDropdownOpen && (
+                <div className="model-dropdown" style={{ top: "28px", right: "0" }}>
+                  <div
+                    className={`model-dropdown-item ${selectedModel === "deepseek-v4-flash" ? "active" : ""}`}
+                    onClick={() => {
+                      setSelectedModel("deepseek-v4-flash");
+                      setIsModelDropdownOpen(false);
+                    }}
+                  >
+                    deepseek-v4-flash
+                  </div>
+                  <div
+                    className={`model-dropdown-item ${selectedModel === "deepseek-v4-pro" ? "active" : ""}`}
+                    onClick={() => {
+                      setSelectedModel("deepseek-v4-pro");
+                      setIsModelDropdownOpen(false);
+                    }}
+                  >
+                    deepseek-v4-pro
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Settings Button */}
+            <button className="titlebar-btn" onClick={() => setIsSettingsOpen(true)}>
+              <Icons.Settings />
+              Settings
+            </button>
+
+            {/* Right Sidebar toggle */}
+            <button className={`titlebar-btn ${isRightSidebarOpen ? "active" : ""}`} onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}>
+              <Icons.RightSidebarToggle />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="main-layout">
+        {/* 1. LEFT SIDEBAR */}
+        <aside className={`left-sidebar ${isLeftSidebarOpen ? "" : "collapsed"}`}>
 
         {/* Action button: New Conversation */}
         <div className="new-conv-btn-container">
@@ -728,15 +868,6 @@ function MainDashboard() {
         {id && activeSession ? (
           // Active Chat logs
           <>
-            <div className="chat-header">
-              <div className="chat-title">
-                <span className="chat-title-main">{activeSession.title}</span>
-              </div>
-              <button className="header-action-btn" onClick={() => showToast("待开发")}>
-                <Icons.IDE />
-                Open IDE
-              </button>
-            </div>
 
 
             {/* Message stream */}
@@ -896,6 +1027,37 @@ function MainDashboard() {
           </div>
         )}
       </main>
+
+      {/* 3. RIGHT SIDEBAR PANEL */}
+      <aside className={`right-panel ${isRightSidebarOpen ? "" : "collapsed"}`}>
+        <div className="right-panel-tabs">
+          <button className="panel-tab active">Overview</button>
+        </div>
+        {(() => {
+          const assistantMessages = messages.filter((m) => m.role === "assistant");
+          const latestAssistantMessage = assistantMessages.length > 0 ? assistantMessages[assistantMessages.length - 1] : null;
+          const rightPanelMarkdownContent = latestAssistantMessage ? latestAssistantMessage.content : "";
+          
+          if (rightPanelMarkdownContent) {
+            return (
+              <div className="right-panel-markdown">
+                {renderMarkdown(rightPanelMarkdownContent)}
+              </div>
+            );
+          } else {
+            return (
+              <div className="right-panel-empty">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                <span>No document generated yet.</span>
+              </div>
+            );
+          }
+        })()}
+      </aside>
+      </div>
 
     </div>
   );
