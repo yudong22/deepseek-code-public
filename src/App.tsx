@@ -574,8 +574,8 @@ function MainDashboard() {
 1. 双端测试通过后，自动进行 \`git commit\` 提交。
 2. 优先通过 Web 端（Mock 效果）进行调试提速。
 
-已更新 [README.md](file:///Users/yudong22/Documents/deepseek-code/README.md) 并执行了本地测试！`;
-          mockFiles = [{ name: "README.md", path: "/Users/yudong22/Documents/deepseek-code" }];
+已更新 [README.md](./README.md) 并执行了本地测试！`;
+          mockFiles = [{ name: "README.md", path: "./" }];
           mockArtifacts = [{ name: "Walkthrough", type: "walkthrough" }];
         } else {
           mockFiles = [
