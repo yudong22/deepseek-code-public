@@ -37,11 +37,16 @@ src/
 ├── App.tsx                  # 核心 React 根组件（主界面逻辑与视图）
 ├── App.css                  # 全局或 App 组件样式
 ├── assets/                  # 静态资源（图片、字体等）
+├── bridge/                  # 统一的 JS Bridge 门面层（封装底层壳交互，支持多端适配）
+│   ├── index.ts             # 桥接层入口（环境检测与分发）
+│   ├── types.ts             # 桥接层 TypeScript 接口定义
+│   ├── tauri.ts             # 原生 Tauri 壳能力实现
+│   └── mock.ts              # 浏览器环境 Mock/降级实现
 └── vite-env.d.ts            # Vite 环境变量类型声明
 ```
 
 #### 关键路径与通信：
-- **通信桥梁**：前端通过 `@tauri-apps/api/core` 中的 `invoke` 方法与 Rust 后端进行异步调用。例如，`invoke("greet", { name })` 会触发后端的 `greet` 命令。
+- **通信桥梁**：前端组件统一导入并调用 `@/bridge`（例如 `bridge.greet(name)` 或数据库接口 `bridge.initDb()`）进行交互，不再直接依赖 `@tauri-apps/api`。内部会自动识别执行环境，若在 Tauri 内则调用 Rust 后端 Command 或使用 `tauri-plugin-sql` 访问本地 SQLite 数据库（`deepseek_code.db`）；若在标准浏览器内则自动使用 `localStorage` 作为模拟数据库进行数据存取，避免出现运行时未定义报错。
 
 ---
 
@@ -62,5 +67,8 @@ src-tauri/
 
 ## 3. 开发规范与维护 (Development Guide)
 每当您完成一个需求的开发：
-1. **进行测试**：确保在桌面环境下（或前端单独环境下）程序运行无误，前后端交互正常。
+1. **进行测试**：
+   - **前端优先验证**：优先运行 `bun run dev` 启动前端服务器，直接在浏览器中进行逻辑 Mock 调试，从而跳过缓慢的原生桌面端打包构建过程。
+   - **双端测试校验**：必须在开发完需求后运行 `bun run test`，该命令会自动串联执行 Rust 编译检测与 React 前端单元测试（`bun test`），确保所有测试通过。
 2. **补充本文档**：若新增了关键组件、新页面（路由）、新的 Rust Command API，需在此文档中补充对应路径的职责说明，以保证文档与代码同步。
+3. **自动 Git 提交**：测试通过且文档同步完成后，必须执行 Git 提交保存当前迭代版本。

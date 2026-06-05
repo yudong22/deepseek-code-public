@@ -5,6 +5,18 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    {
+      "identifier": "sql:default",
+      "allow": [{ "name": "sqlite:deepseek_code.db" }]
+    },
+    {
+      "identifier": "sql:allow-select",
+      "allow": [{ "name": "sqlite:deepseek_code.db" }]
+    },
+    {
+      "identifier": "sql:allow-execute",
+      "allow": [{ "name": "sqlite:deepseek_code.db" }]
+    }
   ]
 }
