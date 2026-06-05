@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "export PATH=\"$PATH:/Users/yudong22/.bun/bin\" && cargo check --manifest-path src-tauri/Cargo.toml && bun test",
-    "build:mac": "tauri build",
+    "build:mac": "tauri build && cp -rf src-tauri/target/release/bundle/macos/deepseek-code.app /Applications/",
     "preview:mac": "tauri build && open src-tauri/target/release/bundle/macos/deepseek-code.app"
   },
   "dependencies": {
