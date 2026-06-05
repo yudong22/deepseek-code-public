@@ -1,0 +1,73 @@
+name: Release macOS Client
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (e.g. v0.1.0-beta.1)'
+        required: false
+        default: 'manual-build'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Export macOS Signing & Notarization Env (if secrets are set)
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.APPLE_CERTIFICATE }}" ]; then
+            echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}" >> $GITHUB_ENV
+          fi
+          if [ -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" ]; then
+            echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
+          fi
+          if [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]; then
+            echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> $GITHUB_ENV
+          fi
+          if [ -n "${{ secrets.APPLE_ID }}" ]; then
+            echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
+          fi
+          if [ -n "${{ secrets.APPLE_PASSWORD }}" ]; then
+            echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> $GITHUB_ENV
+          fi
+          if [ -n "${{ secrets.APPLE_TEAM_ID }}" ]; then
+            echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+          fi
+
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event.inputs.tag_name || github.ref_name }}
+          releaseName: 'deepseek-code ${{ github.event.inputs.tag_name || github.ref_name }}'
+          releaseBody: 'Automatic pre-release build for macOS Apple Silicon.'
+          prerelease: true
+          args: --target aarch64-apple-darwin
