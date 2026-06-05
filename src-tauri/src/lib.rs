@@ -2,6 +2,7 @@ pub mod safety;
 pub mod tools;
 
 use tauri::ipc::Channel;
+use tauri::Manager;
 use crate::tools::AgentTool;
 use crate::tools::{FileReadTool, FileWriteTool, FileEditTool, GrepTool, GlobTool, BashTool};
 
@@ -29,22 +30,44 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 async fn run_agent_loop(
+    app: tauri::AppHandle,
     api_key: String,
     model: String,
     messages: Vec<ds_api::raw::Message>,
     workspace_root: String,
     on_event: Channel<AgentEvent>,
 ) -> Result<(), String> {
+    // 解析工作区路径为绝对路径
     let workspace_path = if workspace_root.is_empty() || workspace_root == "." {
-        let default_sandbox = std::path::PathBuf::from("backend/sandbox_workspace");
-        if !default_sandbox.exists() {
-            let _ = std::fs::create_dir_all(&default_sandbox);
+        // 使用 Tauri app_data_dir 获取绝对路径
+        let base = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("无法获取 app_data_dir: {}", e))?;
+        let sandbox = base.join("sandbox_workspace");
+        if !sandbox.exists() {
+            std::fs::create_dir_all(&sandbox)
+                .map_err(|e| format!("无法创建沙箱目录: {}", e))?;
         }
-        default_sandbox
+        sandbox
     } else {
-        std::path::PathBuf::from(&workspace_root)
+        // 用户指定了路径：转为绝对路径
+        let p = std::path::PathBuf::from(&workspace_root);
+        if p.is_relative() {
+            std::env::current_dir()
+                .map_err(|e| format!("无法获取当前目录: {}", e))?
+                .join(p)
+        } else {
+            p
+        }
     };
-    
+
+    // 确保目录存在
+    if !workspace_path.exists() {
+        std::fs::create_dir_all(&workspace_path)
+            .map_err(|e| format!("无法创建工作区目录: {}", e))?;
+    }
+
     // 初始化 6 个基础工具
     let tools_list: Vec<Box<dyn AgentTool>> = vec![
         Box::new(FileReadTool { workspace_root: workspace_path.clone() }),
@@ -63,6 +86,72 @@ async fn run_agent_loop(
 
     let client = reqwest::Client::new();
     let mut current_history = messages;
+
+    // 动态获取并注入工作区环境元数据（Git 分支、文件列表）到系统提示词中
+    if !current_history.is_empty() {
+        if let ds_api::raw::Role::System = current_history[0].role {
+            let ws_path = std::path::PathBuf::from(&workspace_root);
+        
+        // 1. 获取当前 Git 分支名
+        let git_branch = match std::process::Command::new("git")
+            .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+            .current_dir(&ws_path)
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                String::from_utf8_lossy(&output.stdout).trim().to_string()
+            }
+            _ => "Not a git repository (or git not found)".to_string(),
+        };
+
+        // 2. 扫描工作区根目录下的前 30 个项目，生成概要大纲
+        let mut file_list = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&ws_path) {
+            let mut count = 0;
+            for entry in entries {
+                if count >= 30 {
+                    file_list.push("... (more files truncated)".to_string());
+                    break;
+                }
+                if let Ok(entry) = entry {
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+                    // 忽略隐藏的点文件，但保留 .gitignore
+                    if file_name.starts_with('.') && file_name != ".gitignore" {
+                        continue;
+                    }
+                    let file_type = if entry.path().is_dir() { "dir" } else { "file" };
+                    file_list.push(format!("- {} ({})", file_name, file_type));
+                    count += 1;
+                }
+            }
+        }
+
+        let file_outline = if file_list.is_empty() {
+            "Empty directory or read failed".to_string()
+        } else {
+            file_list.join("\n")
+        };
+
+        // 3. 组装扩展环境上下文
+        let workspace_context = format!(
+            "\n\n[Active Workspace Context]\n\
+             Workspace Root Path: {}\n\
+             Current Git Branch: {}\n\
+             Workspace root contents:\n\
+             {}\n\
+             [End Workspace Context]",
+            workspace_root,
+            git_branch,
+            file_outline
+        );
+
+        // 4. 追加到系统提示词内容中
+        if let Some(ref mut content) = current_history[0].content {
+            content.push_str(&workspace_context);
+        }
+        }
+    }
+
     let max_steps = 15; // 限制最多 15 次多轮交互
 
     for _step in 0..max_steps {
@@ -241,6 +330,11 @@ async fn run_agent_loop(
                 args: tc.arguments.clone(),
             });
 
+            // 对于快速执行的本地文件操作工具，人为引入一小段延迟，确保前端 UI 能够展现 Spinner 动画与倒计时
+            if tc.name != "Bash" {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+
             // 检索匹配对应工具
             let tool = tools_list.iter().find(|t| t.name() == tc.name);
             let result_val = if let Some(t) = tool {
@@ -271,6 +365,10 @@ async fn run_agent_loop(
             current_history.push(tool_msg);
         }
     }
+
+    // 如果循环结束但没有在循环内部提前返回，说明由于达到 max_steps 退出
+    let warning_text = "\n\n⚠️ **系统提示：** 已达到最大步数限制（15 步），任务可能未完全完成。".to_string();
+    let _ = on_event.send(AgentEvent::Text(warning_text));
 
     let _ = on_event.send(AgentEvent::Finished);
     Ok(())

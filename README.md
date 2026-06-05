@@ -15,11 +15,19 @@
 *   **🤖 强大的 DeepSeek-V4 双模引擎**：
     *   内置支持 `deepseek-v4-flash`（低延迟、快速响应）与 `deepseek-v4-pro`（高逻辑推理、深度复杂任务）双模型切换。
     *   提供可视化 Settings 面板，支持安全地保存和清除本地 API Key。
+    *   **本地命令拦截与快捷交互 (Local Slash Commands)**：在输入框中拦截以 `/` 开头的快捷命令（如 `/help` 调出命令帮助、`/clear` 清空历史、`/settings` 打开面板、`/model <pro|flash>` 切换模型），直接在前端高效本地响应，不发送 API，不占用 Token。
+    *   **完整工具链历史恢复 (Full Tool Call Tree Expansion)**：在多轮对话时，前端自动将保存的 `toolCalls` 数组还原为符合 API 规范的 `assistant` 角色 `tool_calls` 及对应的 `tool` 回复，确保模型在后续对话中具备无损的工具执行上下文记忆。
 *   **📊 Mermaid.js 架构图自动渲染**：
     *   右侧 Overview 面板能够动态提取模型输出的 Markdown 文本，提取 ` ```mermaid ` 代码块并实时渲染为交互式的 SVG 流程图，辅助开发者快速掌握复杂系统设计。
 *   **🎨 极简精致的桌面交互 (Premium UI)**：
     *   **沉浸式标题栏**：自定义单行 Titlebar 配合 macOS 交通灯按钮留白（展开/折叠安全间距），支持拖拽移动窗口。
     *   **双折叠侧边栏**：左侧管理项目树与历史会话，右侧呈现 Overview 文档预览，均具备平滑流畅的动画切换效果。
+*   **🛠️ 交互式 Agent 工具箱 (Interactive Agent Tool Cabin)**：
+    *   **动态计时与状态反馈**：工具执行期间展示动画 Spinner 以及基于纯 CSS 的实时计数器计时，并在执行结束后立即锁定结果状态（✓/✕）和最终用时。针对极速的本地文件级工具（如 FileRead、FileWrite 等），人为引入一小段 500ms 交互延迟，确保前端平滑过渡并清晰展示动画及计时。
+    *   **可折叠工具组 (Tool Call Group)**：在单个 Assistant 回复中发生多个工具串联执行时，默认进行折叠隐藏，外部以概数显示（例如“运行了 3 条命令”、“修改了 2 个文件”），并支持一键展开查看单次卡片。
+    *   **无抖动置顶置空 (Jitter-Free Sticky Prompt)**：置顶提示栏采用外层绝对定位（Absolute Overlay）浮动渲染，彻底规避了传统 CSS Sticky 属性在动态显示/隐藏时因高度变化而导致的文档流抖动问题。
+    *   **超时与限制保护机制**：限制单轮最大任务交互最多 15 步（溢出时向前端推送温和告警文本）；并对 Bash 命令行执行工具强加 30 秒超时时间熔断限制，返回优雅的 JSON 错误提示防止线程阻塞锁挂。
+    *   **环境上下文感知 (Workspace Context Aware)**：在后端 `lib.rs` 中自动检测当前 Git 分支、绝对路径及工作区目录列表大纲，并动态注入到 System Prompt 的 `<workspace_context>` 标签中，使 Agent 具备开箱即用的环境布局感知能力。
 
 ---
 

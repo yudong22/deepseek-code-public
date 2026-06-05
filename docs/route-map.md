@@ -36,21 +36,36 @@ deepseek-code/
 ```bash
 src/
 ├── main.tsx                 # 前端入口文件，挂载 React 根节点
-├── App.tsx                  # 核心 React 根组件（集成了单行自定义标题栏、左右侧边栏折叠、Mermaid 渲染以及 Agent 流式对话渲染）
-├── App.css                  # 自定义标题栏、折叠侧边栏过渡动画及 Mermaid 预览、思维链、工具日志渲染样式
+├── App.tsx                  # 根组件与主面板：路由定义、全局状态管理、Agent 流式对话业务逻辑
+├── App.css                  # 全局样式（标题栏、侧边栏、聊天气泡、工具调用卡片、Toast 等）
 ├── assets/                  # 静态资源（图片、字体等）
+├── components/              # 可复用 UI 组件目录
+│   ├── Mermaid.tsx          # Mermaid 图表异步渲染组件
+│   ├── Icons.tsx            # 内联 SVG 图标组件集合（20+ 图标）
+│   ├── Toast.tsx            # 全局 Toast 消息提示组件
+│   ├── SettingsModal.tsx    # 设置弹窗（API Key 管理、历史清空）
+│   ├── TitleBar.tsx         # 自定义单行标题栏（交通灯间距、面包屑、Tab 标签、操作按钮）
+│   ├── LeftSidebar.tsx      # 左侧折叠边栏（新建对话、导航、会话列表、设置入口）
+│   ├── RightPanel.tsx       # 右侧折叠面板（Overview Markdown 预览、工具结果展示）
+│   ├── ChatFeed.tsx         # 对话消息流（包含外层绝对定位防抖动 `.sticky-user-bar` 和内层滚动消息列表）
+│   ├── ChatInput.tsx        # 对话输入区（模型选择、文本输入，并在前端拦截 `/clear`、`/help` 等本地指令并执行相应处理）
+│   ├── EmptyState.tsx       # 新建对话空状态页面（居中提示框、模型选择）
+│   └── ToolCallCard.tsx     # 单个/组合工具调用卡片与执行组组件（ToolCallGroup，支持动态计时、状态变色及折叠概数统计）
+├── utils/                   # 工具函数目录
+│   └── markdown.tsx         # 自定义 Markdown 渲染器（标题、列表、代码块、Mermaid 嵌入、行内格式）
 ├── bridge/                  # 统一的 JS Bridge 门面层（封装底层壳交互，支持多端适配）
 │   ├── index.ts             # 桥接层入口（环境检测与分发）
 │   ├── types.ts             # 桥接层 TypeScript 接口与类型定义（如 runAgent、AgentEvent 等）
-│   ├── tauri.ts             # 原生 Tauri 壳能力实现（对接 SQLite 与底层 run_agent_loop，支持思维链存储）
+│   ├── tauri.ts             # 原生 Tauri 壳能力实现（对接 SQLite，实现具备大小写不敏感兼容/回退机制的列数据加载）
 │   └── mock.ts              # 浏览器环境 Mock/降级实现（模拟 Agent 事件流）
 └── vite-env.d.ts            # Vite 环境变量类型声明
 ```
 
 #### 关键路径与通信：
-- **通信桥梁**：前端组件统一导入并调用 `@/bridge`（例如 `bridge.greet(name)` 或数据库接口 `bridge.initDb()`）进行交互，不再直接依赖 `@tauri-apps/api`。内部会自动识别执行环境，若在 Tauri 内则调用 Rust 后端 Command 或使用 `tauri-plugin-sql` 访问本地 SQLite 数据库（`deepseek_code.db`）；若在标准浏览器内则自动使用 `localStorage` 作为模拟数据库进行数据存取，避免出现运行时未定义报错。
-- **自定义单行标题栏与双折叠侧边栏**：实现了高度集成的单行自定义标题栏，左侧预留了 80px (折叠) / 260px (展开) 的 mac 交通灯控制键安全边距。支持左侧边栏、右侧侧边栏的独立折叠（具有平滑的 CSS 过渡动画）。
-- **右侧 Overview 动态 Markdown 与 Mermaid 渲染**：右侧折叠面板展开时，会动态提取当前会话历史中最新的助手 Markdown 文档，并通过 `mermaid` 模块自动在页面上将 ` ```mermaid ` 代码块编译渲染为交互式 SVG 架构流程图。
+- **通信桥梁**：前端组件统一导入并调用 `@/bridge`（例如 `bridge.greet(name)` 或数据库接口 `bridge.initDb()`）进行交互，不再直接依赖 `@tauri-apps/api`。内部会自动识别执行环境，若在 Tauri 内则调用 Rust 后端 Command 或使用 `tauri-plugin-sql` 访问本地 SQLite 数据库（`deepseek_code.db`）；若在标准浏览器内则自动使用 `localStorage` 作为模拟数据库进行数据存取，避免出现运行时未定义报错。针对 SQLite 列名序列化在部分环境下因大小写不一致的问题，在加载逻辑中提供了属性名智能容错回退解析；在请求发送阶段，前端通过 `expandHistoryMessages` 提取并重构了符合 API 规范的 `tool_calls` 及对应的 `tool` 回复上下文，实现完整的 Agent 执行记忆继承。
+- **动态 System Prompt 工作区感知**：当触发 Agent 运行时，Tauri 后端的 `lib.rs` 在运行 `run_agent_loop` 前会自动执行本地 Git 查询（分支名称）与工作区文件目录树扫描，生成大纲文本动态追加在 System Prompt 的 `<workspace_context>` 标签中，免去前端多次异步查询的开销，使 Agent 具备完整的物理环境感知。
+- **无抖动置顶用户消息栏**：在 `ChatFeed` 消息流中，置顶消息条设计在独立的 `.chat-feed-container` 内部绝对悬浮（`position: absolute`）渲染，脱离了消息列表本身的滚动高度文档流，从根本上解决了频繁展示/隐藏置顶栏时的页面弹动抖动问题。
+- **右侧 Overview 动态 Markdown 与 Mermaid 渲染**：`RightPanel` 组件在右侧折叠面板展开时，会动态提取当前会话历史中最新的助手 Markdown 文档，并通过 `mermaid` 模块自动在页面上将 ` ```mermaid ` 代码块编译渲染为交互式 SVG 架构流程图。
 
 ---
 
@@ -63,7 +78,7 @@ src-tauri/
 │   └── default.json         # 默认允许的应用权限与功能配置
 ├── src/
 │   ├── main.rs              # 应用程序启动入口，调用 lib.rs 中的 run 函数
-│   ├── lib.rs               # 后端核心业务逻辑，注册并实现了 run_agent_loop Tauri 指令
+│   ├── lib.rs               # 后端核心业务逻辑，注册并实现了 run_agent_loop Tauri 指令（对非 Bash 的快速操作引入 500ms 交互延迟以平滑展示前端动画，及 max_steps 步数告警）
 │   ├── safety.rs            # [NEW] 安全拦截器，提供工作区路径防越界（Path Jail）校验
 │   └── tools/               # [NEW] 核心本地 Agent 工具集目录
 │       ├── mod.rs           # 统一特质声明 (AgentTool) 与子模块导出
@@ -72,7 +87,7 @@ src-tauri/
 │       ├── file_edit.rs     # 精准单次匹配替换工具
 │       ├── grep.rs          # 正则全文搜索工具（遵循 .gitignore）
 │       ├── glob.rs          # 文件模式搜索工具（遵循 .gitignore）
-│       └── bash.rs          # 异步 Bash 命令运行工具
+│       └── bash.rs          # 异步 Bash 命令运行工具，内置 30 秒超时熔断保护机制
 └── icons/                   # 应用程序图标（支持多平台格式）
 ```
 

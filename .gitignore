@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sandboxes & local databases
+backend/
+src-tauri/backend/
+src-tauri/target/
+*.db
+*.db-journal

@@ -93,9 +93,21 @@ export const tauriBridge: IBridge = {
   async getSessions(): Promise<Session[]> {
     try {
       const db = await getDb();
-      return await db.select<Session[]>(
+      const rows = await db.select<any[]>(
         "SELECT id, title, lastMessage, updatedAt, projectName FROM sessions ORDER BY updatedAt DESC"
       );
+      return rows.map((row) => {
+        const lastMsg = row.lastMessage !== undefined ? row.lastMessage : row.lastmessage;
+        const updated = row.updatedAt !== undefined ? row.updatedAt : row.updatedat;
+        const project = row.projectName !== undefined ? row.projectName : row.projectname;
+        return {
+          id: row.id,
+          title: row.title,
+          lastMessage: lastMsg || "",
+          updatedAt: updated || "",
+          projectName: project || undefined,
+        };
+      });
     } catch (error) {
       console.error("Failed to retrieve sessions from SQLite:", error);
       return [];
@@ -139,32 +151,30 @@ export const tauriBridge: IBridge = {
   async getMessages(sessionId: string): Promise<Message[]> {
     try {
       const db = await getDb();
-      interface DbMessage {
-        id: string;
-        sessionId: string;
-        role: "user" | "assistant" | "tool";
-        content: string;
-        createdAt: string;
-        reasoningContent: string | null;
-        filesChanged: string | null;
-        artifacts: string | null;
-        toolCalls: string | null;
-      }
-      const rows = await db.select<DbMessage[]>(
+      const rows = await db.select<any[]>(
         "SELECT id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts, toolCalls FROM messages WHERE sessionId = ? ORDER BY createdAt ASC",
         [sessionId]
       );
-      return rows.map((row) => ({
-        id: row.id,
-        sessionId: row.sessionId,
-        role: row.role,
-        content: row.content,
-        createdAt: row.createdAt,
-        reasoning_content: row.reasoningContent || undefined,
-        filesChanged: row.filesChanged ? JSON.parse(row.filesChanged) : undefined,
-        artifacts: row.artifacts ? JSON.parse(row.artifacts) : undefined,
-        toolCalls: row.toolCalls ? JSON.parse(row.toolCalls) : undefined,
-      }));
+      return rows.map((row) => {
+        const sessId = row.sessionId !== undefined ? row.sessionId : row.sessionid;
+        const created = row.createdAt !== undefined ? row.createdAt : row.createdat;
+        const reasoning = row.reasoningContent !== undefined ? row.reasoningContent : row.reasoningcontent;
+        const files = row.filesChanged !== undefined ? row.filesChanged : row.fileschanged;
+        const arts = row.artifacts !== undefined ? row.artifacts : row.artifacts; // note: row.artifacts is already lowercase but added for symmetry
+        const tCalls = row.toolCalls !== undefined ? row.toolCalls : row.toolcalls;
+
+        return {
+          id: row.id,
+          sessionId: sessId,
+          role: row.role,
+          content: row.content,
+          createdAt: created,
+          reasoning_content: reasoning || undefined,
+          filesChanged: files ? JSON.parse(files) : undefined,
+          artifacts: arts ? JSON.parse(arts) : undefined,
+          toolCalls: tCalls ? JSON.parse(tCalls) : undefined,
+        };
+      });
     } catch (error) {
       console.error(`Failed to retrieve messages for session ${sessionId}:`, error);
       return [];
