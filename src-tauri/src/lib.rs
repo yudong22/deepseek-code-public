@@ -119,9 +119,9 @@ async fn run_agent_loop(
         if let Ok(event) = serde_json::from_str::<AgentEvent>(&line) {
             let _ = on_event.send(event);
         } else {
-            // 如果不是 JSON，作为普通文本/思考流输出
+            // 如果不是 JSON，输出到本地控制台日志中，不作为事件发送给前端以避免污染思维链和时间线
             if !line.trim().is_empty() {
-                let _ = on_event.send(AgentEvent::Thinking(line));
+                println!("[Sidecar Log] {}", line);
             }
         }
     }

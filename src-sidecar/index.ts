@@ -41,6 +41,9 @@ async function main() {
       id: sessionId || undefined
     })
 
+    // Map to track callID -> toolName
+    const toolNameMap = new Map<string, string>()
+
     // 4. Run prompt and stream events
     await session.prompt(prompt, (event) => {
       const rawEvent = event.event
@@ -51,26 +54,35 @@ async function main() {
       } else if (rawEvent.type === "session.next.text.delta") {
         printEvent({ type: "Text", payload: rawEvent.data?.delta })
       } else if (rawEvent.type === "session.next.tool.called") {
+        const callID = rawEvent.data?.callID
+        const toolName = rawEvent.data?.tool
+        if (callID && toolName) {
+          toolNameMap.set(callID, toolName)
+        }
         printEvent({
           type: "ToolCall",
           payload: {
-            name: rawEvent.data?.tool,
+            name: toolName,
             args: JSON.stringify(rawEvent.data?.input)
           }
         })
       } else if (rawEvent.type === "session.next.tool.success") {
+        const callID = rawEvent.data?.callID
+        const toolName = callID ? toolNameMap.get(callID) : undefined
         printEvent({
           type: "ToolResult",
           payload: {
-            name: rawEvent.data?.tool,
+            name: toolName,
             result: JSON.stringify(rawEvent.data?.result || rawEvent.data?.structured || {})
           }
         })
       } else if (rawEvent.type === "session.next.tool.failed") {
+        const callID = rawEvent.data?.callID
+        const toolName = callID ? toolNameMap.get(callID) : undefined
         printEvent({
           type: "ToolResult",
           payload: {
-            name: rawEvent.data?.tool,
+            name: toolName,
             result: JSON.stringify({ error: rawEvent.data?.error?.message || "Execution failed" })
           }
         })
