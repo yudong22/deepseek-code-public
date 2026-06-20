@@ -57,31 +57,8 @@ async fn run_agent_loop(
     on_event: Channel<AgentEvent>,
 ) -> Result<(), String> {
     // 1. 解析工作区路径为绝对路径
-    let workspace_path = if workspace_root.is_empty() || workspace_root == "." {
-        // 使用 Tauri app_data_dir 获取绝对路径
-        let base = app
-            .path()
-            .app_data_dir()
-            .map_err(|e| format!("无法获取 app_data_dir: {}", e))?;
-        let sandbox = base.join("sandbox_workspace");
-        if !sandbox.exists() {
-            std::fs::create_dir_all(&sandbox)
-                .map_err(|e| format!("无法创建沙箱目录: {}", e))?;
-        }
-        sandbox
-    } else {
-        // 用户指定了路径：转为绝对路径
-        let p = std::path::PathBuf::from(&workspace_root);
-        if p.is_relative() {
-            std::env::current_dir()
-                .map_err(|e| format!("无法获取当前目录: {}", e))?
-                .join(p)
-        } else {
-            p
-        }
-    };
-
-    // 确保目录存在
+    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
+    // 确保目录存在（用户指定路径时 resolve_workspace_path 不自动创建）
     if !workspace_path.exists() {
         std::fs::create_dir_all(&workspace_path)
             .map_err(|e| format!("无法创建工作区目录: {}", e))?;
@@ -199,12 +176,190 @@ async fn select_directory() -> Result<Option<String>, String> {
     Ok(dir.map(|d| d.path().to_string_lossy().into_owned()))
 }
 
+/// 解析工作区根目录为绝对路径（与 run_agent_loop 逻辑一致）
+fn resolve_workspace_path(app: &tauri::AppHandle, workspace_root: &str) -> Result<std::path::PathBuf, String> {
+    if workspace_root.is_empty() || workspace_root == "." {
+        let base = app
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("无法获取 app_data_dir: {}", e))?;
+        let sandbox = base.join("sandbox_workspace");
+        if !sandbox.exists() {
+            std::fs::create_dir_all(&sandbox)
+                .map_err(|e| format!("无法创建沙箱目录: {}", e))?;
+        }
+        Ok(sandbox)
+    } else {
+        let p = std::path::PathBuf::from(workspace_root);
+        let resolved = if p.is_relative() {
+            std::env::current_dir()
+                .map_err(|e| format!("无法获取当前目录: {}", e))?
+                .join(p)
+        } else {
+            p
+        };
+        Ok(resolved)
+    }
+}
+
+/// 列出工作区中的所有文件（递归，返回相对路径，遵从 .gitignore）
+#[tauri::command]
+async fn list_workspace_files(
+    app: tauri::AppHandle,
+    workspace_root: String,
+    max_results: Option<usize>,
+) -> Result<Vec<String>, String> {
+    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
+    let max = max_results.unwrap_or(200);
+
+    let mut results: Vec<String> = Vec::new();
+    let walker = ignore::WalkBuilder::new(&workspace_path)
+        .standard_filters(true)  // 遵从 .gitignore + 排除隐藏文件/目录（含 .git）
+        .follow_links(false)
+        .build();
+
+    for entry in walker {
+        match entry {
+            Ok(e) => {
+                if e.file_type().map_or(false, |ft| ft.is_file()) {
+                    let rel = e.path().strip_prefix(&workspace_path).unwrap_or(e.path());
+                    results.push(rel.to_string_lossy().to_string());
+                    if results.len() >= max {
+                        break;
+                    }
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+
+    results.sort();
+    Ok(results)
+}
+
+/// 读取工作区文件的 base64 编码（用于图片等二进制文件预览）
+#[tauri::command]
+async fn read_file_base64(
+    app: tauri::AppHandle,
+    workspace_root: String,
+    relative_path: String,
+) -> Result<String, String> {
+    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
+    let file_path = workspace_path.join(&relative_path);
+
+    let canonical_workspace = workspace_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析工作区路径: {}", e))?;
+    let canonical_file = file_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析文件路径 '{}': {}", relative_path, e))?;
+
+    if !canonical_file.starts_with(&canonical_workspace) {
+        return Err("路径穿越检测：文件不在工作区范围内".to_string());
+    }
+
+    use std::io::Read;
+    let mut file = std::fs::File::open(&canonical_file)
+        .map_err(|e| format!("打开文件失败: {}", e))?;
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf)
+        .map_err(|e| format!("读取文件失败: {}", e))?;
+
+    // 使用 base64 标准库编码（不需要额外依赖，直接用 data_encoding 或手动）
+    Ok(base64_encode(&buf))
+}
+
+/// 简单的 base64 编码（避免引入额外 crate）
+fn base64_encode(data: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::new();
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
+        result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(CHARS[(triple & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+    }
+    result
+}
+
+/// 解析工作区中文件的绝对路径（用于 convertFileSrc）
+#[tauri::command]
+async fn resolve_file_path(
+    app: tauri::AppHandle,
+    workspace_root: String,
+    relative_path: String,
+) -> Result<String, String> {
+    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
+    let file_path = workspace_path.join(&relative_path);
+
+    let canonical_workspace = workspace_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析工作区路径: {}", e))?;
+    let canonical_file = file_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析文件路径 '{}': {}", relative_path, e))?;
+
+    if !canonical_file.starts_with(&canonical_workspace) {
+        return Err("路径穿越检测：文件不在工作区范围内".to_string());
+    }
+
+    Ok(canonical_file.to_string_lossy().to_string())
+}
+
+/// 读取工作区中指定文件的文本内容
+#[tauri::command]
+async fn read_text_file(
+    app: tauri::AppHandle,
+    workspace_root: String,
+    relative_path: String,
+) -> Result<String, String> {
+    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
+
+    let file_path = workspace_path.join(&relative_path);
+
+    // 路径穿越防护
+    let canonical_workspace = workspace_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析工作区路径: {}", e))?;
+    let canonical_file = file_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析文件路径 '{}': {}", relative_path, e))?;
+
+    if !canonical_file.starts_with(&canonical_workspace) {
+        return Err("路径穿越检测：文件不在工作区范围内".to_string());
+    }
+
+    std::fs::read_to_string(&canonical_file)
+        .map_err(|e| format!("读取文件失败: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![greet, run_agent_loop, select_directory, cancel_agent])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            run_agent_loop,
+            select_directory,
+            cancel_agent,
+            list_workspace_files,
+            read_text_file,
+            resolve_file_path,
+            read_file_base64
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

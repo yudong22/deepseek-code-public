@@ -9,6 +9,8 @@ interface ChatFeedProps {
   onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
   isGenerating?: boolean;
   onCancelAgent?: () => void;
+  readFile?: (relativePath: string) => Promise<string>;
+  getFileUrl?: (relativePath: string) => Promise<string>;
 }
 
 interface ThinkingBlockProps {
@@ -76,7 +78,7 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
   );
 }
 
-export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAgent }: ChatFeedProps) {
+export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [stickyUserMsg, setStickyUserMsg] = useState<string | null>(null);
@@ -189,7 +191,7 @@ export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAg
                 <>
                   <div className="message-body">
                     {/* 思维链展示 */}
-                    {msg.reasoning_content && (
+                    {msg.reasoning_content !== undefined && (
                       <ThinkingBlock
                         content={msg.reasoning_content}
                         isGenerating={!!isGenerating}
@@ -205,7 +207,27 @@ export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAg
                           messageId={msg.id}
                           onOpenTab={onOpenTab}
                           onCancel={isGenerating && isLastMessage ? onCancelAgent : undefined}
+                          readFile={readFile}
+                          getFileUrl={getFileUrl}
                         />
+                      </div>
+                    )}
+
+                    {/* 实质性的文本总结前加圆点分隔（排除短确认）*/}
+                    {msg.toolCalls && msg.toolCalls.length > 0 && msg.content && msg.content.length > 80 && (
+                      <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        margin: "4px 0",
+                        fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
+                      }}>
+                        <span style={{
+                          color: "inherit",
+                          fontSize: "14px",
+                          lineHeight: 1,
+                          userSelect: "none",
+                          flexShrink: 0,
+                        }}>•</span>
                       </div>
                     )}
 

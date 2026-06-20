@@ -23,7 +23,7 @@ export interface Message {
   // 壳状态模拟字段
   filesChanged?: Array<{ name: string; path: string }>;
   artifacts?: Array<{ name: string; type: string }>;
-  toolCalls?: Array<{ name: string; args: string; call_id?: string; result?: string; isError?: boolean }>;
+  toolCalls?: Array<{ name: string; args: string; call_id?: string; result?: string; isError?: boolean; step?: number }>;
 }
 
 export interface IBridge {
@@ -101,6 +101,21 @@ export interface IBridge {
   ): Promise<void>;
 
   /**
+   * 列出工作区中的所有文件（递归，返回相对路径）
+   */
+  listWorkspaceFiles(maxResults?: number): Promise<string[]>;
+
+  /**
+   * 读取工作区中指定文件的文本内容
+   */
+  readFile(relativePath: string): Promise<string>;
+
+  /**
+   * 获取文件在 WebView 中可加载的 URL（用于图片等二进制文件预览）
+   */
+  getFileUrl(relativePath: string): Promise<string>;
+
+  /**
    * 取消当前正在执行的 agent
    */
   cancelAgent(): Promise<void>;
@@ -111,6 +126,7 @@ export interface AgentEvent {
         "Text" | "TextStarted" | "TextEnded" |
         "ToolCall" | "ToolStarted" | "ToolEnded" |
         "ToolSuccess" | "ToolFailed" |
+        "ToolResult" |
         "StepStarted" | "StepEnded" |
         "Finished" | "Error";
   payload: any;

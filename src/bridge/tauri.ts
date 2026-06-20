@@ -24,17 +24,25 @@ export const tauriBridge: IBridge = {
   async checkForUpdates(): Promise<UpdateResult> {
     console.log("Tauri: checking for updates...");
     try {
-      const res = await fetch("https://api.github.com/repos/yudong22/deepseek-code-public/releases/latest");
+      // 使用 /releases 列表接口（包含 prerelease），/latest 在仅有 prerelease 时返回 404
+      const res = await fetch("https://api.github.com/repos/yudong22/deepseek-code-public/releases?per_page=1");
       if (res.ok) {
-        const data = await res.json();
-        const latestVersion = data.tag_name?.replace(/^v/, "");
-        const currentVersion = "0.2.1";
-        if (latestVersion && latestVersion !== currentVersion) {
-          return {
-            hasUpdate: true,
-            version: latestVersion,
-            changelog: data.body || "无更新说明。",
-          };
+        const releases = await res.json();
+        if (Array.isArray(releases) && releases.length > 0) {
+          const latest = releases[0];
+          // 跳过 draft 版本
+          if (latest.draft) {
+            return { hasUpdate: false };
+          }
+          const latestVersion = latest.tag_name?.replace(/^v/, "");
+          const currentVersion = "0.2.3";
+          if (latestVersion && latestVersion !== currentVersion) {
+            return {
+              hasUpdate: true,
+              version: latestVersion,
+              changelog: latest.body || "无更新说明。",
+            };
+          }
         }
       }
     } catch (error) {
@@ -282,6 +290,74 @@ export const tauriBridge: IBridge = {
       await invoke("cancel_agent");
     } catch (error) {
       console.error("Tauri cancelAgent failed:", error);
+    }
+  },
+
+  async listWorkspaceFiles(maxResults = 200): Promise<string[]> {
+    try {
+      const db = await getDb();
+      const rows = await db.select<{ value: string }[]>(
+        "SELECT value FROM settings WHERE key = ?",
+        ["workspace_path"]
+      );
+      const workspaceRoot = rows?.[0]?.value || "";
+      return await invoke<string[]>("list_workspace_files", {
+        workspaceRoot,
+        maxResults,
+      });
+    } catch (error) {
+      console.error("Failed to list workspace files:", error);
+      return [];
+    }
+  },
+
+  async readFile(relativePath: string): Promise<string> {
+    try {
+      const db = await getDb();
+      const rows = await db.select<{ value: string }[]>(
+        "SELECT value FROM settings WHERE key = ?",
+        ["workspace_path"]
+      );
+      const workspaceRoot = rows?.[0]?.value || "";
+      return await invoke<string>("read_text_file", {
+        workspaceRoot,
+        relativePath,
+      });
+    } catch (error) {
+      console.error(`Failed to read file ${relativePath}:`, error);
+      return `Error: ${error}`;
+    }
+  },
+
+  async getFileUrl(relativePath: string): Promise<string> {
+    try {
+      const db = await getDb();
+      const rows = await db.select<{ value: string }[]>(
+        "SELECT value FROM settings WHERE key = ?",
+        ["workspace_path"]
+      );
+      const workspaceRoot = rows?.[0]?.value || "";
+      const base64 = await invoke<string>("read_file_base64", {
+        workspaceRoot,
+        relativePath,
+      });
+      // 根据扩展名确定 MIME 类型
+      const ext = relativePath.split(".").pop()?.toLowerCase() || "";
+      const mimeMap: Record<string, string> = {
+        png: "image/png",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        gif: "image/gif",
+        svg: "image/svg+xml",
+        webp: "image/webp",
+        bmp: "image/bmp",
+        ico: "image/x-icon",
+      };
+      const mime = mimeMap[ext] || "application/octet-stream";
+      return `data:${mime};base64,${base64}`;
+    } catch (error) {
+      console.error(`Failed to get file URL for ${relativePath}:`, error);
+      return "";
     }
   },
 };

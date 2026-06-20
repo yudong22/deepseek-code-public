@@ -171,6 +171,45 @@ function MainDashboard() {
     });
   };
 
+  // 读取文件并在右侧面板预览
+  const readAndPreviewFile = async (relativePath: string) => {
+    try {
+      const ext = relativePath.split(".").pop()?.toLowerCase() || "text";
+      const imageExts = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"]);
+
+      if (imageExts.has(ext)) {
+        // 图片：使用 getFileUrl 获取 WebView 可加载的 URL
+        const url = await bridge.getFileUrl(relativePath);
+        if (url) {
+          openTab({
+            id: `file-${relativePath}`,
+            title: relativePath,
+            type: "image",
+            content: url,
+            language: ext,
+          });
+        }
+      } else {
+        // 文本文件：读取内容
+        const content = await bridge.readFile(relativePath);
+        openTab({
+          id: `file-${relativePath}`,
+          title: relativePath,
+          type: "tool_result",
+          content,
+          language: ext,
+        });
+      }
+    } catch (err) {
+      console.error("预览文件失败:", err);
+    }
+  };
+
+  // 列出工作区文件（用于 @ 自动补全）
+  const listFiles = async (): Promise<string[]> => {
+    return await bridge.listWorkspaceFiles(200);
+  };
+
   // --- API Key 管理 ---
   async function handleSaveApiKey() {
     try {
@@ -500,8 +539,9 @@ function MainDashboard() {
 
       let currentContent = "";
       let currentThinking = "";
+      let currentStep = 0;
       // 追踪 call_id 以精确匹配工具事件
-      let currentToolCalls: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean }> = [];
+      let currentToolCalls: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean; step?: number }> = [];
 
       await bridge.runAgent(
         savedApiKey || "",
@@ -512,10 +552,7 @@ function MainDashboard() {
         async (event) => {
           // 推理块
           if (event.type === "ThinkingStarted") {
-            if (!currentThinking) {
-              currentThinking = " ";
-              setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
-            }
+            // 不需要占位字符，等第一个 delta 到达时自然显示
           } else if (event.type === "Thinking") {
             currentThinking += event.payload;
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
@@ -534,7 +571,7 @@ function MainDashboard() {
             const toolName = event.payload.name;
             const toolArgs = event.payload.args;
             const callId = event.payload.call_id || "";
-            currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs, call_id: callId }];
+            currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs, call_id: callId, step: currentStep }];
             setMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === assistantMsgId);
               if (idx > -1) {
@@ -644,9 +681,11 @@ function MainDashboard() {
               return prev;
             });
           }
-          // Step 生命周期（暂不在 UI 中显示）
+          // Step 生命周期：计数用于工具调用的圆点标记
           else if (event.type === "StepStarted") {
+            currentStep += 1;
           } else if (event.type === "StepEnded") {
+            // Step 结束，不需要额外操作
           }
           // 错误事件
           else if (event.type === "Error") {
@@ -766,6 +805,8 @@ function MainDashboard() {
                 onOpenTab={openTab}
                 isGenerating={isGenerating}
                 onCancelAgent={handleCancel}
+                readFile={(path) => bridge.readFile(path)}
+                getFileUrl={(path) => bridge.getFileUrl(path)}
               />
               <ChatInput
                 inputText={inputText}
@@ -777,6 +818,9 @@ function MainDashboard() {
                 onCancel={handleCancel}
                 onToggleModelDropdown={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
                 onSelectModel={(model) => { setSelectedModel(model); setIsModelDropdownOpen(false); }}
+                workspacePath={savedWorkspacePath}
+                onListFiles={listFiles}
+                onPreviewFile={readAndPreviewFile}
               />
             </>
           ) : (
@@ -792,6 +836,8 @@ function MainDashboard() {
               projects={projects}
               onSelectProject={handleSelectProject}
               onAddProject={handleAddProject}
+              onListFiles={listFiles}
+              onPreviewFile={readAndPreviewFile}
             />
           )}
         </main>

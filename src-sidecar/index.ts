@@ -88,11 +88,24 @@ async function main() {
         })
       } else if (type === "session.next.tool.success") {
         const callID = data?.callID ?? ""
+        // 尽量捕获完整的工具结果：result / structured / output / content
+        const rawResult = data?.result ?? data?.structured ?? {}
+        // 如果 result 是对象，展开合并可能存在的 output / content 字段
+        let enriched: any = typeof rawResult === "object" && rawResult !== null ? { ...rawResult } : rawResult
+        if (data?.output !== undefined && typeof enriched === "object") {
+          enriched.output = data.output
+        }
+        if (data?.result?.content !== undefined && typeof enriched === "object") {
+          enriched.content = data.result.content
+        }
+        if (data?.result?.diff !== undefined && typeof enriched === "object") {
+          enriched.diff = data.result.diff
+        }
         printEvent({
           type: "ToolSuccess",
           payload: {
             name: toolNameByCallID.get(callID) ?? "",
-            result: JSON.stringify(data?.result ?? data?.structured ?? {}),
+            result: JSON.stringify(enriched),
             call_id: callID
           }
         })

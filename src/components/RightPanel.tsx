@@ -129,6 +129,42 @@ export default function RightPanel({
     ["md", "markdown"].includes(language) || title.endsWith(".md");
   const isBash =
     language === "bash" || title.includes("bash") || title.includes("command");
+  const isImage = activeTab.type === "image" ||
+    ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"].includes(language);
+
+  // 2a. Image preview
+  if (isImage) {
+    return (
+      <aside
+        className={`right-panel ${isOpen ? "" : "collapsed"} ${nightClass}`}
+        style={isOpen ? { width } : undefined}
+      >
+        <div className="right-panel-resize-handle" onMouseDown={handleMouseDown} />
+        <div className="rp-file-header">
+          <span className="rp-file-icon">🖼️</span>
+          <span className="rp-file-name">{activeTab.title}</span>
+          <span className="rp-file-lang">{activeTab.language || "image"}</span>
+        </div>
+        <div className="rp-file-body" style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: isNightMode ? "#1c1c1e" : "#f5f5f7",
+          overflow: "auto",
+        }}>
+          <img
+            src={activeTab.content}
+            alt={activeTab.title}
+            style={{
+              maxWidth: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
+            }}
+          />
+        </div>
+      </aside>
+    );
+  }
 
   // 3. Markdown file — source/preview toggle
   if (isMarkdown) {

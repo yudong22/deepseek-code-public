@@ -1144,6 +1144,37 @@ body {
   }
 }
 
+/* --- 文件 @ 自动补全下拉框 --- */
+.file-autocomplete-dropdown {
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 4px 0;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  animation: dropdownFadeIn 0.12s ease-out;
+}
+
+.file-autocomplete-item {
+  transition: background 0.1s;
+}
+
+.file-autocomplete-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.night-mode .file-autocomplete-dropdown {
+  background: rgba(44, 44, 46, 0.95);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #e5e5ea;
+}
+
+.night-mode .file-autocomplete-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
 /* --- Settings Modal styling --- */
 .settings-modal-overlay {
   position: fixed;
