@@ -6,11 +6,10 @@
   "scripts": {
     "build:sidecar": "if [ -d ../opencode ]; then mkdir -p src-tauri/binaries && cd ../opencode && bun build --compile --minify ../deepseek-code-public/src-sidecar/index.ts --outfile ../deepseek-code-public/src-tauri/binaries/opencode-sidecar-$(rustc -Vv | grep host | cut -d ' ' -f 2); fi",
     "dev": "bun run build:sidecar && vite",
-    "build": "bun run build:sidecar && tsc && vite build",
     "preview": "bun run build:sidecar && tauri dev",
+    "build:mac": "bun run build:sidecar && tauri build && (killall deepseek-code || true) && cp -rf src-tauri/target/release/bundle/macos/deepseek-code.app /Applications/",
     "tauri": "tauri",
-    "test": "export PATH=\"$PATH:$HOME/.bun/bin\" && cargo check --manifest-path src-tauri/Cargo.toml && bun test",
-    "build:mac": "bun run build:sidecar && tauri build && (killall deepseek-code || true) && cp -rf src-tauri/target/release/bundle/macos/deepseek-code.app /Applications/"
+    "test": "cargo check --manifest-path src-tauri/Cargo.toml && bun test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

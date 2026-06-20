@@ -10,14 +10,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 bun install                  # Install frontend dependencies
-bun run dev                  # Web mode (browser, mock backend, no Rust) — use for UI iteration
-bun run tauri dev            # Full desktop mode (Tauri + Rust backend + SQLite)
-bun run test                 # Run all checks: cargo check + bun test
-bun run tauri build          # Production build
-bun run build:mac            # Build macOS .app, kill old instance, copy to /Applications
-bun run build:sidecar        # Compile the sidecar binary from src-sidecar/index.ts
-bun test                     # Run only frontend unit tests (Bun test runner)
-cargo check --manifest-path src-tauri/Cargo.toml  # Rust compilation check only
+bun run dev                  # Web mode (browser, mock backend, no Rust) — 快速迭代 UI
+bun run preview              # 桌面端开发模式 (Tauri + Rust + SQLite)
+bun run test                 # 全量检查：cargo check + bun test
+bun run build:mac            # 构建 macOS .app，终止旧实例，复制到 /Applications
+bun run build:sidecar        # 单独编译 sidecar 二进制 (src-sidecar/index.ts → Bun)
 ```
 
 ## Architecture
