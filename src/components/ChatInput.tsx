@@ -5,8 +5,10 @@ interface ChatInputProps {
   inputText: string;
   selectedModel: string;
   isModelDropdownOpen: boolean;
+  isGenerating?: boolean;
   onInputChange: (value: string) => void;
   onSend: () => void;
+  onCancel?: () => void;
   onToggleModelDropdown: () => void;
   onSelectModel: (model: string) => void;
 }
@@ -15,8 +17,10 @@ export default function ChatInput({
   inputText,
   selectedModel,
   isModelDropdownOpen,
+  isGenerating,
   onInputChange,
   onSend,
+  onCancel,
   onToggleModelDropdown,
   onSelectModel,
 }: ChatInputProps) {
@@ -96,7 +100,11 @@ export default function ChatInput({
             <button className="chat-input-mic-btn" title="Voice Input">
               <Icons.Mic />
             </button>
-            {inputText.trim() && (
+            {isGenerating ? (
+              <button className="chat-input-send-btn cancelling" onClick={onCancel} title="Stop">
+                <Icons.Stop />
+              </button>
+            ) : inputText.trim() && (
               <button className="chat-input-send-btn" onClick={onSend} title="Send">
                 <Icons.ArrowRight />
               </button>

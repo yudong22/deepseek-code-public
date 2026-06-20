@@ -1,5 +1,10 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::Manager;
+
+/// 全局取消标记，供 cancel_agent 和 run_agent_loop 共享
+struct AgentCancelled(AtomicBool);
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", content = "payload")]
@@ -125,24 +130,38 @@ async fn run_agent_loop(
 
     let mut child = cmd.spawn().map_err(|e| format!("无法启动 sidecar {}: {}", sidecar_path.display(), e))?;
 
+    // 注册取消标记，供 cancel_agent 使用
+    app.manage(AgentCancelled(AtomicBool::new(false)));
+
     // 5. 将用户 Prompt 写入 sidecar stdin，并关闭 stdin
     let mut stdin = child.stdin.take().ok_or("无法打开 sidecar stdin".to_string())?;
     stdin.write_all(last_user_prompt.as_bytes()).await
         .map_err(|e| format!("写入 sidecar stdin 失败: {}", e))?;
     drop(stdin); // 关闭 stdin，sidecar 会读取到 EOF 并开始处理
 
-    // 6. 流式读取 stdout 并转发给前端
+    // 6. 流式读取 stdout 并转发给前端（支持取消）
     let stdout = child.stdout.take().ok_or("无法获取 sidecar stdout".to_string())?;
     let mut reader = BufReader::new(stdout).lines();
 
-    while let Some(line) = reader.next_line().await.map_err(|e| format!("读取 sidecar 输出失败: {}", e))? {
-        if let Ok(event) = serde_json::from_str::<AgentEvent>(&line) {
-            let _ = on_event.send(event);
-        } else {
-            // 如果不是 JSON，输出到本地控制台日志中，不作为事件发送给前端以避免污染思维链和时间线
-            if !line.trim().is_empty() {
-                println!("[Sidecar Log] {}", line);
+    loop {
+        // 检查取消标记
+        if app.state::<AgentCancelled>().0.load(Ordering::SeqCst) {
+            let _ = child.kill().await;
+            let _ = on_event.send(AgentEvent::Finished);
+            return Ok(());
+        }
+
+        match tokio::time::timeout(Duration::from_secs(1), reader.next_line()).await {
+            Ok(Ok(Some(line))) => {
+                if let Ok(event) = serde_json::from_str::<AgentEvent>(&line) {
+                    let _ = on_event.send(event);
+                } else if !line.trim().is_empty() {
+                    println!("[Sidecar Log] {}", line);
+                }
             }
+            Ok(Ok(None)) => break, // EOF
+            Ok(Err(e)) => return Err(format!("读取 sidecar 输出失败: {}", e)),
+            Err(_) => continue, // 超时，重新检查取消标记
         }
     }
 
@@ -166,6 +185,12 @@ async fn run_agent_loop(
 }
 
 #[tauri::command]
+async fn cancel_agent(app: tauri::AppHandle) -> Result<(), String> {
+    app.state::<AgentCancelled>().0.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+#[tauri::command]
 async fn select_directory() -> Result<Option<String>, String> {
     let dir = rfd::AsyncFileDialog::new()
         .set_title("选择工作区目录")
@@ -179,7 +204,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![greet, run_agent_loop, select_directory])
+        .invoke_handler(tauri::generate_handler![greet, run_agent_loop, select_directory, cancel_agent])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

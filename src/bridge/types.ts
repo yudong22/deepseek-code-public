@@ -99,6 +99,11 @@ export interface IBridge {
     sessionId: string,
     onEvent: (event: AgentEvent) => void
   ): Promise<void>;
+
+  /**
+   * 取消当前正在执行的 agent
+   */
+  cancelAgent(): Promise<void>;
 }
 
 export interface AgentEvent {

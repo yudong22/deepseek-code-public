@@ -8,6 +8,7 @@ interface ChatFeedProps {
   messages: Message[];
   onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
   isGenerating?: boolean;
+  onCancelAgent?: () => void;
 }
 
 interface ThinkingBlockProps {
@@ -75,7 +76,7 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
   );
 }
 
-export default function ChatFeed({ messages, onOpenTab, isGenerating }: ChatFeedProps) {
+export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAgent }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [stickyUserMsg, setStickyUserMsg] = useState<string | null>(null);
@@ -203,6 +204,7 @@ export default function ChatFeed({ messages, onOpenTab, isGenerating }: ChatFeed
                           toolCalls={msg.toolCalls}
                           messageId={msg.id}
                           onOpenTab={onOpenTab}
+                          onCancel={isGenerating && isLastMessage ? onCancelAgent : undefined}
                         />
                       </div>
                     )}

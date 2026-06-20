@@ -405,6 +405,13 @@ function MainDashboard() {
     }
   }
 
+  // --- 取消 Agent 执行 ---
+  const handleCancel = async () => {
+    setIsGenerating(false);
+    activeStreamingSessionRef.current = null;
+    await bridge.cancelAgent();
+  };
+
   // --- 发送消息并触发 Agent 循环 ---
   async function handleSend() {
     const userText = inputText.trim();
@@ -503,15 +510,21 @@ function MainDashboard() {
         savedWorkspacePath || ".",
         currentSessionId!,
         async (event) => {
-          // 推理块：ThinkingStarted 时立即占位
+          // 推理块：工具执行后的 thinking 注入到 content 中保持顺序
           if (event.type === "ThinkingStarted") {
-            if (!currentThinking) {
+            if (!currentThinking && !currentToolCalls.some(tc => tc.result !== undefined)) {
               currentThinking = " ";
               setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
             }
           } else if (event.type === "Thinking") {
-            currentThinking += event.payload;
-            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+            if (currentToolCalls.some(tc => tc.result !== undefined)) {
+              // 工具执行后的 thinking：追加到 content 中（保持与 text/step 的顺序）
+              currentContent += event.payload;
+              setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+            } else {
+              currentThinking += event.payload;
+              setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+            }
           } else if (event.type === "ThinkingEnded") {
             // 推理结束
           }
@@ -762,13 +775,16 @@ function MainDashboard() {
                 messages={messages}
                 onOpenTab={openTab}
                 isGenerating={isGenerating}
+                onCancelAgent={handleCancel}
               />
               <ChatInput
                 inputText={inputText}
                 selectedModel={selectedModel}
                 isModelDropdownOpen={isModelDropdownOpen}
+                isGenerating={isGenerating}
                 onInputChange={setInputText}
                 onSend={handleSend}
+                onCancel={handleCancel}
                 onToggleModelDropdown={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
                 onSelectModel={(model) => { setSelectedModel(model); setIsModelDropdownOpen(false); }}
               />

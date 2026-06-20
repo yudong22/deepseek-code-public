@@ -162,5 +162,9 @@ export const mockBridge: IBridge = {
 
     onEvent({ type: "Finished", payload: null });
   },
+
+  async cancelAgent(): Promise<void> {
+    console.warn("[Bridge Mock] cancelAgent called. No-op in mock environment.");
+  },
 };
 

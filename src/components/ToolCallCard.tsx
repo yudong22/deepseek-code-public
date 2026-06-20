@@ -14,6 +14,7 @@ interface ToolCallCardProps {
   messageId: string;
   index: number;
   onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
+  onCancel?: () => void;
 }
 
 // ─── 工具 ID 分类 ─────────────────────────────────────────────────────────────
@@ -163,11 +164,12 @@ function detectError(tc: ToolCallData): boolean {
 // ─── 文件操作工具（read / write / edit / apply_patch）────────────────────────
 // 只显示一行：状态点 + 工具名 + 可点击文件链接，点击在右侧预览区打开
 
-function FileToolCard({ tc, messageId, index, onOpenTab }: {
+function FileToolCard({ tc, messageId, index, onOpenTab, onCancel }: {
   tc: ToolCallData;
   messageId: string;
   index: number;
   onOpenTab: ToolCallCardProps["onOpenTab"];
+  onCancel?: ToolCallCardProps["onCancel"];
 }) {
   const isDone = tc.result !== undefined;
   const isError = detectError(tc);
@@ -242,15 +244,32 @@ function FileToolCard({ tc, messageId, index, onOpenTab }: {
       {/* 耗时 */}
       <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}s</span>
 
-      {/* 状态附言 */}
-      {isExecuting && (
-        <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", flexShrink: 0, animation: "tc-pulse 1.5s ease-in-out infinite" }}>
-          executing…
-        </span>
-      )}
-      {!isDone && !isExecuting && (
-        <span style={{ fontSize: "11px", opacity: 0.45, fontStyle: "italic", flexShrink: 0 }}>
-          {actionLabel[name] ?? "running"}…
+      {/* 状态附言 + 取消按钮 */}
+      {!isDone && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+          {isExecuting ? (
+            <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>
+              executing…
+            </span>
+          ) : (
+            <span style={{ fontSize: "11px", opacity: 0.45, fontStyle: "italic" }}>
+              {actionLabel[name] ?? "running"}…
+            </span>
+          )}
+          {onCancel && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onCancel(); }}
+              title="Cancel"
+              style={{
+                cursor: "pointer", fontSize: "12px", opacity: 0.5, lineHeight: 1,
+                padding: "1px 4px", borderRadius: "3px",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              ✕
+            </span>
+          )}
         </span>
       )}
       {isDone && isError && (
@@ -263,8 +282,9 @@ function FileToolCard({ tc, messageId, index, onOpenTab }: {
 // ─── 工具区展开工具（bash / glob / grep / todo / webfetch / websearch / ...） ──
 // 显示可展开/折叠的输出，不提供"在新标签页打开"按钮
 
-function ExpandableToolCard({ tc }: {
+function ExpandableToolCard({ tc, onCancel }: {
   tc: ToolCallData;
+  onCancel?: ToolCallCardProps["onCancel"];
 }) {
   const isDone = tc.result !== undefined;
   const isError = detectError(tc);
@@ -314,10 +334,26 @@ function ExpandableToolCard({ tc }: {
           <span style={{ opacity: 0.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>({argsPreview})</span>
           {/* 耗时 */}
           <span style={{ fontSize: "11px", opacity: 0.35, marginLeft: "4px" }}>{elapsed}s</span>
-          {/* 执行中标记 */}
+          {/* 执行中标记 + 取消 */}
           {isExecuting && (
-            <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>
-              executing…
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>
+                executing…
+              </span>
+              {onCancel && (
+                <span
+                  onClick={(e) => { e.stopPropagation(); onCancel(); }}
+                  title="Cancel"
+                  style={{
+                    cursor: "pointer", fontSize: "12px", opacity: 0.5, lineHeight: 1,
+                    padding: "1px 4px", borderRadius: "3px",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  ✕
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -350,8 +386,23 @@ function ExpandableToolCard({ tc }: {
 
       {/* 执行中 */}
       {expanded && !isDone && (
-        <div style={{ margin: "2px 0 0 0", opacity: 0.5 }}>
-          <span>  └ 正在执行中…</span>
+        <div style={{ margin: "2px 0 0 0", opacity: 0.6 }}>
+          <span>  └ 正在执行中…
+            {onCancel && (
+              <span
+                onClick={(e) => { e.stopPropagation(); onCancel(); }}
+                title="Cancel"
+                style={{
+                  cursor: "pointer", marginLeft: "8px", fontSize: "12px", opacity: 0.6,
+                  padding: "1px 4px", borderRadius: "3px",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                [Cancel]
+              </span>
+            )}
+          </span>
         </div>
       )}
     </div>
@@ -360,14 +411,14 @@ function ExpandableToolCard({ tc }: {
 
 // ─── 主入口：按工具分类分派 ───────────────────────────────────────────────────
 
-export default function ToolCallCard({ toolCall: tc, messageId, index, onOpenTab }: ToolCallCardProps) {
+export default function ToolCallCard({ toolCall: tc, messageId, index, onOpenTab, onCancel }: ToolCallCardProps) {
   const name = normalizeToolName(tc.name);
 
   if (PREVIEW_TOOLS.has(name)) {
-    return <FileToolCard tc={tc} messageId={messageId} index={index} onOpenTab={onOpenTab} />;
+    return <FileToolCard tc={tc} messageId={messageId} index={index} onOpenTab={onOpenTab} onCancel={onCancel} />;
   }
 
-  return <ExpandableToolCard tc={tc} />;
+  return <ExpandableToolCard tc={tc} onCancel={onCancel} />;
 }
 
 /**
@@ -377,9 +428,10 @@ interface ToolCallGroupProps {
   toolCalls: ToolCallData[];
   messageId: string;
   onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
+  onCancel?: () => void;
 }
 
-export function ToolCallGroup({ toolCalls, messageId, onOpenTab }: ToolCallGroupProps) {
+export function ToolCallGroup({ toolCalls, messageId, onOpenTab, onCancel }: ToolCallGroupProps) {
   return (
     <div className="tc-group-terminal" style={{
       display: "flex",
@@ -394,6 +446,7 @@ export function ToolCallGroup({ toolCalls, messageId, onOpenTab }: ToolCallGroup
           messageId={messageId}
           index={idx}
           onOpenTab={onOpenTab}
+          onCancel={onCancel}
         />
       ))}
     </div>

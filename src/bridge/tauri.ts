@@ -276,5 +276,13 @@ export const tauriBridge: IBridge = {
       throw error;
     }
   },
+
+  async cancelAgent(): Promise<void> {
+    try {
+      await invoke("cancel_agent");
+    } catch (error) {
+      console.error("Tauri cancelAgent failed:", error);
+    }
+  },
 };
 
