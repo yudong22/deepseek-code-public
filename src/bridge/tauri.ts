@@ -23,10 +23,35 @@ export const tauriBridge: IBridge = {
 
   async checkForUpdates(): Promise<UpdateResult> {
     console.log("Tauri: checking for updates...");
-    // 占位实现，后续可以调用 @tauri-apps/plugin-updater 插件
+    try {
+      const res = await fetch("https://api.github.com/repos/yudong22/deepseek-code-public/releases/latest");
+      if (res.ok) {
+        const data = await res.json();
+        const latestVersion = data.tag_name?.replace(/^v/, "");
+        const currentVersion = "0.2.1";
+        if (latestVersion && latestVersion !== currentVersion) {
+          return {
+            hasUpdate: true,
+            version: latestVersion,
+            changelog: data.body || "无更新说明。",
+          };
+        }
+      }
+    } catch (error) {
+      console.error("Tauri checkForUpdates failed:", error);
+    }
     return {
       hasUpdate: false,
     };
+  },
+
+  async selectDirectory(): Promise<string | null> {
+    try {
+      return await invoke<string | null>("select_directory");
+    } catch (error) {
+      console.error("Tauri selectDirectory failed:", error);
+      return null;
+    }
   },
 
   async initDb(): Promise<void> {

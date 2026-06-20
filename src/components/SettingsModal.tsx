@@ -1,3 +1,6 @@
+import React, { useState } from "react";
+import { bridge } from "@/bridge";
+
 interface SettingsModalProps {
   isOpen: boolean;
   apiKey: string;
@@ -23,7 +26,69 @@ export default function SettingsModal({
   onClear,
   onClearHistory,
 }: SettingsModalProps) {
+  const [isChecking, setIsChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<{
+    type: "info" | "success" | "error";
+    message: React.ReactNode;
+  } | null>(null);
+
   if (!isOpen) return null;
+
+  const handleCheckUpdates = async () => {
+    setIsChecking(true);
+    setUpdateStatus({ type: "info", message: "正在检查更新..." });
+    try {
+      const result = await bridge.checkForUpdates();
+      if (result.hasUpdate) {
+        setUpdateStatus({
+          type: "success",
+          message: (
+            <div>
+              <p style={{ fontWeight: "600", marginBottom: "4px" }}>发现新版本: v{result.version}</p>
+              <pre style={{
+                whiteSpace: "pre-wrap",
+                fontFamily: "inherit",
+                fontSize: "11px",
+                color: "#48484a",
+                background: "#e5e5ea",
+                padding: "8px",
+                borderRadius: "4px",
+                margin: "4px 0 8px 0",
+                maxHeight: "120px",
+                overflowY: "auto",
+                border: "1px solid #d1d1d6",
+                textAlign: "left"
+              }}>
+                {result.changelog}
+              </pre>
+              <button
+                type="button"
+                onClick={() => window.open(`https://github.com/yudong22/deepseek-code-public/releases/tag/v${result.version}`, "_blank")}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  backgroundColor: "#007aff",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontWeight: "500"
+                }}
+              >
+                立即去下载
+              </button>
+            </div>
+          )
+        });
+      } else {
+        setUpdateStatus({ type: "info", message: "您的应用已是最新版本。" });
+      }
+    } catch (err) {
+      setUpdateStatus({ type: "error", message: `检查更新失败: ${String(err)}` });
+    } finally {
+      setIsChecking(false);
+    }
+  };
 
   return (
     <div className="settings-modal-overlay" onClick={onClose}>
@@ -59,20 +124,84 @@ export default function SettingsModal({
           {/* Workspace Path */}
           <div className="form-group" style={{ marginTop: "16px" }}>
             <label>工作区目录（Workspace）</label>
-            <input
-              type="text"
-              value={workspacePath}
-              onChange={(e) => onWorkspaceChange(e.target.value)}
-              placeholder="留空则使用默认沙箱目录"
-              className="settings-input"
-            />
-            <p className="settings-hint" style={{ color: "#8e8e93" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                type="text"
+                value={workspacePath}
+                onChange={(e) => onWorkspaceChange(e.target.value)}
+                placeholder="留空则使用默认沙箱目录"
+                className="settings-input"
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  const path = await bridge.selectDirectory();
+                  if (path) {
+                    onWorkspaceChange(path);
+                  }
+                }}
+                className="btn-secondary"
+                style={{
+                  padding: "0 12px",
+                  height: "32px",
+                  fontSize: "12px",
+                  border: "1px solid #d1d1d6",
+                  borderRadius: "6px",
+                  background: "#f2f2f7",
+                  cursor: "pointer"
+                }}
+              >
+                浏览...
+              </button>
+            </div>
+            <p className="settings-hint" style={{ color: "#8e8e93", marginTop: "4px" }}>
               {workspacePath.trim() ? (
                 <span>AI 将在此目录内读写文件：<code style={{ fontSize: "11px", background: "#f2f2f7", padding: "1px 4px", borderRadius: "3px" }}>{workspacePath}</code></span>
               ) : (
                 <span>留空时使用 App 数据目录下的 <code style={{ fontSize: "11px", background: "#f2f2f7", padding: "1px 4px", borderRadius: "3px" }}>sandbox_workspace/</code> 作为沙箱</span>
               )}
             </p>
+          </div>
+
+          {/* 关于与更新 */}
+          <div className="form-group" style={{ marginTop: "16px", borderTop: "1px solid #e3e3e3", paddingTop: "16px" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>关于与更新</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                <span style={{ fontSize: "12px", color: "#1d1d1f" }}>当前版本: v0.2.1</span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleCheckUpdates}
+                  disabled={isChecking}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "12px",
+                    backgroundColor: "#f2f2f7",
+                    border: "1px solid #d1d1d6",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {isChecking ? "正在检查..." : "检查更新"}
+                </button>
+              </div>
+              {updateStatus && (
+                <div style={{
+                  fontSize: "12px",
+                  color: updateStatus.type === "success" ? "#000" : updateStatus.type === "error" ? "#ff3b30" : "#8e8e93",
+                  padding: "10px",
+                  backgroundColor: "#f2f2f7",
+                  border: "1px solid #e5e5ea",
+                  borderRadius: "6px",
+                  marginTop: "4px",
+                  lineHeight: "1.4"
+                }}>
+                  {updateStatus.message}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className="settings-modal-footer">

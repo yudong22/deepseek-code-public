@@ -62,7 +62,15 @@ describe("JS Bridge - Mock Fallback APIs", () => {
   test("checkForUpdates() should return mock updates info", async () => {
     const update = await mockBridge.checkForUpdates();
     expect(update.hasUpdate).toBe(true);
-    expect(update.version).toBe("1.0.0");
+    expect(update.version).toBe("0.3.0");
+  });
+
+  test("selectDirectory() should return mock folder path", async () => {
+    const originalPrompt = window.prompt;
+    window.prompt = () => "/mock/path";
+    const dir = await mockBridge.selectDirectory();
+    expect(dir).toBe("/mock/path");
+    window.prompt = originalPrompt;
   });
 
   test("initDb() should initialize empty sessions in localStorage", async () => {

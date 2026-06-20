@@ -84,6 +84,11 @@ export interface IBridge {
   deleteSetting(key: string): Promise<void>;
 
   /**
+   * 调起原生文件夹选择器
+   */
+  selectDirectory(): Promise<string | null>;
+
+  /**
    * 调起带 tools 的 agent 循环
    */
   runAgent(

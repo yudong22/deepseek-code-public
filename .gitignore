@@ -29,3 +29,4 @@ src-tauri/backend/
 src-tauri/target/
 *.db
 *.db-journal
+.opencode

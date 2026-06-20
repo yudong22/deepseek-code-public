@@ -2,7 +2,14 @@ import React from "react";
 import Mermaid from "@/components/Mermaid";
 import { FileCode } from "@/components/Icons";
 
-// --- 自定义行内 Markdown 渲染器 ---
+const ReactIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#007aff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, verticalAlign: "middle" }}>
+    <ellipse cx="12" cy="12" rx="11" ry="4.2" transform="rotate(30 12 12)" />
+    <ellipse cx="12" cy="12" rx="11" ry="4.2" transform="rotate(90 12 12)" />
+    <ellipse cx="12" cy="12" rx="11" ry="4.2" transform="rotate(150 12 12)" />
+    <circle cx="12" cy="12" r="2" fill="#007aff" />
+  </svg>
+);
 
 /** 渲染完整的 Markdown 文本 */
 export function renderMarkdown(text: string) {
@@ -12,11 +19,63 @@ export function renderMarkdown(text: string) {
   let codeBlockContent: string[] = [];
   let codeBlockLang = "";
 
+  // 表格状态
+  let inTable = false;
+  let tableHeaders: string[] = [];
+  let tableRows: string[][] = [];
+  let tableAlignments: ("left" | "center" | "right")[] = [];
+
+  const pushTable = (keyIndex: number) => {
+    if (tableHeaders.length === 0) return;
+    elements.push(
+      <div key={`table-${keyIndex}`} className="markdown-table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              {tableHeaders.map((header, hIdx) => (
+                <th 
+                  key={hIdx} 
+                  style={{ 
+                    textAlign: tableAlignments[hIdx] || "left"
+                  }}
+                >
+                  {parseInlineMarkdown(header)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tableRows.map((row, rIdx) => (
+              <tr key={rIdx}>
+                {row.map((cell, cIdx) => (
+                  <td 
+                    key={cIdx} 
+                    style={{ 
+                      textAlign: tableAlignments[cIdx] || "left"
+                    }}
+                  >
+                    {parseInlineMarkdown(cell)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+    // 重置
+    inTable = false;
+    tableHeaders = [];
+    tableRows = [];
+    tableAlignments = [];
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // 代码块
     if (line.startsWith("```")) {
+      if (inTable) pushTable(i);
       if (inCodeBlock) {
         // 代码块结束
         if (codeBlockLang === "mermaid") {
@@ -43,6 +102,37 @@ export function renderMarkdown(text: string) {
     if (inCodeBlock) {
       codeBlockContent.push(line);
       continue;
+    }
+
+    // Markdown 表格解析
+    const isTableRow = line.trim().startsWith("|") && line.trim().endsWith("|");
+    if (isTableRow) {
+      if (!inTable) {
+        // 检查下一行是否是分隔符行
+        const nextLine = lines[i + 1];
+        const isSeparator = nextLine && nextLine.trim().startsWith("|") && /^[|\s:-]+$/.test(nextLine.trim());
+        if (isSeparator) {
+          tableHeaders = line.split("|").map(s => s.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+          const sepParts = nextLine.split("|").map(s => s.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+          tableAlignments = sepParts.map(p => {
+            if (p.startsWith(":") && p.endsWith(":")) return "center";
+            if (p.endsWith(":")) return "right";
+            return "left";
+          });
+          inTable = true;
+          i++; // 跳过分隔符行
+          continue;
+        }
+      } else {
+        const rowCells = line.split("|").map(s => s.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+        tableRows.push(rowCells);
+        continue;
+      }
+    }
+
+    // 如果当前行不是表格行，但我们正处于表格状态中，先输出之前的表格
+    if (!isTableRow && inTable) {
+      pushTable(i);
     }
 
     // 标题
@@ -78,6 +168,11 @@ export function renderMarkdown(text: string) {
     }
   }
 
+  // 循环结束，检查是否还有未输出的表格
+  if (inTable) {
+    pushTable(lines.length);
+  }
+
   return elements;
 }
 
@@ -97,10 +192,26 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
       if (linkMatch) {
         const title = linkMatch[1];
         const path = linkMatch[2];
+        const isReactFile = title.endsWith(".tsx") || title.endsWith(".jsx") || title.endsWith(".ts") || title.endsWith(".js");
         parts.push(
-          <a key={index} href={path} className="file-item-left" style={{ display: "inline-flex", alignItems: "center", gap: "3px", margin: "0 2px" }}>
-            <FileCode />
-            {title}
+          <a 
+            key={index} 
+            href={path} 
+            className="inline-file-link"
+            style={{ 
+              display: "inline-flex", 
+              alignItems: "center", 
+              gap: "4px", 
+              margin: "0 2px",
+              color: "inherit",
+              textDecoration: "none",
+              fontFamily: "Consolas, Monaco, monospace",
+              fontWeight: "600",
+              verticalAlign: "middle"
+            }}
+          >
+            {isReactFile ? <ReactIcon /> : <span style={{ color: "#007aff", display: "inline-flex", alignItems: "center" }}><FileCode /></span>}
+            <span className="file-name-text" style={{ textDecoration: "none" }}>{title}</span>
           </a>
         );
       } else {

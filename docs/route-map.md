@@ -43,9 +43,9 @@ src/
 │   ├── Mermaid.tsx          # Mermaid 图表异步渲染组件
 │   ├── Icons.tsx            # 内联 SVG 图标组件集合（20+ 图标）
 │   ├── Toast.tsx            # 全局 Toast 消息提示组件
-│   ├── SettingsModal.tsx    # 设置弹窗（API Key 管理、历史清空）
+│   ├── SettingsModal.tsx    # 设置弹窗（API Key 管理、历史清空、工作区目录原生浏览选择、检查更新面板与日志）
 │   ├── TitleBar.tsx         # 自定义单行标题栏（交通灯间距、面包屑、Tab 标签、操作按钮）
-│   ├── LeftSidebar.tsx      # 左侧折叠边栏（新建对话、导航、会话列表、设置入口）
+│   ├── LeftSidebar.tsx      # 左侧折叠边栏（新建对话、导航、Projects 项目文件夹分组树形列表、会话列表、设置入口）
 │   ├── RightPanel.tsx       # 右侧折叠面板（Overview Markdown 预览、工具结果展示）
 │   ├── ChatFeed.tsx         # 对话消息流（包含外层绝对定位防抖动 `.sticky-user-bar` 和内层滚动消息列表）
 │   ├── ChatInput.tsx        # 对话输入区（模型选择、文本输入，并在前端拦截 `/clear`、`/help` 等本地指令并执行相应处理）
@@ -55,9 +55,9 @@ src/
 │   └── markdown.tsx         # 自定义 Markdown 渲染器（标题、列表、代码块、Mermaid 嵌入、行内格式）
 ├── bridge/                  # 统一的 JS Bridge 门面层（封装底层壳交互，支持多端适配）
 │   ├── index.ts             # 桥接层入口（环境检测与分发）
-│   ├── types.ts             # 桥接层 TypeScript 接口与类型定义（如 runAgent、AgentEvent 等）
-│   ├── tauri.ts             # 原生 Tauri 壳能力实现（对接 SQLite，实现具备大小写不敏感兼容/回退机制的列数据加载）
-│   └── mock.ts              # 浏览器环境 Mock/降级实现（模拟 Agent 事件流）
+│   ├── types.ts             # 桥接层 TypeScript 接口与类型定义（包含 selectDirectory、checkForUpdates 声明）
+│   ├── tauri.ts             # 原生 Tauri 壳能力实现（对接 SQLite，实现具备列数据解析容错、实际检查 GitHub Release 更新、以及调用原生文件夹选择器的功能）
+│   └── mock.ts              # 浏览器环境 Mock/降级实现（模拟 Agent 事件流、工作区目录录入及更新返回）
 └── vite-env.d.ts            # Vite 环境变量类型声明
 ```
 
@@ -78,7 +78,7 @@ src-tauri/
 │   └── default.json         # 默认允许的应用权限与功能配置
 ├── src/
 │   ├── main.rs              # 应用程序启动入口，调用 lib.rs 中的 run 函数
-│   ├── lib.rs               # 后端核心业务逻辑，注册并实现了 run_agent_loop Tauri 指令（启动外部 sidecar 进程 opencode-sidecar，通过 stdin/stdout 流式传输 Prompt 与 AgentEvent）
+│   ├── lib.rs               # 后端核心业务逻辑，注册并实现了 run_agent_loop 以及 select_directory Tauri 指令（前者启动外部 sidecar，后者用于跨平台调用文件夹选择器）
 │   ├── safety.rs            # [NEW] 安全拦截器，提供工作区路径防越界（Path Jail）校验
 │   └── tools/               # [NEW] 核心本地 Agent 工具集目录
 │       ├── mod.rs           # 统一特质声明 (AgentTool) 与子模块导出

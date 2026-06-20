@@ -145,12 +145,21 @@ async fn run_agent_loop(
     Ok(())
 }
 
+#[tauri::command]
+async fn select_directory() -> Result<Option<String>, String> {
+    let dir = rfd::AsyncFileDialog::new()
+        .set_title("选择工作区目录")
+        .pick_folder()
+        .await;
+    Ok(dir.map(|d| d.path().to_string_lossy().into_owned()))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
-        .invoke_handler(tauri::generate_handler![greet, run_agent_loop])
+        .invoke_handler(tauri::generate_handler![greet, run_agent_loop, select_directory])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

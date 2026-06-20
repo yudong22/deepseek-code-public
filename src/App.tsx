@@ -46,6 +46,10 @@ function MainDashboard() {
   const [workspacePath, setWorkspacePath] = useState("");
   const [savedWorkspacePath, setSavedWorkspacePath] = useState("");
 
+  // 项目管理状态
+  const [projects, setProjects] = useState<string[]>([]);
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+
   // 侧边栏折叠状态
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
@@ -80,6 +84,14 @@ function MainDashboard() {
         if (storedWorkspace) {
           setWorkspacePath(storedWorkspace);
           setSavedWorkspacePath(storedWorkspace);
+        }
+        const storedProjects = await bridge.getSetting("projects_list");
+        if (storedProjects) {
+          try {
+            setProjects(JSON.parse(storedProjects));
+          } catch (e) {
+            console.error("Failed to parse projects_list:", e);
+          }
         }
       } catch (err) {
         console.error("Database initialization failed:", err);
@@ -214,6 +226,79 @@ function MainDashboard() {
     }
   }
 
+  // --- 项目管理操作 ---
+  const handleToggleProjectCollapse = (projectName: string) => {
+    setCollapsedProjects((prev) => ({
+      ...prev,
+      [projectName]: !prev[projectName],
+    }));
+  };
+
+  const handleAddProject = async () => {
+    try {
+      const selectedPath = await bridge.selectDirectory();
+      if (!selectedPath) return;
+
+      let updatedProjects = [...projects];
+      if (!updatedProjects.includes(selectedPath)) {
+        updatedProjects.push(selectedPath);
+        setProjects(updatedProjects);
+        await bridge.saveSetting("projects_list", JSON.stringify(updatedProjects));
+      }
+
+      setWorkspacePath(selectedPath);
+      setSavedWorkspacePath(selectedPath);
+      await bridge.saveSetting("workspace_path", selectedPath);
+
+      const parts = selectedPath.split(/[/\\]/);
+      const name = parts[parts.length - 1] || selectedPath;
+      setCollapsedProjects((prev) => ({
+        ...prev,
+        [name]: false, // 自动展开项目
+      }));
+
+      showToast(`已导入项目并切换工作区为: ${selectedPath}`);
+      navigate("/");
+    } catch (err) {
+      console.error("Failed to add project:", err);
+      showToast("导入项目失败");
+    }
+  };
+
+  const handleRemoveProject = async (projectPath: string) => {
+    try {
+      const updatedProjects = projects.filter((p) => p !== projectPath);
+      setProjects(updatedProjects);
+      await bridge.saveSetting("projects_list", JSON.stringify(updatedProjects));
+      showToast("已移除项目");
+    } catch (err) {
+      console.error("Failed to remove project:", err);
+      showToast("移除项目失败");
+    }
+  };
+
+  const handleSelectProject = async (projectPath: string) => {
+    try {
+      setWorkspacePath(projectPath);
+      setSavedWorkspacePath(projectPath);
+      await bridge.saveSetting("workspace_path", projectPath);
+
+      if (projectPath) {
+        const parts = projectPath.split(/[/\\]/);
+        const name = parts[parts.length - 1] || projectPath;
+        setCollapsedProjects((prev) => ({
+          ...prev,
+          [name]: false, // 自动展开项目
+        }));
+      }
+
+      showToast(`已切换工作区为: ${projectPath}`);
+      navigate("/");
+    } catch (err) {
+      console.error("Failed to select project:", err);
+    }
+  };
+
   // --- 会话与消息加载 ---
   async function loadSessions() {
     try {
@@ -336,13 +421,19 @@ function MainDashboard() {
 
     // 1. 新建会话（如需要）
     if (!currentSessionId) {
+      let currentProjName = "";
+      if (savedWorkspacePath) {
+        const parts = savedWorkspacePath.split(/[/\\]/);
+        currentProjName = parts[parts.length - 1] || "";
+      }
+
       currentSessionId = `session-${Date.now()}`;
       const newSession: Session = {
         id: currentSessionId,
         title: userText.length > 25 ? userText.substring(0, 25) + "..." : userText,
         lastMessage: userText,
         updatedAt: new Date().toISOString(),
-        projectName: "deepseek-code",
+        projectName: currentProjName || undefined,
       };
       await bridge.saveSession(newSession);
       navigate(`/chat/s/${currentSessionId}`);
@@ -553,6 +644,13 @@ function MainDashboard() {
           onSelectSession={(sessionId) => navigate(`/chat/s/${sessionId}`)}
           onSettingsOpen={() => setIsSettingsOpen(true)}
           showToast={showToast}
+          projects={projects}
+          activeWorkspacePath={savedWorkspacePath}
+          collapsedProjects={collapsedProjects}
+          onToggleProjectCollapse={handleToggleProjectCollapse}
+          onAddProject={handleAddProject}
+          onRemoveProject={handleRemoveProject}
+          onSelectProject={handleSelectProject}
         />
 
         <main className="middle-panel">
@@ -582,6 +680,10 @@ function MainDashboard() {
               onSend={handleSend}
               onToggleModelDropdown={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
               onSelectModel={(model) => { setSelectedModel(model); setIsModelDropdownOpen(false); }}
+              activeWorkspacePath={savedWorkspacePath}
+              projects={projects}
+              onSelectProject={handleSelectProject}
+              onAddProject={handleAddProject}
             />
           )}
         </main>

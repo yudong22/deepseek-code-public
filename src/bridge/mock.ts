@@ -41,9 +41,18 @@ export const mockBridge: IBridge = {
     console.warn("[Bridge Mock] checkForUpdates called. Falling back to mock implementation.");
     return {
       hasUpdate: true,
-      version: "1.0.0",
-      changelog: "This is a mock update changelog for browser environment test.",
+      version: "0.3.0",
+      changelog: "这是一个为网页端 Mock 环境模拟的升级包。\n- 新增：多项目（Projects）会话分组与管理。\n- 优化：在设置中原生文件夹路径选择器。\n- 修复：修复了一系列已知的 UI 交互问题。",
     };
+  },
+
+  async selectDirectory(): Promise<string | null> {
+    console.warn("[Bridge Mock] selectDirectory called.");
+    if (typeof window !== "undefined" && typeof window.prompt === "function") {
+      const path = window.prompt("请输入项目文件夹绝对路径:");
+      return path ? path.trim() : null;
+    }
+    return "/mock/path";
   },
 
   async initDb(): Promise<void> {

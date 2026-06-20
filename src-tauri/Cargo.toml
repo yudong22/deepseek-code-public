@@ -1,6 +1,6 @@
 [package]
 name = "deepseek-code"
-version = "0.2.0"
+version = "0.2.1"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -31,6 +31,7 @@ tokio = { version = "1", features = ["process", "sync", "rt", "time"] }
 futures = "0.3"
 reqwest = "0.13"
 eventsource-stream = "0.2"
+rfd = "0.15"
 
 
 
