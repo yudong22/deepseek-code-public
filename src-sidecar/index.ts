@@ -41,6 +41,9 @@ async function main() {
       id: sessionId || undefined
     })
 
+    // 用 callID 映射工具名（opencode 的 success/failed 事件不包含 tool 字段）
+    const toolNameByCallID = new Map<string, string>()
+
     // 4. Run prompt and stream events
     await session.prompt(prompt, (raw) => {
       const rawEvent = raw.event
@@ -67,12 +70,15 @@ async function main() {
       }
       // --- Tool lifecycle ---
       else if (type === "session.next.tool.called") {
+        const callID = data?.callID ?? ""
+        const toolName = data?.tool ?? ""
+        if (callID) toolNameByCallID.set(callID, toolName)
         printEvent({
           type: "ToolCall",
           payload: {
-            name: data?.tool ?? "",
+            name: toolName,
             args: JSON.stringify(data?.input ?? {}),
-            call_id: data?.callID ?? ""
+            call_id: callID
           }
         })
       } else if (type === "session.next.tool.started") {
@@ -81,21 +87,23 @@ async function main() {
           payload: { call_id: data?.callID ?? "" }
         })
       } else if (type === "session.next.tool.success") {
+        const callID = data?.callID ?? ""
         printEvent({
           type: "ToolSuccess",
           payload: {
-            name: data?.tool ?? "",
+            name: toolNameByCallID.get(callID) ?? "",
             result: JSON.stringify(data?.result ?? data?.structured ?? {}),
-            call_id: data?.callID ?? ""
+            call_id: callID
           }
         })
       } else if (type === "session.next.tool.failed") {
+        const callID = data?.callID ?? ""
         printEvent({
           type: "ToolFailed",
           payload: {
-            name: data?.tool ?? "",
+            name: toolNameByCallID.get(callID) ?? "",
             error: data?.error?.message ?? "Execution failed",
-            call_id: data?.callID ?? ""
+            call_id: callID
           }
         })
       } else if (type === "session.next.tool.ended") {
