@@ -102,7 +102,7 @@ export default function LeftSidebar({
             className={`session-link ${activeSessionId === s.id ? "active" : ""}`}
             onClick={() => onSelectSession(s.id)}
           >
-            <span className="session-title-text" style={{ fontWeight: activeSessionId === s.id ? "500" : "normal" }}>
+            <span className="session-title-text" style={{ fontWeight: "normal" }}>
               {s.title}
             </span>
             <span className="session-time">{getSessionTimeLabel(s.updatedAt)}</span>
@@ -247,7 +247,7 @@ export default function LeftSidebar({
                 className={`session-link ${activeSessionId === s.id ? "active" : ""}`}
                 onClick={() => onSelectSession(s.id)}
               >
-                <span className="session-title-text" style={{ fontWeight: activeSessionId === s.id ? "500" : "normal" }}>
+                <span className="session-title-text" style={{ fontWeight: "normal" }}>
                   {s.title}
                 </span>
                 <span className="session-time">{getSessionTimeLabel(s.updatedAt)}</span>

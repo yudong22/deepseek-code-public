@@ -72,13 +72,13 @@ async function main() {
           payload: {
             name: data?.tool ?? "",
             args: JSON.stringify(data?.input ?? {}),
-            callID: data?.callID ?? ""
+            call_id: data?.callID ?? ""
           }
         })
       } else if (type === "session.next.tool.started") {
         printEvent({
           type: "ToolStarted",
-          payload: { callID: data?.callID ?? "" }
+          payload: { call_id: data?.callID ?? "" }
         })
       } else if (type === "session.next.tool.success") {
         printEvent({
@@ -86,7 +86,7 @@ async function main() {
           payload: {
             name: data?.tool ?? "",
             result: JSON.stringify(data?.result ?? data?.structured ?? {}),
-            callID: data?.callID ?? ""
+            call_id: data?.callID ?? ""
           }
         })
       } else if (type === "session.next.tool.failed") {
@@ -95,13 +95,13 @@ async function main() {
           payload: {
             name: data?.tool ?? "",
             error: data?.error?.message ?? "Execution failed",
-            callID: data?.callID ?? ""
+            call_id: data?.callID ?? ""
           }
         })
       } else if (type === "session.next.tool.ended") {
         printEvent({
           type: "ToolEnded",
-          payload: { callID: data?.callID ?? "" }
+          payload: { call_id: data?.callID ?? "" }
         })
       }
       // --- Step lifecycle ---

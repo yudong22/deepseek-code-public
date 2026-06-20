@@ -242,9 +242,8 @@ body {
 }
 
 .session-link.active {
-  background-color: #e3e3e3;
+  background-color: #d4d4d4;
   color: #000;
-  font-weight: 500;
 }
 
 .session-title-text {

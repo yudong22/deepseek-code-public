@@ -500,7 +500,6 @@ function MainDashboard() {
 
       let currentContent = "";
       let currentThinking = "";
-      let currentStep = 0;
       let currentToolCalls: Array<{ name: string; args: string; result?: string; isError?: boolean; executing?: boolean }> = [];
 
       await bridge.runAgent(
@@ -650,15 +649,9 @@ function MainDashboard() {
               return prev;
             });
           }
-          // Step 生命周期：多步 Agent 时用分隔线标记步骤
+          // Step 生命周期（暂不在 UI 中显示）
           else if (event.type === "StepStarted") {
-            currentStep++;
-            if (currentStep > 1) {
-              currentContent += `\n\n---\n*Step ${currentStep}*\n\n`;
-              setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
-            }
           } else if (event.type === "StepEnded") {
-            // step 结束（暂不需要处理）
           }
           // 错误事件
           else if (event.type === "Error") {
