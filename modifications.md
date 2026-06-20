@@ -666,3 +666,49 @@ echo "运行 pwd" | DEEPSEEK_API_KEY=... WORKSPACE_PATH=... OPENCODE_MODEL=deeps
 {"type":"Finished","payload":null}
 ```
 工具能够被成功调起、获取正确输出，并完成了大模型后续文本流的生成与推送。
+
+---
+
+## 8. 右侧预览区 UI 重构（右侧面板可调宽度 / 夜间模式 / 工具分类）
+
+### 8.1 右侧预览区宽度可调
+
+**文件**：[RightPanel.tsx](file:///Users/denis/Sites/deepseek-code-public/src/components/RightPanel.tsx)、[App.tsx](file:///Users/denis/Sites/deepseek-code-public/src/App.tsx)、[TitleBar.tsx](file:///Users/denis/Sites/deepseek-code-public/src/components/TitleBar.tsx)、[App.css](file:///Users/denis/Sites/deepseek-code-public/src/App.css)
+
+- `RightPanel` 新增 `width` / `onWidthChange` props，宽度由父组件 `App.tsx` 通过 `rightPanelWidth` state 统一管理（默认 320px，拖动范围 240–900px）。
+- 面板左边缘新增 5px 透明拖拽手柄（`.right-panel-resize-handle`），悬停显示蓝色高亮，拖动时 cursor 变为 `col-resize`。
+- TitleBar 的右侧 tab 区域（`.titlebar-right-panel-header`）接收 `rightPanelWidth` prop，宽度与面板实时同步，避免对不齐。
+- 移除了 `.right-panel > *` 中的硬编码 `min-width: 320px` 约束，改为 `collapsed` 时 `width: 0 !important`，打开时宽度由内联样式控制。
+
+### 8.2 预览区样式与工具区统一 / 夜间模式
+
+**文件**：[App.tsx](file:///Users/denis/Sites/deepseek-code-public/src/App.tsx)、[TitleBar.tsx](file:///Users/denis/Sites/deepseek-code-public/src/components/TitleBar.tsx)、[App.css](file:///Users/denis/Sites/deepseek-code-public/src/App.css)
+
+- 新增 `isNightMode` 布尔 state，切换时在 `.app-container` 上加/移除 `night-mode` class。
+- TitleBar 加入月亮/太阳切换按钮（右侧面板打开/关闭时均可见），激活时按钮高亮为蓝色。
+- 日间模式下右侧预览区使用浅色主题（白色背景 + `#f6f6f6` 文件头 + 灰色行号栏），与聊天区工具卡片视觉语言一致。
+- 夜间模式下通过 `.night-mode` 选择器级联覆盖全局颜色：标题栏、左侧栏、聊天区、工具卡片、右侧预览区全部变暗，只有 `bash` 终端样式面板本身始终是深色（不受影响）。
+- CSS 新增 `.rp-file-header`、`.rp-file-name`、`.rp-file-lang`、`.rp-file-body`、`.rp-source-view`、`.rp-line-numbers`、`.rp-code-content` 等浅色文件查看器样式类。
+
+### 8.3 FileRead 工具卡片改为文件链接 + Markdown 内嵌 Tab
+
+**文件**：[ToolCallCard.tsx](file:///Users/denis/Sites/deepseek-code-public/src/components/ToolCallCard.tsx)、[RightPanel.tsx](file:///Users/denis/Sites/deepseek-code-public/src/components/RightPanel.tsx)、[App.css](file:///Users/denis/Sites/deepseek-code-public/src/App.css)
+
+- `read` 工具卡片不再展开文件内容，改为一行显示：状态圆点 + 工具名 + 可点击蓝色文件名链接，点击直接在右侧预览区打开。
+- 右侧预览区的 Markdown 文件改用内嵌 Tab 栏（`Preview` / `Source`）代替原来头部的胶囊按钮，Tab 样式与 TitleBar 一致（蓝色底部边框高亮激活态）。
+- CSS 新增 `.rp-inner-tabs`、`.rp-inner-tab` 样式，并在 `.night-mode` 下同步覆盖。
+
+### 8.4 工具统一分类处理
+
+**文件**：[ToolCallCard.tsx](file:///Users/denis/Sites/deepseek-code-public/src/components/ToolCallCard.tsx)
+
+基于 opencode 源码（`packages/opencode/src/tool/`）梳理所有工具的真实 ID（全小写），统一分为两类：
+
+**预览区工具**（`PREVIEW_TOOLS` 集合）：`read` / `write` / `edit` / `apply_patch` 及旧版兼容名
+- 渲染为一行文件链接卡片（`FileToolCard`），点击打开右侧预览区，不提供展开/折叠。
+
+**工具区展开工具**：`bash` / `glob` / `grep` / `todowrite` / `webfetch` / `websearch` / `plan` / `plan_exit` / `task` / `skill` / `question` 等
+- 渲染为可展开/折叠卡片（`ExpandableToolCard`），输出留在工具区，**不显示「在新标签页打开」按钮**。
+
+同时移除了旧版 `normalizeToolName` 首字母大写映射（`FileRead`→`FileRead` 等），统一改用 opencode 原生小写 ID。新增 `useElapsed` 和 `detectError` 辅助函数消除重复代码。
+

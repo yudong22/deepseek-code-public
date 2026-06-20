@@ -24,6 +24,9 @@ interface TitleBarProps {
   onTabClick: (tabId: string) => void;
   onTabClose: (tabId: string, e: React.MouseEvent) => void;
   showToast: (message: string) => void;
+  isNightMode: boolean;
+  onToggleNightMode: () => void;
+  rightPanelWidth: number;
 }
 
 export default function TitleBar({
@@ -40,6 +43,9 @@ export default function TitleBar({
   onTabClick,
   onTabClose,
   showToast,
+  isNightMode,
+  onToggleNightMode,
+  rightPanelWidth,
 }: TitleBarProps) {
   return (
     <div className="custom-titlebar" data-tauri-drag-region>
@@ -77,7 +83,7 @@ export default function TitleBar({
 
         {/* 右侧面板标题栏（在右侧边栏打开时可见） */}
         {hasActiveSession && activeSession && isRightSidebarOpen && (
-          <div className="titlebar-right-panel-header" data-tauri-drag-region>
+          <div className="titlebar-right-panel-header" data-tauri-drag-region style={{ width: rightPanelWidth, minWidth: rightPanelWidth }}>
             {/* Tab 标签容器 */}
             <div className="right-panel-tabs">
               {tabs.map((tab, index) => {
@@ -121,6 +127,25 @@ export default function TitleBar({
 
             {/* 操作按钮 */}
             <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0, paddingLeft: "6px" }}>
+              <button
+                className={`titlebar-btn${isNightMode ? " active" : ""}`}
+                onClick={onToggleNightMode}
+                title={isNightMode ? "切换为日间模式" : "切换为夜间模式"}
+                style={{ padding: "4px" }}
+              >
+                {isNightMode ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                    <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                  </svg>
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                  </svg>
+                )}
+              </button>
               <button className="titlebar-btn" onClick={onSettingsOpen} style={{ padding: "4px" }}>
                 <Icons.Settings />
               </button>
@@ -134,6 +159,24 @@ export default function TitleBar({
         {/* 右侧边栏关闭时的切换按钮 */}
         {hasActiveSession && activeSession && !isRightSidebarOpen && (
           <div className="titlebar-actions" style={{ paddingRight: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              className={`titlebar-btn${isNightMode ? " active" : ""}`}
+              onClick={onToggleNightMode}
+              title={isNightMode ? "切换为日间模式" : "切换为夜间模式"}
+            >
+              {isNightMode ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+              )}
+            </button>
             <button className="titlebar-btn" onClick={onToggleRightSidebar}>
               <Icons.RightSidebarToggle />
             </button>

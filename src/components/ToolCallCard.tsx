@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 
-
 /** 工具调用的类型定义 */
 interface ToolCallData {
   name: string;
@@ -16,337 +15,373 @@ interface ToolCallCardProps {
   onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
 }
 
-/** 根据工具名称返回对应的图标和颜色 */
-function getToolMeta(name: string): { icon: string; color: string; label: string } {
-  const map: Record<string, { icon: string; color: string; label: string }> = {
-    FileRead:  { icon: "📄", color: "#5ac8fa", label: "Read" },
-    FileWrite: { icon: "✏️", color: "#34c759", label: "Write" },
-    FileEdit:  { icon: "🖊️", color: "#ff9f0a", label: "Edit" },
-    Bash:      { icon: "⚡", color: "#bf5af2", label: "Run" },
-    Glob:      { icon: "🔍", color: "#007aff", label: "Glob" },
-    Grep:      { icon: "🔎", color: "#007aff", label: "Grep" },
-    TodoRead:  { icon: "📋", color: "#ff9f0a", label: "Todo" },
-    TodoWrite: { icon: "📝", color: "#ff9f0a", label: "Todo" },
-  };
-  return map[name] || { icon: "🔧", color: "#8e8e93", label: name };
+// ─── 工具 ID 分类 ─────────────────────────────────────────────────────────────
+//
+// opencode 真实工具 ID（全小写）：
+//   文件操作类（在右侧预览区打开）：read / write / edit / apply_patch
+//     以及旧版兼容名：fileread / filewrite / fileedit
+//   工具区展开类（不进预览区）：bash / glob / grep / todoread / todowrite /
+//     webfetch / websearch / plan / plan_exit / task / skill / question
+//
+// 策略：PREVIEW_TOOLS 集合内的走"文件链接"样式 + 点击打开预览区
+//       其余全部走"展开/折叠"样式，没有"在新标签页打开"按钮
+
+const PREVIEW_TOOLS = new Set([
+  "read", "fileread",
+  "write", "filewrite",
+  "edit", "fileedit",
+  "apply_patch",
+]);
+
+/** 规范化工具 ID 为真实 opencode 格式（小写）*/
+function normalizeToolName(name: string): string {
+  return (name || "").toLowerCase().trim();
 }
 
-/** 解析工具调用参数，提取可读的预览文本 */
+/** 解析参数 JSON，提取最具代表性的预览字符串 */
 function getArgsPreview(tc: ToolCallData): string {
   try {
     const parsed = JSON.parse(tc.args);
     if (parsed.path) return parsed.path;
+    if (parsed.file_path) return parsed.file_path;
     if (parsed.command) return parsed.command;
     if (parsed.pattern) return parsed.pattern;
     if (parsed.glob) return parsed.glob;
+    if (parsed.query) return parsed.query;
+    if (parsed.url) return parsed.url;
     return JSON.stringify(parsed);
   } catch {
-    return tc.args;
+    return tc.args || "";
   }
 }
 
-/** 根据工具类型提取展示语言和内容 */
-function getToolResultDisplay(tc: ToolCallData): { language: string; contentToShow: string } {
-  let language = "json";
-  let contentToShow = tc.result || "";
+/** 从结果 JSON 中提取可展示的内容与语言 */
+function getToolResultDisplay(tc: ToolCallData): { language: string; content: string } {
+  const name = normalizeToolName(tc.name);
+  let language = "text";
+  let content = tc.result || "";
 
-  if (tc.name === "FileRead") {
+  if (name === "read" || name === "fileread") {
     try {
-      const parsedRes = JSON.parse(tc.result || "{}");
-      if (parsedRes.content !== undefined) {
-        contentToShow = parsedRes.content;
-        const ext = getArgsPreview(tc).split(".").pop();
-        language = ext || "text";
+      const parsed = JSON.parse(tc.result || "{}");
+      if (parsed.content !== undefined) {
+        content = parsed.content;
+        const ext = getArgsPreview(tc).split(".").pop()?.split("?")[0] || "text";
+        language = ext;
       }
     } catch {}
-  } else if (tc.name === "Bash") {
+
+  } else if (name === "write" || name === "filewrite" || name === "edit" || name === "fileedit" || name === "apply_patch") {
+    // write/edit 结果通常是 diff 或确认信息；尝试提取 new_content / content
     try {
-      const parsedRes = JSON.parse(tc.result || "{}");
-      contentToShow = parsedRes.stdout || parsedRes.stderr || tc.result || "";
+      const parsed = JSON.parse(tc.result || "{}");
+      if (parsed.content !== undefined) {
+        content = parsed.content;
+      } else if (parsed.new_content !== undefined) {
+        content = parsed.new_content;
+      } else if (typeof parsed === "string") {
+        content = parsed;
+      }
+      const ext = getArgsPreview(tc).split(".").pop()?.split("?")[0] || "text";
+      language = ext;
+    } catch {
+      content = tc.result || "";
+    }
+
+  } else if (name === "bash") {
+    try {
+      const parsed = JSON.parse(tc.result || "{}");
+      content = parsed.output || parsed.stdout || parsed.stderr || tc.result || "";
       language = "bash";
     } catch {}
-  } else if (tc.name === "Glob" || tc.name === "Grep") {
+
+  } else if (name === "glob" || name === "grep") {
     language = "json";
     try {
-      contentToShow = JSON.stringify(JSON.parse(tc.result || "{}"), null, 2);
+      content = JSON.stringify(JSON.parse(tc.result || "{}"), null, 2);
     } catch {}
-  }
 
-  return { language, contentToShow };
-}
-
-/** 根据工具类型生成展示用的标题 */
-function getTabTitle(tc: ToolCallData): string {
-  const preview = getArgsPreview(tc);
-  if (tc.name === "FileRead" || tc.name === "FileWrite" || tc.name === "FileEdit") {
-    return preview.split(/[/\\]/).pop() || tc.name;
-  }
-  if (tc.name === "Bash") {
-    return preview.length > 12 ? preview.substring(0, 12) + "..." : preview;
-  }
-  if (tc.name === "Glob" || tc.name === "Grep") {
-    return `${tc.name}: ${preview.length > 8 ? preview.substring(0, 8) + "..." : preview}`;
-  }
-  return tc.name;
-}
-
-/** 格式化参数，美化展示 */
-function formatArgs(args: string): string {
-  try {
-    return JSON.stringify(JSON.parse(args), null, 2);
-  } catch {
-    return args;
-  }
-}
-
-export default function ToolCallCard({ toolCall: tc, messageId, index, onOpenTab }: ToolCallCardProps) {
-  const [expanded, setExpanded] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const startTimeRef = useRef<number>(Date.now());
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const isDone = tc.result !== undefined;
-
-  // 动态解析结果中的错误标记
-  let isError = tc.isError;
-  if (tc.result !== undefined && !isError) {
+  } else if (name === "webfetch") {
+    // webfetch 返回网页文本，可能是 markdown
     try {
-      const parsed = JSON.parse(tc.result);
-      if (parsed && (parsed.error !== undefined || parsed.success === false)) {
-        isError = true;
-      }
+      const parsed = JSON.parse(tc.result || "{}");
+      content = parsed.content || parsed.text || tc.result || "";
+    } catch {}
+    language = "markdown";
+
+  } else if (name === "websearch") {
+    language = "json";
+    try {
+      content = JSON.stringify(JSON.parse(tc.result || "{}"), null, 2);
     } catch {}
   }
 
-  // 计时器：执行中递增，完成后停止
+  return { language, content };
+}
+
+/** 从路径中取最后一段作为 tab 标题 */
+function fileBaseName(path: string): string {
+  return path.split(/[/\\]/).filter(Boolean).pop() || path;
+}
+
+// ─── 计时 hook ────────────────────────────────────────────────────────────────
+
+function useElapsed(isDone: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(Date.now());
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     if (!isDone) {
-      startTimeRef.current = Date.now();
-      intervalRef.current = setInterval(() => {
-        setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      startRef.current = Date.now();
+      timerRef.current = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
       }, 1000);
     } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isDone]);
 
-  const meta = getToolMeta(tc.name);
+  return elapsed;
+}
+
+// ─── 错误检测 ─────────────────────────────────────────────────────────────────
+
+function detectError(tc: ToolCallData): boolean {
+  if (tc.isError) return true;
+  if (tc.result === undefined) return false;
+  try {
+    const parsed = JSON.parse(tc.result);
+    return parsed && (parsed.error !== undefined || parsed.success === false);
+  } catch {
+    return false;
+  }
+}
+
+// ─── 文件操作工具（read / write / edit / apply_patch）────────────────────────
+// 只显示一行：状态点 + 工具名 + 可点击文件链接，点击在右侧预览区打开
+
+function FileToolCard({ tc, messageId, index, onOpenTab }: {
+  tc: ToolCallData;
+  messageId: string;
+  index: number;
+  onOpenTab: ToolCallCardProps["onOpenTab"];
+}) {
+  const isDone = tc.result !== undefined;
+  const isError = detectError(tc);
+  const elapsed = useElapsed(isDone);
+  const name = normalizeToolName(tc.name);
   const argsPreview = getArgsPreview(tc);
-  // 只显示路径的最后一段作为文件名，路径过长时缩短
-  const shortPreview = argsPreview.split(/[/\\]/).pop() || argsPreview;
-  const displayPreview = shortPreview.length > 40 ? shortPreview.substring(0, 40) + "…" : shortPreview;
+  const fileName = fileBaseName(argsPreview);
 
-  const handleHeaderClick = () => {
-    setExpanded((v) => !v);
+  let statusColor = "#007aff";
+  if (isDone) statusColor = isError ? "#ff3b30" : "#34c759";
+
+  // 执行中的动作描述
+  const actionLabel: Record<string, string> = {
+    read: "reading", fileread: "reading",
+    write: "writing", filewrite: "writing",
+    edit: "editing", fileedit: "editing",
+    apply_patch: "patching",
   };
 
-  const handleOpenTab = (e: React.MouseEvent) => {
+  const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isDone) {
-      const { language, contentToShow } = getToolResultDisplay(tc);
-      const title = getTabTitle(tc);
-      onOpenTab({
-        id: `tool-${messageId}-${index}`,
-        title,
-        type: "tool_result",
-        content: contentToShow,
-        language,
-      });
-    }
+    if (!isDone || isError) return;
+    const { language, content } = getToolResultDisplay(tc);
+    if (!content) return;
+    onOpenTab({
+      id: `tool-${messageId}-${index}`,
+      title: fileName,
+      type: "tool_result",
+      content,
+      language,
+    });
   };
-
-  const { contentToShow } = getToolResultDisplay(tc);
 
   return (
-    <div className={`tool-call-card-v2 ${isDone ? (isError ? "tc-error" : "tc-done") : "tc-running"}`}>
-      {/* ── Header row ── */}
-      <div className="tc-header" onClick={handleHeaderClick}>
-        {/* Left: status icon / spinner */}
-        <div className="tc-status-icon">
-          {!isDone ? (
-            <span className="tc-spinner" />
-          ) : isError ? (
-            <span className="tc-icon-done tc-icon-error">✕</span>
-          ) : (
-            <span className="tc-icon-done tc-icon-ok">✓</span>
-          )}
-        </div>
+    <div style={{
+      fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
+      fontSize: "12px",
+      lineHeight: "1.8",
+      margin: "2px 0",
+      color: "inherit",
+      display: "flex",
+      alignItems: "center",
+      gap: "5px",
+      flexWrap: "wrap",
+    }}>
+      {/* 状态圆点 */}
+      <span style={{ color: statusColor, fontSize: "14px", lineHeight: 1, userSelect: "none", flexShrink: 0 }}>•</span>
 
-        {/* Tool emoji */}
-        <span className="tc-tool-emoji" title={tc.name}>{meta.icon}</span>
+      {/* 工具名 */}
+      <span style={{ fontWeight: "bold", flexShrink: 0, opacity: 0.8 }}>{name}</span>
 
-        {/* Tool name + preview */}
-        <div className="tc-label">
-          <span className="tc-name">{tc.name}</span>
-          <span className="tc-preview">{displayPreview}</span>
-        </div>
+      {/* 文件名链接 */}
+      <span
+        onClick={handleClick}
+        title={argsPreview}
+        style={{
+          color: isDone && !isError ? "#007aff" : "inherit",
+          cursor: isDone && !isError ? "pointer" : "default",
+          textDecoration: isDone && !isError ? "underline" : "none",
+          opacity: isDone ? 1 : 0.55,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          maxWidth: "260px",
+          flexShrink: 1,
+        }}
+      >
+        {fileName}
+      </span>
 
-        {/* Right: elapsed / chevron */}
-        <div className="tc-right">
-          {!isDone ? (
-            <span className="tc-elapsed tc-elapsed-live">{elapsed}s</span>
-          ) : (
-            <span className="tc-elapsed tc-elapsed-done">{elapsed}s</span>
-          )}
-          <span className={`tc-chevron ${expanded ? "tc-chevron-open" : ""}`}>›</span>
-        </div>
-      </div>
+      {/* 耗时 */}
+      <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}s</span>
 
-      {/* ── Expandable detail ── */}
-      <div className={`tc-detail ${expanded ? "tc-detail-open" : ""}`}>
-        <div className="tc-detail-inner">
-          {/* Args */}
-          <div className="tc-detail-section">
-            <div className="tc-detail-label">参数</div>
-            <pre className="tc-pre">{formatArgs(tc.args)}</pre>
-          </div>
-
-          {/* Result */}
-          {isDone && (
-            <div className="tc-detail-section">
-              <div className="tc-detail-label-row">
-                <span className="tc-detail-label">{isError ? "错误输出" : "执行结果"}</span>
-                <button className="tc-open-btn" onClick={handleOpenTab}>在右侧面板查看 →</button>
-              </div>
-              <pre className={`tc-pre ${isError ? "tc-pre-error" : ""}`}>
-                {contentToShow.length > 800
-                  ? contentToShow.substring(0, 800) + "\n…（截断，点击右侧查看完整内容）"
-                  : contentToShow}
-              </pre>
-            </div>
-          )}
-
-          {!isDone && (
-            <div className="tc-detail-section">
-              <div className="tc-detail-label">状态</div>
-              <div className="tc-running-placeholder">
-                <span className="tc-spinner-sm" />
-                <span style={{ color: "#8e8e93", fontSize: "12px" }}>正在执行中...</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* 状态附言 */}
+      {!isDone && (
+        <span style={{ fontSize: "11px", opacity: 0.45, fontStyle: "italic", flexShrink: 0 }}>
+          {actionLabel[name] ?? "running"}…
+        </span>
+      )}
+      {isDone && isError && (
+        <span style={{ fontSize: "11px", color: "#ff3b30", flexShrink: 0 }}>failed</span>
+      )}
     </div>
   );
 }
 
-/** ──────────────────────────────────────────────────────
- *  ToolCallGroup — collapsible group of tool call cards
- *  Shows summary when collapsed; individual cards when open
- * ────────────────────────────────────────────────────── */
+// ─── 工具区展开工具（bash / glob / grep / todo / webfetch / websearch / ...） ──
+// 显示可展开/折叠的输出，不提供"在新标签页打开"按钮
+
+function ExpandableToolCard({ tc }: {
+  tc: ToolCallData;
+}) {
+  const isDone = tc.result !== undefined;
+  const isError = detectError(tc);
+  const elapsed = useElapsed(isDone);
+  const name = normalizeToolName(tc.name);
+  const argsPreview = getArgsPreview(tc);
+  const { content } = getToolResultDisplay(tc);
+
+  const [expanded, setExpanded] = useState(!isDone);
+
+  useEffect(() => {
+    if (isDone) setExpanded(false);
+  }, [isDone]);
+
+  let statusColor = "#007aff";
+  if (isDone) statusColor = isError ? "#ff3b30" : "#34c759";
+
+  const formatOutput = (text: string) => {
+    if (!text) return "";
+    const lines = text.split("\n");
+    if (lines.length > 1 && lines[lines.length - 1].trim() === "") lines.pop();
+    return lines.map((l, i) => (i === 0 ? `  └ ${l}` : `    ${l}`)).join("\n");
+  };
+
+  return (
+    <div style={{
+      fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
+      fontSize: "12px",
+      lineHeight: "1.6",
+      margin: "2px 0",
+      color: "inherit",
+      display: "flex",
+      flexDirection: "column",
+    }}>
+      {/* 头部：点击展开/收起 */}
+      <div
+        onClick={() => setExpanded(v => !v)}
+        style={{ display: "flex", alignItems: "center", cursor: "pointer", userSelect: "none", width: "100%" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px", flex: 1 }}>
+          {/* 状态圆点 */}
+          <span style={{ color: statusColor, marginRight: "2px", fontSize: "14px", lineHeight: 1, userSelect: "none" }}>•</span>
+          {/* 工具名 */}
+          <span style={{ fontWeight: "bold", opacity: 0.8 }}>{name}</span>
+          {/* 参数预览 */}
+          <span style={{ opacity: 0.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>({argsPreview})</span>
+          {/* 耗时 */}
+          <span style={{ fontSize: "11px", opacity: 0.35, marginLeft: "4px" }}>{elapsed}s</span>
+        </div>
+        {/* 展开三角 */}
+        <span style={{ fontSize: "10px", opacity: 0.4, width: "12px", textAlign: "center", marginLeft: "10px", marginRight: "4px" }}>
+          {expanded ? "▼" : "▶"}
+        </span>
+      </div>
+
+      {/* 展开内容 */}
+      {expanded && isDone && content && (
+        <pre style={{
+          margin: "2px 0 0 0",
+          fontFamily: "inherit",
+          fontSize: "inherit",
+          lineHeight: "inherit",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-all",
+          color: "inherit",
+          opacity: 0.8,
+          maxHeight: "320px",
+          overflowY: "auto",
+          background: "transparent",
+          border: "none",
+          paddingLeft: 0,
+        }}>
+          {formatOutput(content)}
+        </pre>
+      )}
+
+      {/* 执行中 */}
+      {expanded && !isDone && (
+        <div style={{ margin: "2px 0 0 0", opacity: 0.5 }}>
+          <span>  └ 正在执行中…</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 主入口：按工具分类分派 ───────────────────────────────────────────────────
+
+export default function ToolCallCard({ toolCall: tc, messageId, index, onOpenTab }: ToolCallCardProps) {
+  const name = normalizeToolName(tc.name);
+
+  if (PREVIEW_TOOLS.has(name)) {
+    return <FileToolCard tc={tc} messageId={messageId} index={index} onOpenTab={onOpenTab} />;
+  }
+
+  return <ExpandableToolCard tc={tc} />;
+}
+
+/**
+ * ToolCallGroup — 工具调用组的扁平化渲染容器
+ */
 interface ToolCallGroupProps {
   toolCalls: ToolCallData[];
   messageId: string;
   onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
 }
 
-/** 根据一批工具调用生成人类可读的摘要 */
-function buildGroupSummary(toolCalls: ToolCallData[]): string {
-  const fileOps = toolCalls.filter((tc) =>
-    ["FileRead", "FileWrite", "FileEdit"].includes(tc.name)
-  ).length;
-  const searchOps = toolCalls.filter((tc) =>
-    ["Glob", "Grep"].includes(tc.name)
-  ).length;
-  const bashOps = toolCalls.filter((tc) => tc.name === "Bash").length;
-  const otherOps = toolCalls.length - fileOps - searchOps - bashOps;
-
-  const parts: string[] = [];
-  if (fileOps > 0) parts.push(`${fileOps} 个文件`);
-  if (searchOps > 0) parts.push(`搜索 ${searchOps} 次`);
-  if (bashOps > 0) parts.push(`运行 ${bashOps} 条命令`);
-  if (otherOps > 0) parts.push(`${otherOps} 个操作`);
-
-  if (parts.length === 0) return `${toolCalls.length} 个工具`;
-
-  const hasFileRead = toolCalls.some((tc) => tc.name === "FileRead");
-  const hasFileWrite = toolCalls.some((tc) =>
-    ["FileWrite", "FileEdit"].includes(tc.name)
-  );
-  const onlySearch = fileOps === 0 && searchOps > 0 && bashOps === 0;
-  const onlyBash = fileOps === 0 && searchOps === 0 && bashOps > 0;
-
-  if (onlySearch) return `搜索了 ${searchOps} 次`;
-  if (onlyBash) return `运行了 ${bashOps} 条命令`;
-  if (hasFileRead && !hasFileWrite && searchOps === 0 && bashOps === 0)
-    return `探索了 ${fileOps} 个文件`;
-  if (hasFileWrite && fileOps > 0 && searchOps === 0 && bashOps === 0)
-    return `修改了 ${fileOps} 个文件`;
-
-  return `操作了 ${parts.join("、")}`;
-}
-
 export function ToolCallGroup({ toolCalls, messageId, onOpenTab }: ToolCallGroupProps) {
-  const [expanded, setExpanded] = useState(false);
-
-  const isAnyRunning = toolCalls.some((tc) => tc.result === undefined);
-  const hasError = toolCalls.some((tc) => {
-    if (tc.isError) return true;
-    if (tc.result !== undefined) {
-      try {
-        const p = JSON.parse(tc.result);
-        return p && (p.error !== undefined || p.success === false);
-      } catch {}
-    }
-    return false;
-  });
-
-  const summary = buildGroupSummary(toolCalls);
-  const count = toolCalls.length;
-  const statusColor = isAnyRunning ? "#007aff" : hasError ? "#ff3b30" : "#8e8e93";
-
   return (
-    <div className="tc-group">
-      {/* ── Group header row ── */}
-      <div
-        className="tc-group-header"
-        onClick={() => setExpanded((v) => !v)}
-        style={{ borderLeftColor: statusColor }}
-      >
-        {/* Left status */}
-        <div className="tc-status-icon" style={{ flexShrink: 0 }}>
-          {isAnyRunning ? (
-            <span className="tc-spinner" />
-          ) : hasError ? (
-            <span className="tc-icon-done tc-icon-error">✕</span>
-          ) : (
-            <span className="tc-icon-done tc-icon-ok">✓</span>
-          )}
-        </div>
-
-        {/* Summary text */}
-        <span className="tc-group-summary">{summary}</span>
-
-        {/* Count badge */}
-        {count > 1 && <span className="tc-group-count">{count}</span>}
-
-        {/* Chevron */}
-        <span className={`tc-chevron ${expanded ? "tc-chevron-open" : ""}`}>›</span>
-      </div>
-
-      {/* ── Expanded body: individual cards ── */}
-      <div className={`tc-group-body ${expanded ? "tc-group-body-open" : ""}`}>
-        <div className="tc-group-inner">
-          {toolCalls.map((tc, idx) => (
-            <ToolCallCard
-              key={idx}
-              toolCall={tc}
-              messageId={messageId}
-              index={idx}
-              onOpenTab={onOpenTab}
-            />
-          ))}
-        </div>
-      </div>
+    <div className="tc-group-terminal" style={{
+      display: "flex",
+      flexDirection: "column",
+      gap: "4px",
+      margin: "8px 0",
+    }}>
+      {toolCalls.map((tc, idx) => (
+        <ToolCallCard
+          key={idx}
+          toolCall={tc}
+          messageId={messageId}
+          index={idx}
+          onOpenTab={onOpenTab}
+        />
+      ))}
     </div>
   );
 }

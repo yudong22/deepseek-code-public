@@ -638,7 +638,7 @@ body {
 
 /* 3. Right Sidebar Overview Panel */
 .right-panel {
-  width: 320px;
+  /* width is set inline when open */
   background-color: #fcfcfc;
   border-left: 1px solid #e3e3e3;
   display: flex;
@@ -646,16 +646,145 @@ body {
   flex-shrink: 0;
   height: 100%;
   overflow: hidden;
-  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-left-color 0.2s;
+  position: relative;
+  transition: border-left-color 0.2s;
 }
 
 .right-panel.collapsed {
-  width: 0px;
+  width: 0 !important;
   border-left-color: transparent;
 }
 
-.right-panel > * {
-  min-width: 320px;
+/* ── Resize drag handle (left edge) ── */
+.right-panel-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.right-panel-resize-handle:hover {
+  background: rgba(0, 122, 255, 0.15);
+}
+
+/* ── File panel header ── */
+.rp-file-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px 9px 16px;
+  background: #f6f6f6;
+  border-bottom: 1px solid #e3e3e3;
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+  flex-shrink: 0;
+  color: #3a3a3c;
+  min-width: 0;
+}
+
+.rp-file-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.rp-file-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.rp-file-lang {
+  font-size: 10px;
+  text-transform: uppercase;
+  opacity: 0.55;
+  font-weight: 500;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+/* ── Markdown inner tab bar (Preview / Source) ── */
+.rp-inner-tabs {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #e3e3e3;
+  background: #f6f6f6;
+  flex-shrink: 0;
+  padding: 0 8px;
+  gap: 0;
+}
+
+.rp-inner-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #888;
+  cursor: pointer;
+  transition: color 0.12s, border-bottom-color 0.12s;
+  white-space: nowrap;
+  font-family: system-ui, sans-serif;
+  margin-bottom: -1px; /* overlap the container border */
+}
+
+.rp-inner-tab:hover {
+  color: #1d1d1f;
+}
+
+.rp-inner-tab.active {
+  color: #007aff;
+  border-bottom-color: #007aff;
+  font-weight: 600;
+}
+
+/* ── File body container ── */
+.rp-file-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  min-width: 0;
+}
+
+/* ── Source code view (line numbers + code) ── */
+.rp-source-view {
+  flex: 1;
+  display: flex;
+  overflow: auto;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #1d1d1f;
+}
+
+.rp-line-numbers {
+  padding: 12px 10px 12px 16px;
+  text-align: right;
+  color: #bbb;
+  user-select: none;
+  border-right: 1px solid #e8e8ed;
+  background: #fafafa;
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+.rp-code-content {
+  margin: 0;
+  padding: 12px 16px;
+  white-space: pre;
+  flex: 1;
+  overflow: visible;
+  background: transparent;
 }
 
 /* Tabs list */
@@ -1788,3 +1917,252 @@ body {
 .tc-group-inner .tool-call-card-v2:last-child {
   margin-bottom: 0;
 }
+
+/* ════════════════════════════════════════════════
+   Night Mode — full app dark theme
+   Applied when .night-mode is on .app-container
+   ════════════════════════════════════════════════ */
+
+.night-mode body,
+.app-container.night-mode {
+  background-color: #1a1a1a;
+  color: #e0e0e0;
+}
+
+/* Titlebar */
+.night-mode .custom-titlebar {
+  background-color: #1f1f1f;
+  border-bottom-color: #333;
+}
+
+.night-mode .titlebar-btn {
+  color: #aaa;
+}
+
+.night-mode .titlebar-btn:hover {
+  background-color: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.night-mode .titlebar-btn.active {
+  color: #60a5fa;
+  background-color: rgba(96, 165, 250, 0.12);
+}
+
+.night-mode .titlebar-breadcrumb-session {
+  color: #c0c0c0;
+}
+
+.night-mode .titlebar-left,
+.night-mode .titlebar-left-controls {
+  background-color: #1f1f1f;
+  border-right-color: #333;
+}
+
+.night-mode .titlebar-right-panel-header {
+  background-color: #262626;
+  border-left-color: #333;
+}
+
+.night-mode .titlebar-right-panel-header .panel-tab {
+  color: #888;
+}
+
+.night-mode .titlebar-right-panel-header .panel-tab:hover {
+  background-color: rgba(255,255,255,0.06);
+  color: #ddd;
+}
+
+.night-mode .titlebar-right-panel-header .panel-tab.active {
+  background-color: #333;
+  border-color: #444;
+  color: #fff;
+}
+
+/* Left sidebar */
+.night-mode .left-sidebar {
+  background-color: #1f1f1f;
+  border-right-color: #333;
+}
+
+.night-mode .section-title {
+  color: #666;
+}
+
+.night-mode .session-link {
+  color: #999;
+}
+
+.night-mode .session-link:hover,
+.night-mode .session-link.active {
+  background-color: #2a2a2a;
+  color: #fff;
+}
+
+/* Middle chat panel */
+.night-mode .middle-panel,
+.night-mode .chat-messages-feed,
+.night-mode .active-chat-input-container {
+  background-color: #1a1a1a;
+}
+
+.night-mode .message-header {
+  color: #e0e0e0;
+}
+
+.night-mode .message-body {
+  color: #d0d0d0;
+}
+
+.night-mode .message-bubble-user {
+  background-color: #252525;
+  border-color: #333;
+  color: #e0e0e0;
+}
+
+.night-mode .active-chat-input-container {
+  border-top-color: #333;
+}
+
+.night-mode .active-chat-box {
+  background-color: #252525;
+}
+
+.night-mode .active-chat-textarea {
+  color: #e0e0e0;
+}
+
+.night-mode .active-chat-textarea::placeholder {
+  color: #555;
+}
+
+.night-mode .message-body code {
+  background-color: #2a2a2a;
+  color: #e0e0e0;
+}
+
+.night-mode .message-body pre {
+  background-color: #212121;
+  border-color: #333;
+}
+
+/* Tool call cards */
+.night-mode .tool-call-card-v2 {
+  background: #232323;
+  border-color: #333;
+}
+
+.night-mode .tc-group {
+  background: #232323;
+  border-color: #333;
+}
+
+.night-mode .tc-group-inner {
+  background: #1e1e1e;
+  border-top-color: #333;
+}
+
+.night-mode .tc-group-inner .tool-call-card-v2 {
+  background: #282828;
+}
+
+.night-mode .tc-group-summary {
+  color: #bbb;
+}
+
+.night-mode .tc-group-count {
+  background: #333;
+  color: #aaa;
+}
+
+/* Right panel — night mode */
+.night-mode .right-panel {
+  background-color: #1e1e1e;
+  border-left-color: #333;
+}
+
+.night-mode .rp-file-header {
+  background: #252525;
+  border-bottom-color: #333;
+  color: #bbb;
+}
+
+.night-mode .rp-file-body {
+  background: #1e1e1e;
+}
+
+.night-mode .rp-source-view {
+  color: #d4d4d4;
+}
+
+.night-mode .rp-line-numbers {
+  background: #222;
+  border-right-color: #333;
+  color: #555;
+}
+
+.night-mode .rp-code-content {
+  background: transparent;
+}
+
+/* night-mode inner tab bar */
+.night-mode .rp-inner-tabs {
+  background: #252525;
+  border-bottom-color: #333;
+}
+
+.night-mode .rp-inner-tab {
+  color: #666;
+}
+
+.night-mode .rp-inner-tab:hover {
+  color: #ccc;
+}
+
+.night-mode .rp-inner-tab.active {
+  color: #60a5fa;
+  border-bottom-color: #60a5fa;
+}
+
+.night-mode .right-panel-markdown {
+  color: #d0d0d0;
+}
+
+.night-mode .right-panel-markdown h1,
+.night-mode .right-panel-markdown h2,
+.night-mode .right-panel-markdown h3 {
+  color: #e0e0e0;
+}
+
+.night-mode .right-panel-markdown h1 {
+  border-bottom-color: #333;
+}
+
+.night-mode .right-panel-markdown code {
+  background-color: #2a2a2a;
+  color: #e0e0e0;
+}
+
+.night-mode .right-panel-markdown pre {
+  background-color: #212121;
+  border-color: #333;
+}
+
+.night-mode .right-panel-markdown .mermaid {
+  background-color: #232323;
+  border-color: #333;
+}
+
+.night-mode .right-panel-empty {
+  color: #555;
+}
+
+.night-mode .right-panel-resize-handle:hover {
+  background: rgba(96, 165, 250, 0.2);
+}
+
+/* Settings modal night mode */
+.night-mode .settings-overlay {
+  background: rgba(0,0,0,0.6);
+}
+

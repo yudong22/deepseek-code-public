@@ -50,12 +50,19 @@ function MainDashboard() {
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
 
+  // 夜间模式
+  const [isNightMode, setIsNightMode] = useState(false);
+
+  // 右侧面板宽度（可拖动调整）
+  const [rightPanelWidth, setRightPanelWidth] = useState(320);
+
   // Toast 通知状态
   const [toast, setToast] = useState<{ visible: boolean; message: string }>({
     visible: false,
     message: "",
   });
   const toastTimeoutRef = useRef<number | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
   const activeStreamingSessionRef = useRef<string | null>(null);
 
   // --- 初始化：加载数据库、会话、API Key、工作区路径 ---
@@ -366,6 +373,7 @@ function MainDashboard() {
 
     // 3. 触发 Agent 循环
     try {
+      setIsGenerating(true);
       activeStreamingSessionRef.current = currentSessionId;
       const historyMsgs = await bridge.getMessages(currentSessionId);
       const apiMessages = [
@@ -451,10 +459,12 @@ function MainDashboard() {
               return prev;
             });
           } else if (event.type === "Error") {
+            setIsGenerating(false);
             activeStreamingSessionRef.current = null;
             currentContent += `\n\n❌ **运行出错：** \`${event.payload}\`\n`;
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
           } else if (event.type === "Finished") {
+            setIsGenerating(false);
             activeStreamingSessionRef.current = null;
             // 直接使用本地 mutable 数组，无需从 React state 读取
             const finalToolCalls = currentToolCalls;
@@ -488,6 +498,7 @@ function MainDashboard() {
         }
       );
     } catch (err: any) {
+      setIsGenerating(false);
       activeStreamingSessionRef.current = null;
       console.error("Agent execution failed:", err);
       const errMsg = typeof err === "string" ? err : (err?.message || String(err));
@@ -498,7 +509,7 @@ function MainDashboard() {
   const activeSession = sessions.find((s) => s.id === id);
 
   return (
-    <div className="app-container">
+    <div className={`app-container${isNightMode ? " night-mode" : ""}`}>
       <Toast visible={toast.visible} message={toast.message} />
 
       <SettingsModal
@@ -528,6 +539,9 @@ function MainDashboard() {
         onTabClick={setActiveTabId}
         onTabClose={closeTab}
         showToast={showToast}
+        isNightMode={isNightMode}
+        onToggleNightMode={() => setIsNightMode((v) => !v)}
+        rightPanelWidth={rightPanelWidth}
       />
 
       <div className="main-layout">
@@ -547,6 +561,7 @@ function MainDashboard() {
               <ChatFeed
                 messages={messages}
                 onOpenTab={openTab}
+                isGenerating={isGenerating}
               />
               <ChatInput
                 inputText={inputText}
@@ -576,6 +591,9 @@ function MainDashboard() {
           tabs={tabs}
           activeTabId={activeTabId}
           messages={messages}
+          width={rightPanelWidth}
+          onWidthChange={setRightPanelWidth}
+          isNightMode={isNightMode}
         />
       </div>
     </div>
