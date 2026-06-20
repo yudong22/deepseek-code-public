@@ -24,13 +24,7 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ds-api = "0.1"
-ignore = "0.4"
-globset = "0.4"
-regex = "1"
 tokio = { version = "1", features = ["process", "sync", "rt", "time"] }
-futures = "0.3"
-reqwest = "0.13"
-eventsource-stream = "0.2"
 rfd = "0.15"
 
 
