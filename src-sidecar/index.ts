@@ -1,7 +1,7 @@
 import { Session } from "../../opencode/packages/core/src/session/wrapper"
 import fs from "fs"
 
-function main() {
+async function main() {
   try {
     // 1. Read prompt from stdin until EOF
     const prompt = fs.readFileSync(0, "utf-8").trim()
