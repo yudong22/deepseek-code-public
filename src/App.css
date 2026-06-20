@@ -1505,6 +1505,135 @@ body {
    Tool Call Cards v2 — Reference-style redesign
    ════════════════════════════════════════════════ */
 
+/* ════════════════════════════════════════════════
+   Thinking Block — terminal-style ∴ prefix rows
+   ════════════════════════════════════════════════ */
+
+.thinking-block {
+  background: transparent;
+  border: none;
+  border-left: none;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 2px;
+  margin-bottom: 14px;
+  cursor: pointer;
+  user-select: none;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #8e8e93;
+  transition: color 0.15s;
+  overflow: hidden;
+}
+
+.thinking-block:hover {
+  background: transparent;
+  color: #636366;
+}
+
+/* 每一行思维内容 */
+.thinking-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 1.6em;
+}
+
+/* ∴ 符号 */
+.thinking-prefix {
+  color: #c5c5ce;
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 1px;
+  user-select: none;
+}
+
+/* 正文 */
+.thinking-text {
+  color: #8e8e93;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* 折叠状态摘要行 */
+.thinking-collapsed {
+  opacity: 0.85;
+}
+
+.thinking-summary {
+  color: #8e8e93;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.thinking-meta {
+  color: #aeaea3;
+  font-size: 10.5px;
+  flex-shrink: 0;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+/* 流式输入光标 */
+.thinking-cursor {
+  display: inline-block;
+  width: 5px;
+  height: 12px;
+  background: #8e8e93;
+  border-radius: 1px;
+  margin-top: 3px;
+  animation: thinking-blink 0.9s step-end infinite;
+}
+
+@keyframes thinking-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+/* 思维行文字容器 */
+.thinking-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Night mode: dark terminal look */
+.night-mode .thinking-block {
+  background: transparent;
+  border-left: none;
+  color: #636366;
+}
+
+.night-mode .thinking-block:hover {
+  background: transparent;
+  color: #8e8e93;
+}
+
+.night-mode .thinking-prefix {
+  color: #48484a;
+}
+
+.night-mode .thinking-text {
+  color: #636366;
+}
+
+.night-mode .thinking-summary {
+  color: #636366;
+}
+
+.night-mode .thinking-meta {
+  color: #48484a;
+}
+
+.night-mode .thinking-cursor {
+  background: #636366;
+}
+
 /* Container for all tool calls in a message */
 .message-tool-calls-list {
   margin-top: 12px;

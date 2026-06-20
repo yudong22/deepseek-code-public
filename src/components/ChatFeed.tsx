@@ -7,9 +7,75 @@ import { ToolCallGroup } from "@/components/ToolCallCard";
 interface ChatFeedProps {
   messages: Message[];
   onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
+  isGenerating?: boolean;
 }
 
-export default function ChatFeed({ messages, onOpenTab }: ChatFeedProps) {
+interface ThinkingBlockProps {
+  content: string;
+  isGenerating: boolean;
+  isLastMessage: boolean;
+}
+
+function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockProps) {
+  const isStreaming = isGenerating && isLastMessage;
+  const [expanded, setExpanded] = useState(true);
+
+  // 当生成结束时自动折叠
+  useEffect(() => {
+    if (!isStreaming) {
+      setExpanded(false);
+    }
+  }, [isStreaming]);
+
+  // 把思维内容按行拆分，每行加 ∴ 前缀
+  const lines = content
+    .split("\n")
+    .filter((l) => l.trim() !== "")
+    .map((l) => l.trimEnd());
+
+  return (
+    <div
+      className="thinking-block"
+      onClick={() => setExpanded((v) => !v)}
+    >
+      {expanded ? (
+        /* 展开：每行显示 ∴ 前缀 */
+        <div className="thinking-lines">
+          {lines.map((line, i) => (
+            <div key={i} className="thinking-line">
+              <span className="thinking-prefix">∴</span>
+              <span className="thinking-text">{line}</span>
+            </div>
+          ))}
+          {/* 流式输入中的闪烁光标 */}
+          {isStreaming && (
+            <div className="thinking-line">
+              <span className="thinking-prefix">∴</span>
+              <span className="thinking-cursor" />
+            </div>
+          )}
+        </div>
+      ) : (
+        /* 折叠：单行摘要 */
+        <div className="thinking-line thinking-collapsed">
+          <span className="thinking-prefix">∴</span>
+          <span className="thinking-summary">
+            {lines[0]
+              ? lines[0].length > 60
+                ? lines[0].slice(0, 60) + "…"
+                : lines[0]
+              : "Thinking…"}
+          </span>
+          <span className="thinking-meta">
+            {lines.length} lines · click to expand
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ChatFeed({ messages, onOpenTab, isGenerating }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [stickyUserMsg, setStickyUserMsg] = useState<string | null>(null);
@@ -72,92 +138,89 @@ export default function ChatFeed({ messages, onOpenTab }: ChatFeedProps) {
       )}
 
       <div className="chat-messages-feed" ref={containerRef}>
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`message-wrapper ${msg.role}`}
-            data-msg-id={msg.id}
-            data-role={msg.role}
-          >
-            {msg.role === "user" ? (
-              <div className="message-bubble-user">
-                {msg.content}
-              </div>
-            ) : msg.role === "tool" ? (
-              /* tool 角色消息（旧格式兼容，基本不使用） */
-              <div className="message-tool-log" style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 12px",
-                margin: "6px 0",
-                fontSize: "12px",
-                color: "#8a8a8f",
-                background: "rgba(0, 0, 0, 0.02)",
-                borderRadius: "6px",
-                borderLeft: "2px solid #8e8e93"
-              }}>
-                <span style={{ fontSize: "14px" }}>⚙️</span>
-                <span><strong>工具执行完成</strong></span>
-                <details style={{ marginLeft: "auto", cursor: "pointer" }}>
-                  <summary style={{ outline: "none", color: "#007aff", fontSize: "11px" }}>查看输出</summary>
-                  <pre style={{
-                    marginTop: "6px",
-                    background: "#f8f8f8",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    color: "#333",
-                    maxHeight: "200px",
-                    overflow: "auto",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-all"
-                  }}>{msg.content}</pre>
-                </details>
-              </div>
-            ) : (
-              <>
-                <div className="message-body">
-                  {/* 思维链展示 */}
-                  {msg.reasoning_content && (
-                    <div className="message-reasoning-block" style={{
-                      background: "rgba(0, 0, 0, 0.02)",
-                      borderLeft: "3px solid #8e8e93",
-                      padding: "8px 12px",
-                      marginBottom: "12px",
+        {messages.map((msg, index) => {
+          const isLastMessage = index === messages.length - 1;
+
+          return (
+            <div
+              key={msg.id}
+              className={`message-wrapper ${msg.role}`}
+              data-msg-id={msg.id}
+              data-role={msg.role}
+            >
+              {msg.role === "user" ? (
+                <div className="message-bubble-user">
+                  {msg.content}
+                </div>
+              ) : msg.role === "tool" ? (
+                /* tool 角色消息（旧格式兼容，基本不使用） */
+                <div className="message-tool-log" style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "8px 12px",
+                  margin: "6px 0",
+                  fontSize: "12px",
+                  color: "#8a8a8f",
+                  background: "rgba(0, 0, 0, 0.02)",
+                  borderRadius: "6px",
+                  borderLeft: "2px solid #8e8e93"
+                }}>
+                  <span style={{ fontSize: "14px" }}>⚙️</span>
+                  <span><strong>工具执行完成</strong></span>
+                  <details style={{ marginLeft: "auto", cursor: "pointer" }}>
+                    <summary style={{ outline: "none", color: "#007aff", fontSize: "11px" }}>查看输出</summary>
+                    <pre style={{
+                      marginTop: "6px",
+                      background: "#f8f8f8",
+                      padding: "8px",
                       borderRadius: "4px",
-                      fontSize: "12px",
-                      color: "#555"
-                    }}>
-                      <div style={{ fontWeight: "600", fontSize: "11px", color: "#8e8e93", marginBottom: "4px" }}>思维链 (Thinking):</div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{msg.reasoning_content}</div>
-                    </div>
-                  )}
-
-                  {/* 工具调用组 — 渲染在文本之前（工具在文本生成前执行）*/}
-                  {msg.toolCalls && msg.toolCalls.length > 0 && (
-                    <div className="message-tool-calls-list">
-                      <ToolCallGroup
-                        toolCalls={msg.toolCalls}
-                        messageId={msg.id}
-                        onOpenTab={onOpenTab}
+                      fontSize: "11px",
+                      color: "#333",
+                      maxHeight: "200px",
+                      overflow: "auto",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-all"
+                    }}>{msg.content}</pre>
+                  </details>
+                </div>
+              ) : (
+                <>
+                  <div className="message-body">
+                    {/* 思维链展示 */}
+                    {msg.reasoning_content && (
+                      <ThinkingBlock
+                        content={msg.reasoning_content}
+                        isGenerating={!!isGenerating}
+                        isLastMessage={isLastMessage}
                       />
-                    </div>
-                  )}
+                    )}
 
-                  {renderMarkdown(msg.content)}
-                </div>
+                    {/* 工具调用组 — 渲染在文本之前（工具在文本生成前执行）*/}
+                    {msg.toolCalls && msg.toolCalls.length > 0 && (
+                      <div className="message-tool-calls-list">
+                        <ToolCallGroup
+                          toolCalls={msg.toolCalls}
+                          messageId={msg.id}
+                          onOpenTab={onOpenTab}
+                        />
+                      </div>
+                    )}
 
-                <div className="message-footer">
-                  <span>{new Date(msg.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
-                  <button className="message-action-icon"><Icons.Like /></button>
-                  <button className="message-action-icon"><Icons.Dislike /></button>
-                  <button className="message-action-icon"><Icons.Copy /></button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
+                    {renderMarkdown(msg.content)}
+                  </div>
+
+                  <div className="message-footer">
+                    <span>{new Date(msg.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <button className="message-action-icon"><Icons.Like /></button>
+                    <button className="message-action-icon"><Icons.Dislike /></button>
+                    <button className="message-action-icon"><Icons.Copy /></button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
     </div>

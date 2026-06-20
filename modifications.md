@@ -712,3 +712,15 @@ echo "运行 pwd" | DEEPSEEK_API_KEY=... WORKSPACE_PATH=... OPENCODE_MODEL=deeps
 
 同时移除了旧版 `normalizeToolName` 首字母大写映射（`FileRead`→`FileRead` 等），统一改用 opencode 原生小写 ID。新增 `useElapsed` 和 `detectError` 辅助函数消除重复代码。
 
+---
+
+## 9. 思维链融入对话答复（去背景框与边框）
+
+### 9.1 思维链去框融合
+
+**文件**：[App.css](file:///Users/denis/Sites/deepseek-code-public/src/App.css)
+
+- 移除了 `.thinking-block` 和 `.night-mode .thinking-block` 的背景色（改为 `transparent`），去除了左边框 `border-left`、边框圆角 `border-radius` 及内边距 `padding: 0`。
+- 调整了思维链在日间与夜间模式下的文字颜色（日间：`#8e8e93` / hover `#636366`；夜间：`#636366` / hover `#8e8e93`），使其直接放置在对话区上方，与主答复文本自然融为一体，同时通过等宽（monospace）字体和稍浅的文字色与主正文作层次区分。
+- 优化了 collapsed (折叠) 状态下的颜色和流式输入时光标的颜色，确保视觉连贯性。
+
