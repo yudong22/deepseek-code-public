@@ -694,6 +694,20 @@ body {
   color: #333;
 }
 
+.message-action-icon.liked {
+  color: #34c759;
+}
+.message-action-icon.liked svg {
+  fill: currentColor;
+}
+
+.message-action-icon.disliked {
+  color: #ff3b30;
+}
+.message-action-icon.disliked svg {
+  fill: currentColor;
+}
+
 /* Floating bottom chat input */
 .active-chat-input-container {
   padding: 16px 24px 24px 24px;

@@ -11,6 +11,7 @@ interface ChatFeedProps {
   onCancelAgent?: () => void;
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;
+  showToast?: (message: string) => void;
 }
 
 interface ThinkingBlockProps {
@@ -78,11 +79,12 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
   );
 }
 
-export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl }: ChatFeedProps) {
+export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserAtBottomRef = useRef(true);
   const [stickyUserMsg, setStickyUserMsg] = useState<string | null>(null);
+  const [likes, setLikes] = useState<Record<string, "like" | "dislike" | null>>({});
 
   // 滚动监听：跟踪用户是否在底部（主动向上滚动即取消自动下滚）
   useEffect(() => {
@@ -155,6 +157,30 @@ export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAg
       <div className="chat-messages-feed" ref={containerRef}>
         {messages.map((msg, index) => {
           const isLastMessage = index === messages.length - 1;
+          const messageLiked = likes[msg.id] === "like";
+          const messageDisliked = likes[msg.id] === "dislike";
+
+          const handleLike = () => {
+            setLikes((prev) => ({
+              ...prev,
+              [msg.id]: prev[msg.id] === "like" ? null : "like",
+            }));
+          };
+
+          const handleDislike = () => {
+            setLikes((prev) => ({
+              ...prev,
+              [msg.id]: prev[msg.id] === "dislike" ? null : "dislike",
+            }));
+          };
+
+          const handleCopy = () => {
+            navigator.clipboard.writeText(msg.content).then(() => {
+              if (showToast) {
+                showToast("已复制到剪贴板");
+              }
+            });
+          };
 
           return (
             <div
@@ -268,9 +294,27 @@ export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAg
 
                   <div className="message-footer">
                     <span>{new Date(msg.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
-                    <button className="message-action-icon"><Icons.Like /></button>
-                    <button className="message-action-icon"><Icons.Dislike /></button>
-                    <button className="message-action-icon"><Icons.Copy /></button>
+                    <button 
+                      className={`message-action-icon${messageLiked ? " liked" : ""}`}
+                      onClick={handleLike}
+                      title="点赞"
+                    >
+                      <Icons.Like />
+                    </button>
+                    <button 
+                      className={`message-action-icon${messageDisliked ? " disliked" : ""}`}
+                      onClick={handleDislike}
+                      title="点踩"
+                    >
+                      <Icons.Dislike />
+                    </button>
+                    <button 
+                      className="message-action-icon"
+                      onClick={handleCopy}
+                      title="复制消息"
+                    >
+                      <Icons.Copy />
+                    </button>
                   </div>
                 </>
               )}

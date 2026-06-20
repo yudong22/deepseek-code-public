@@ -12,14 +12,11 @@ import ChatFeed from "@/components/ChatFeed";
 import ChatInput from "@/components/ChatInput";
 import EmptyState from "@/components/EmptyState";
 
-// --- 右侧面板 Tab 类型 ---
-interface Tab {
-  id: string;
-  title: string;
-  type: string;
-  content: string;
-  language?: string;
-}
+import { useToast } from "@/hooks/useToast";
+import { useSettings } from "@/hooks/useSettings";
+import { useProjects } from "@/hooks/useProjects";
+import { useRightPanelTabs, Tab } from "@/hooks/useRightPanelTabs";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 // --- 主面板组件，管理所有状态与业务逻辑 ---
 function MainDashboard() {
@@ -30,25 +27,7 @@ function MainDashboard() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
 
-  // 右侧面板 Tab 状态
-  const [tabs, setTabs] = useState<Tab[]>([
-    { id: "overview", title: "Overview", type: "overview", content: "" }
-  ]);
   const [activeTabId, setActiveTabId] = useState<string>("overview");
-
-  // API Key & 模型选择状态
-  const [apiKey, setApiKey] = useState("");
-  const [savedApiKey, setSavedApiKey] = useState<string | null>(null);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("deepseek-v4-flash");
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
-  // 工作区路径（空字符串 = 使用后端默认沙箱目录）
-  const [workspacePath, setWorkspacePath] = useState("");
-  const [savedWorkspacePath, setSavedWorkspacePath] = useState("");
-
-  // 项目管理状态
-  const [projects, setProjects] = useState<string[]>([]);
-  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
 
   // 侧边栏折叠状态
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(true);
@@ -60,14 +39,81 @@ function MainDashboard() {
   // 右侧面板宽度（可拖动调整）
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
 
-  // Toast 通知状态
-  const [toast, setToast] = useState<{ visible: boolean; message: string }>({
-    visible: false,
-    message: "",
-  });
-  const toastTimeoutRef = useRef<number | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const activeStreamingSessionRef = useRef<string | null>(null);
+
+  // --- 1. Toast Notification Hook ---
+  const { toast, showToast } = useToast();
+
+  // --- 2. Settings Management Hook ---
+  const {
+    apiKey,
+    setApiKey,
+    savedApiKey,
+    setSavedApiKey,
+    isSettingsOpen,
+    setIsSettingsOpen,
+    selectedModel,
+    setSelectedModel,
+    isModelDropdownOpen,
+    setIsModelDropdownOpen,
+    workspacePath,
+    setWorkspacePath,
+    savedWorkspacePath,
+    setSavedWorkspacePath,
+    handleSaveApiKey,
+    handleClearApiKey,
+    handleClearHistory,
+  } = useSettings({
+    showToast,
+    navigate,
+    loadSessions,
+  });
+
+  // --- 3. Projects Workspace Hook ---
+  const {
+    projects,
+    setProjects,
+    collapsedProjects,
+    setCollapsedProjects,
+    handleToggleProjectCollapse,
+    handleAddProject,
+    handleRemoveProject,
+    handleSelectProject,
+  } = useProjects({
+    showToast,
+    navigate,
+    setWorkspacePath,
+    setSavedWorkspacePath,
+  });
+
+  // --- 4. Right Panel Tabs Hook ---
+  const {
+    tabs,
+    setTabs,
+    openTab,
+    closeTab,
+    readAndPreviewFile,
+  } = useRightPanelTabs({
+    setIsRightSidebarOpen,
+    activeTabId,
+    setActiveTabId,
+  });
+
+  // --- 5. Global Keyboard Shortcuts Hook ---
+  useKeyboardShortcuts({
+    isSettingsOpen,
+    setIsSettingsOpen,
+    isRightSidebarOpen,
+    setIsRightSidebarOpen,
+    isLeftSidebarOpen,
+    setIsLeftSidebarOpen,
+    setTabs,
+    setActiveTabId,
+    messages,
+    showToast,
+    navigate,
+  });
 
   // --- 初始化：加载数据库、会话、API Key、工作区路径 ---
   useEffect(() => {
@@ -98,7 +144,7 @@ function MainDashboard() {
       }
     }
     init();
-  }, []);
+  }, [setApiKey, setSavedApiKey, setWorkspacePath, setSavedWorkspacePath, setProjects]);
 
   // 点击外部关闭模型选择下拉
   useEffect(() => {
@@ -113,7 +159,7 @@ function MainDashboard() {
       clearTimeout(timer);
       document.removeEventListener("click", handleClose);
     };
-  }, [isModelDropdownOpen]);
+  }, [isModelDropdownOpen, setIsModelDropdownOpen]);
 
   // 切换会话时加载消息
   useEffect(() => {
@@ -127,280 +173,11 @@ function MainDashboard() {
     } else {
       setMessages([]);
     }
-  }, [id]);
-
-  // --- 全局键盘快捷键（用 ref 存回调避免依赖抖动）---
-  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
-  keyHandlerRef.current = (e: KeyboardEvent) => {
-    const mod = e.metaKey || e.ctrlKey;
-
-    // 纯 Escape（无 mod）
-    if (e.key === "Escape" && !mod) {
-      if (isSettingsOpen) {
-        e.preventDefault();
-        setIsSettingsOpen(false);
-        return;
-      }
-      if (isRightSidebarOpen) {
-        e.preventDefault();
-        setTabs([{ id: "overview", title: "Overview", type: "overview", content: "" }]);
-        setActiveTabId("overview");
-        setIsRightSidebarOpen(false);
-        return;
-      }
-    }
-
-    // mod 组合键（用 e.code 避免键盘布局和大小写问题）
-    if (mod) {
-      switch (e.code) {
-        case "KeyN": // mod+N → 新建会话
-          e.preventDefault();
-          navigate("/");
-          return;
-        case "Comma": // mod+, → 设置
-          e.preventDefault();
-          setIsSettingsOpen(true);
-          return;
-        case "KeyL": // mod+L → 聚焦输入框
-          e.preventDefault();
-          document.querySelector<HTMLTextAreaElement>(".chat-input-textarea")?.focus();
-          return;
-        case "KeyB": // mod+B → 切换左侧边栏
-          e.preventDefault();
-          setIsLeftSidebarOpen((v) => !v);
-          return;
-        case "Backslash": // mod+\ → 切换右侧面板
-          e.preventDefault();
-          setIsRightSidebarOpen((v) => !v);
-          return;
-        case "KeyC": // mod+Shift+C → 复制最后一条助手消息
-          if (e.shiftKey) {
-            e.preventDefault();
-            const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-            if (lastAssistant) {
-              navigator.clipboard.writeText(lastAssistant.content).then(() => {
-                showToast("已复制到剪贴板");
-              });
-            }
-          }
-          return;
-      }
-    }
-  };
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => keyHandlerRef.current(e);
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, []);
-
-  // --- Toast 通知 ---
-  function showToast(message: string) {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    setToast({ visible: true, message });
-    toastTimeoutRef.current = window.setTimeout(() => {
-      setToast({ visible: false, message: "" });
-    }, 1800);
-  }
-
-  // --- 右侧面板 Tab 操作 ---
-  const openTab = (tab: Tab) => {
-    setTabs((prev) => {
-      if (prev.some((t) => t.id === tab.id)) {
-        return prev;
-      }
-      const titleIdx = prev.findIndex((t) => t.title === tab.title);
-      if (titleIdx > -1) {
-        const next = [...prev];
-        next[titleIdx] = tab;
-        return next;
-      }
-      return [...prev, tab];
-    });
-    setActiveTabId(tab.id);
-    setIsRightSidebarOpen(true);
-  };
-
-  const closeTab = (tabId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (tabId === "overview") return;
-    setTabs((prev) => {
-      const nextTabs = prev.filter((t) => t.id !== tabId);
-      if (activeTabId === tabId) {
-        const last = nextTabs[nextTabs.length - 1];
-        setActiveTabId(last ? last.id : "overview");
-      }
-      return nextTabs;
-    });
-  };
-
-  // 读取文件并在右侧面板预览
-  const readAndPreviewFile = async (relativePath: string) => {
-    try {
-      const ext = relativePath.split(".").pop()?.toLowerCase() || "text";
-      const imageExts = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"]);
-
-      if (imageExts.has(ext)) {
-        // 图片：使用 getFileUrl 获取 WebView 可加载的 URL
-        const url = await bridge.getFileUrl(relativePath);
-        if (url) {
-          openTab({
-            id: `file-${relativePath}`,
-            title: relativePath,
-            type: "image",
-            content: url,
-            language: ext,
-          });
-        }
-      } else {
-        // 文本文件：读取内容
-        const content = await bridge.readFile(relativePath);
-        openTab({
-          id: `file-${relativePath}`,
-          title: relativePath,
-          type: "tool_result",
-          content,
-          language: ext,
-        });
-      }
-    } catch (err) {
-      console.error("预览文件失败:", err);
-    }
-  };
+  }, [id, setTabs, setActiveTabId]);
 
   // 列出工作区文件（用于 @ 自动补全）
   const listFiles = async (): Promise<string[]> => {
     return await bridge.listWorkspaceFiles(200);
-  };
-
-  // --- API Key 管理 ---
-  async function handleSaveApiKey() {
-    try {
-      if (!apiKey.trim()) {
-        showToast("API Key 不能为空");
-        return;
-      }
-      await bridge.saveSetting("deepseek_api_key", apiKey.trim());
-      setSavedApiKey(apiKey.trim());
-
-      // 同时保存工作区路径
-      if (workspacePath.trim()) {
-        await bridge.saveSetting("workspace_path", workspacePath.trim());
-        setSavedWorkspacePath(workspacePath.trim());
-      } else {
-        await bridge.deleteSetting("workspace_path");
-        setSavedWorkspacePath("");
-      }
-
-      showToast("设置已保存");
-      setIsSettingsOpen(false);
-    } catch (err) {
-      console.error("保存设置失败:", err);
-      showToast("保存失败，请重试");
-    }
-  }
-
-  async function handleClearApiKey() {
-    try {
-      await bridge.deleteSetting("deepseek_api_key");
-      setApiKey("");
-      setSavedApiKey(null);
-      showToast("API Key 已清除");
-    } catch (err) {
-      console.error("清除 API Key 失败:", err);
-      showToast("清除失败，请重试");
-    }
-  }
-
-  async function handleClearHistory() {
-    try {
-      const allSessions = await bridge.getSessions();
-      for (const s of allSessions) {
-        await bridge.deleteSession(s.id);
-      }
-      showToast("历史会话已全部清空");
-      setIsSettingsOpen(false);
-      navigate("/");
-      await loadSessions();
-    } catch (err) {
-      console.error("清空历史会话失败:", err);
-      showToast("清空失败，请重试");
-    }
-  }
-
-  // --- 项目管理操作 ---
-  const handleToggleProjectCollapse = (projectName: string) => {
-    setCollapsedProjects((prev) => ({
-      ...prev,
-      [projectName]: !prev[projectName],
-    }));
-  };
-
-  const handleAddProject = async () => {
-    try {
-      const selectedPath = await bridge.selectDirectory();
-      if (!selectedPath) return;
-
-      let updatedProjects = [...projects];
-      if (!updatedProjects.includes(selectedPath)) {
-        updatedProjects.push(selectedPath);
-        setProjects(updatedProjects);
-        await bridge.saveSetting("projects_list", JSON.stringify(updatedProjects));
-      }
-
-      setWorkspacePath(selectedPath);
-      setSavedWorkspacePath(selectedPath);
-      await bridge.saveSetting("workspace_path", selectedPath);
-
-      const parts = selectedPath.split(/[/\\]/);
-      const name = parts[parts.length - 1] || selectedPath;
-      setCollapsedProjects((prev) => ({
-        ...prev,
-        [name]: false, // 自动展开项目
-      }));
-
-      showToast(`已导入项目并切换工作区为: ${selectedPath}`);
-      navigate("/");
-    } catch (err) {
-      console.error("Failed to add project:", err);
-      showToast("导入项目失败");
-    }
-  };
-
-  const handleRemoveProject = async (projectPath: string) => {
-    try {
-      const updatedProjects = projects.filter((p) => p !== projectPath);
-      setProjects(updatedProjects);
-      await bridge.saveSetting("projects_list", JSON.stringify(updatedProjects));
-      showToast("已移除项目");
-    } catch (err) {
-      console.error("Failed to remove project:", err);
-      showToast("移除项目失败");
-    }
-  };
-
-  const handleSelectProject = async (projectPath: string) => {
-    try {
-      setWorkspacePath(projectPath);
-      setSavedWorkspacePath(projectPath);
-      await bridge.saveSetting("workspace_path", projectPath);
-
-      if (projectPath) {
-        const parts = projectPath.split(/[/\\]/);
-        const name = parts[parts.length - 1] || projectPath;
-        setCollapsedProjects((prev) => ({
-          ...prev,
-          [name]: false, // 自动展开项目
-        }));
-      }
-
-      showToast(`已切换工作区为: ${projectPath}`);
-      navigate("/");
-    } catch (err) {
-      console.error("Failed to select project:", err);
-    }
   };
 
   // --- 会话与消息加载 ---
@@ -708,18 +485,18 @@ function MainDashboard() {
         toolCalls?: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean; step?: number }>;
         elapsed?: string;
       }> = [];
-  /** 将 currentToolCalls 的最新状态同步到 sections 中 */
-  const syncSections = () => {
-    if (sections.length === 0) return;
-    for (const sec of sections) {
-      if (sec.type === "tools" && sec.toolCalls) {
-        sec.toolCalls = sec.toolCalls.map(tc => {
-          const updated = currentToolCalls.find(ctc => ctc.call_id === tc.call_id);
-          return updated || tc;
-        });
-      }
-    }
-  };
+      /** 将 currentToolCalls 的最新状态同步 to sections 中 */
+      const syncSections = () => {
+        if (sections.length === 0) return;
+        for (const sec of sections) {
+          if (sec.type === "tools" && sec.toolCalls) {
+            sec.toolCalls = sec.toolCalls.map(tc => {
+              const updated = currentToolCalls.find(ctc => ctc.call_id === tc.call_id);
+              return updated || tc;
+            });
+          }
+        }
+      };
 
       // 追踪 call_id 以精确匹配工具事件
       let currentToolCalls: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean; step?: number }> = [];
@@ -735,7 +512,6 @@ function MainDashboard() {
           // ─── 推理块 ─────────────────────────────────────────────────
           if (event.type === "ThinkingStarted") {
             thinkingStart = Date.now();
-            // 追加新的 thinking 段落
             sections.push({ type: "thinking", content: "" });
           } else if (event.type === "Thinking") {
             if (sections.length > 0 && sections[sections.length - 1].type === "thinking") {
@@ -752,8 +528,14 @@ function MainDashboard() {
           }
           // ─── 文本块 ─────────────────────────────────────────────────
           else if (event.type === "TextStarted") {
+            sections.push({ type: "text", content: "" });
           } else if (event.type === "Text") {
             currentContent += event.payload;
+            if (sections.length > 0 && sections[sections.length - 1].type === "text") {
+              sections[sections.length - 1].content = (sections[sections.length - 1].content || "") + event.payload;
+            } else {
+              sections.push({ type: "text", content: event.payload });
+            }
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
           } else if (event.type === "TextEnded") {
           }
@@ -763,14 +545,11 @@ function MainDashboard() {
             const toolArgs = event.payload.args;
             const callId = event.payload.call_id || "";
             currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs, call_id: callId, step: currentStep }];
-            // 确保最后一个段落是 tools 类型（或追加新的）
             if (sections.length === 0 || sections[sections.length - 1].type !== "tools") {
               sections.push({ type: "tools", toolCalls: [] });
             }
-            // 同步 latest toolCalls 到 sections
             const ts = sections.filter(s => s.type === "tools");
             if (ts.length > 0) ts[ts.length - 1].toolCalls = [...currentToolCalls.filter(tc => {
-              // 只取属于当前 step 的工具
               return tc.step === currentStep || currentToolCalls.filter(t => t.step === currentStep).length === 0;
             })];
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
@@ -778,7 +557,6 @@ function MainDashboard() {
             const callId = event.payload.call_id || "";
             const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId && tc.result === undefined);
             if (execIdx > -1) {
-
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === execIdx ? { ...tc, executing: true } : tc
               );
@@ -797,7 +575,6 @@ function MainDashboard() {
             const callId = event.payload.call_id || "";
             const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (execIdx > -1) {
-
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === execIdx ? { ...tc, executing: false } : tc
               );
@@ -818,7 +595,6 @@ function MainDashboard() {
             const callId = event.payload.call_id || "";
             const tcIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (tcIdx > -1) {
-
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === tcIdx ? { ...tc, result: event.payload.result, isError: false } : tc
               );
@@ -838,7 +614,6 @@ function MainDashboard() {
             const tcIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (tcIdx > -1) {
               const errorStr = JSON.stringify({ error: event.payload.error });
-
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === tcIdx ? { ...tc, result: errorStr, isError: true } : tc
               );
@@ -854,7 +629,7 @@ function MainDashboard() {
               return prev;
             });
           }
-          // 向后兼容：旧版 ToolResult（合并了成功/失败）
+          // 向后兼容：旧版 ToolResult
           else if (event.type === "ToolResult") {
             const toolName = event.payload.name;
             const toolResult = event.payload.result;
@@ -868,7 +643,6 @@ function MainDashboard() {
 
             const tcIdx = [...currentToolCalls].map((tc, i) => tc.name === toolName && tc.result === undefined ? i : -1).filter(i => i > -1).pop() ?? -1;
             if (tcIdx > -1) {
-
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === tcIdx ? { ...tc, result: toolResult, isError } : tc
               );
@@ -892,17 +666,15 @@ function MainDashboard() {
               reasoning: event.payload?.tokens_reasoning,
             };
           }
-          // Step 生命周期：计数用于工具调用的圆点标记
+          // Step 生命周期
           else if (event.type === "StepStarted") {
             currentStep += 1;
           } else if (event.type === "StepEnded") {
-            // Step 结束，不需要额外操作
           }
           // 错误事件
           else if (event.type === "Error") {
             setIsGenerating(false);
             activeStreamingSessionRef.current = null;
-            // 标记所有未完成的工具为失败，停止计时
             currentToolCalls = currentToolCalls.map(tc =>
               tc.result !== undefined ? tc : { ...tc, result: JSON.stringify({ error: "Agent error" }), isError: true }
             );
@@ -914,12 +686,10 @@ function MainDashboard() {
           else if (event.type === "Finished") {
             setIsGenerating(false);
             activeStreamingSessionRef.current = null;
-            // 直接使用本地 mutable 数组，去除 UI 专用字段
             const finalToolCalls = currentToolCalls.length > 0
               ? currentToolCalls.map(({ executing, ...tc }) => tc)
               : undefined;
 
-            // 追加总计时间与 token
             const elapsed = (Math.round(((Date.now() - sessionStartTime) / 1000) * 2) / 2).toFixed(1);
             const statsParts: string[] = ["\u23f1\ufe0f " + elapsed + "s"];
             if (totalTokens.input) statsParts.push("\ud83d\udce5 " + totalTokens.input);
@@ -929,6 +699,24 @@ function MainDashboard() {
               currentContent += "\n\n---\n*" + statsParts.join(" \u00b7 ") + "*";
             }
 
+            const finishedSections: Message["sections"] = sections.length > 0 ? sections.map(s => {
+              if (s.type === "thinking") return { type: "thinking" as const, content: s.content || "", elapsed: s.elapsed };
+              if (s.type === "tools") return { type: "tools" as const, toolCalls: (s.toolCalls || []).map(({ executing, ...tc }) => tc) };
+              return { type: "text" as const, content: s.content || "" };
+            }) : undefined;
+
+            if (finishedSections && statsParts.length > 0) {
+              const lastTextSec = [...finishedSections].reverse().find(s => s.type === "text");
+              if (lastTextSec) {
+                lastTextSec.content += "\n\n---\n*" + statsParts.join(" \u00b7 ") + "*";
+              } else {
+                finishedSections.push({
+                  type: "text" as const,
+                  content: "\n\n---\n*" + statsParts.join(" \u00b7 ") + "*",
+                });
+              }
+            }
+
             const finalMsg: Message = {
               id: assistantMsgId,
               sessionId: currentSessionId!,
@@ -936,15 +724,8 @@ function MainDashboard() {
               content: currentContent,
               createdAt: new Date().toISOString(),
               toolCalls: finalToolCalls,
+              sections: finishedSections,
             };
-            // 保存按到达顺序的段落（同时保留 reasoning_content 和 toolCalls 做降级兼容）
-            const finishedSections: Message["sections"] = sections.length > 0 ? sections.map(s => {
-              if (s.type === "thinking") return { type: "thinking" as const, content: s.content || "", elapsed: s.elapsed };
-              if (s.type === "tools") return { type: "tools" as const, toolCalls: (s.toolCalls || []).map(({ executing, ...tc }) => tc) };
-              return { type: "text" as const, content: s.content || "" };
-            }) : undefined;
-            finalMsg.sections = finishedSections;
-            // 旧格式兼容
             const allThinking = sections.filter(s => s.type === "thinking").map(s => {
               const c = s.content || "";
               return s.elapsed ? c + `\n⏱ ${s.elapsed}s` : c;
@@ -1042,6 +823,7 @@ function MainDashboard() {
                 onCancelAgent={handleCancel}
                 readFile={(path) => bridge.readFile(path)}
                 getFileUrl={(path) => bridge.getFileUrl(path)}
+                showToast={showToast}
               />
               <ChatInput
                 inputText={inputText}
@@ -1125,7 +907,6 @@ function expandHistoryMessages(historyMsgs: Message[]): any[] {
     } else if (m.role === "assistant") {
       const hasTools = m.toolCalls && m.toolCalls.length > 0;
       if (hasTools) {
-        // 为每个工具调用生成唯一的 mock ID（API 规范必填）
         const toolCallsWithId = m.toolCalls!.map((tc, idx) => ({
           id: `call_${m.id}_${idx}`,
           type: "function" as const,
@@ -1136,7 +917,6 @@ function expandHistoryMessages(historyMsgs: Message[]): any[] {
           _result: tc.result || "null",
         }));
 
-        // 写入带 tool_calls 的 assistant 消息
         result.push({
           role: "assistant",
           content: m.content || null,
@@ -1148,7 +928,6 @@ function expandHistoryMessages(historyMsgs: Message[]): any[] {
           })),
         });
 
-        // 紧接着写入 role: tool 消息（匹配 id 和名称）
         for (const tc of toolCallsWithId) {
           result.push({
             role: "tool",
@@ -1157,7 +936,6 @@ function expandHistoryMessages(historyMsgs: Message[]): any[] {
           });
         }
       } else {
-        // 普通的 assistant 回复
         result.push({
           role: "assistant",
           content: m.content,

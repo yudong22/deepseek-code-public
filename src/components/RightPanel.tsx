@@ -82,9 +82,14 @@ export default function RightPanel({
       assistantMessages.length > 0
         ? assistantMessages[assistantMessages.length - 1]
         : null;
-    const rightPanelMarkdownContent = latestAssistantMessage
+    let rightPanelMarkdownContent = latestAssistantMessage
       ? latestAssistantMessage.content
       : "";
+
+    // Strip trailing stats block if present
+    if (rightPanelMarkdownContent) {
+      rightPanelMarkdownContent = rightPanelMarkdownContent.replace(/\n\n---\n\*[\s\S]+\*$/, "");
+    }
 
     return (
       <aside
