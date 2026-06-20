@@ -1,0 +1,2 @@
+#!/bin/sh
+bun run "$(dirname "$0")/openhands-call.js" "$@"

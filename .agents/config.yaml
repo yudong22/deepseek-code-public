@@ -1,0 +1,52 @@
+version: "2026.1"
+project_id: "deepseek-code"
+
+runtime:
+  type: "ephemeral-worktree"      # 采用 Git Worktree 隔离机制
+  sandbox_root: "/tmp/ai-workers"  # 沙箱物理根路径
+  safe_mode: true                  # 拦截危险系统指令
+
+# 核心多 Agent 路由规则
+version: "2026.1"
+project_id: "cross-platform-mid-platform"
+
+agent_routing:
+  primary_developer: 
+    provider: "openai_compatible"        # 声明使用 OpenAI 兼容协议
+    # 2026年标准的 LiteLLM/OpenHands 路由格式：供应商/模型名
+    model: "deepseek/deepseek-v4-flash"   
+    api_base: "https://api.deepseek.com/v1" # 或者是你们内部中台的 API 转发网关
+    api_key: "${DEEPSEEK_API_KEY}"       # 从系统环境变量中无感读取，严禁硬编码
+    temperature: 0.2                     # 编程任务建议低采样随机性，确保代码严谨
+    max_tokens: 8192
+    
+  ci_healer:
+    provider: "openai_compatible"
+    model: "deepseek/deepseek-v4-flash"
+    api_base: "https://api.deepseek.com/v1"
+    api_key: "${DEEPSEEK_API_KEY}"
+    temperature: 0.0                     # CI自愈属于机械性修复，直接设为 0 追求确定性
+# 降维极速验证门禁（秒级响应）
+
+verification_pipeline:
+  # 示例三端配置（保持文档一致性）
+  gateway:
+    match: "gateway/**/*"
+    cmd: "cd gateway && go fmt ./... && go vet ./... && go test ./..."
+  flutter:
+    match: "mobile/**/*"
+    cmd: "cd mobile && flutter analyze"
+  tauri_app:
+    match: "desktop/**/*"
+    cmd: "cd desktop && npm run check && cd src-tauri && cargo check"
+  
+  # 当前项目真实配置（供流水线在此项目自身运行验证）
+  project_tauri:
+    match: "src-tauri/**/*"
+    cmd: "cargo check --manifest-path src-tauri/Cargo.toml"
+  project_frontend:
+    match: "src/**/*"
+    cmd: "bun test src/bridge/bridge.test.ts"
+  project_sidecar:
+    match: "src-sidecar/**/*"
+    cmd: "bun run build:sidecar"

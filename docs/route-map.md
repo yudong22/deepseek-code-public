@@ -23,11 +23,14 @@ deepseek-code/
 ├── index.html               # 单页应用入口 HTML
 ├── public/                  # 静态公共资源目录
 ├── docs/                    # 项目设计与维护文档目录
+│   ├── preview.md           # AI 原生研发流水线实施文档
 │   └── route-map.md         # [当前文件] 代码结构与路径说明文档
 ├── src/                     # 前端 React 源码目录
 ├── src-tauri/               # 后端 Rust 源码与 Tauri 配置目录
-└── backend/                 # 沙箱运行环境与临时目录
-    └── sandbox_workspace/   # 默认沙箱生成和解析临时文件的保存位置
+├── backend/                 # 沙箱运行环境与临时目录
+│   └── sandbox_workspace/   # 默认沙箱生成和解析临时文件的保存位置
+├── .agents/                 # AI 流水线配置目录 (config.yaml, agent.md)
+└── scripts/                 # 流水线自动化验证与运行脚本目录 (ai-runner-v2.js, fast-validate.js, openhands-call)
 ```
 
 ---
