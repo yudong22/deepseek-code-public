@@ -6,6 +6,7 @@ interface ToolCallData {
   args: string;
   result?: string;
   isError?: boolean;
+  executing?: boolean;
 }
 
 interface ToolCallCardProps {
@@ -170,6 +171,7 @@ function FileToolCard({ tc, messageId, index, onOpenTab }: {
 }) {
   const isDone = tc.result !== undefined;
   const isError = detectError(tc);
+  const isExecuting = tc.executing && !isDone;
   const elapsed = useElapsed(isDone);
   const name = normalizeToolName(tc.name);
   const argsPreview = getArgsPreview(tc);
@@ -213,7 +215,7 @@ function FileToolCard({ tc, messageId, index, onOpenTab }: {
       flexWrap: "wrap",
     }}>
       {/* 状态圆点 */}
-      <span style={{ color: statusColor, fontSize: "14px", lineHeight: 1, userSelect: "none", flexShrink: 0 }}>•</span>
+      <span style={{ color: statusColor, fontSize: "14px", lineHeight: 1, userSelect: "none", flexShrink: 0, animation: isExecuting ? "tc-pulse 1.5s ease-in-out infinite" : "none" }}>•</span>
 
       {/* 工具名 */}
       <span style={{ fontWeight: "bold", flexShrink: 0, opacity: 0.8 }}>{name}</span>
@@ -241,7 +243,12 @@ function FileToolCard({ tc, messageId, index, onOpenTab }: {
       <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}s</span>
 
       {/* 状态附言 */}
-      {!isDone && (
+      {isExecuting && (
+        <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", flexShrink: 0, animation: "tc-pulse 1.5s ease-in-out infinite" }}>
+          executing…
+        </span>
+      )}
+      {!isDone && !isExecuting && (
         <span style={{ fontSize: "11px", opacity: 0.45, fontStyle: "italic", flexShrink: 0 }}>
           {actionLabel[name] ?? "running"}…
         </span>
@@ -261,6 +268,7 @@ function ExpandableToolCard({ tc }: {
 }) {
   const isDone = tc.result !== undefined;
   const isError = detectError(tc);
+  const isExecuting = tc.executing && !isDone;
   const elapsed = useElapsed(isDone);
   const name = normalizeToolName(tc.name);
   const argsPreview = getArgsPreview(tc);
@@ -299,13 +307,19 @@ function ExpandableToolCard({ tc }: {
       >
         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px", flex: 1 }}>
           {/* 状态圆点 */}
-          <span style={{ color: statusColor, marginRight: "2px", fontSize: "14px", lineHeight: 1, userSelect: "none" }}>•</span>
+          <span style={{ color: statusColor, marginRight: "2px", fontSize: "14px", lineHeight: 1, userSelect: "none", animation: isExecuting ? "tc-pulse 1.5s ease-in-out infinite" : "none" }}>•</span>
           {/* 工具名 */}
           <span style={{ fontWeight: "bold", opacity: 0.8 }}>{name}</span>
           {/* 参数预览 */}
           <span style={{ opacity: 0.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>({argsPreview})</span>
           {/* 耗时 */}
           <span style={{ fontSize: "11px", opacity: 0.35, marginLeft: "4px" }}>{elapsed}s</span>
+          {/* 执行中标记 */}
+          {isExecuting && (
+            <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>
+              executing…
+            </span>
+          )}
         </div>
         {/* 展开三角 */}
         <span style={{ fontSize: "10px", opacity: 0.4, width: "12px", textAlign: "center", marginLeft: "10px", marginRight: "4px" }}>

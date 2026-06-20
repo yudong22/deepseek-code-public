@@ -493,7 +493,8 @@ function MainDashboard() {
 
       let currentContent = "";
       let currentThinking = "";
-      let currentToolCalls: Array<{ name: string; args: string; result?: string; isError?: boolean }> = [];
+      let currentStep = 0;
+      let currentToolCalls: Array<{ name: string; args: string; result?: string; isError?: boolean; executing?: boolean }> = [];
 
       await bridge.runAgent(
         savedApiKey || "",
@@ -502,9 +503,12 @@ function MainDashboard() {
         savedWorkspacePath || ".",
         currentSessionId!,
         async (event) => {
-          // 推理块
+          // 推理块：ThinkingStarted 时立即占位
           if (event.type === "ThinkingStarted") {
-            // 推理开始（可用于 UI 动画提示）
+            if (!currentThinking) {
+              currentThinking = " ";
+              setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+            }
           } else if (event.type === "Thinking") {
             currentThinking += event.payload;
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
@@ -535,9 +539,37 @@ function MainDashboard() {
               return prev;
             });
           } else if (event.type === "ToolStarted") {
-            // 工具开始执行（可用于 UI 执行计数）
+            const execIdx = [...currentToolCalls].map((tc, i) => tc.result === undefined && !tc.executing ? i : -1).filter(i => i > -1)[0];
+            if (execIdx !== undefined && execIdx > -1) {
+              currentToolCalls = currentToolCalls.map((tc, i) =>
+                i === execIdx ? { ...tc, executing: true } : tc
+              );
+              setMessages((prev) => {
+                const idx = prev.findIndex((m) => m.id === assistantMsgId);
+                if (idx > -1) {
+                  const updated = [...prev];
+                  updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                  return updated;
+                }
+                return prev;
+              });
+            }
           } else if (event.type === "ToolEnded") {
-            // 工具执行结束
+            const execIdx = currentToolCalls.findIndex(tc => tc.executing);
+            if (execIdx > -1) {
+              currentToolCalls = currentToolCalls.map((tc, i) =>
+                i === execIdx ? { ...tc, executing: false } : tc
+              );
+              setMessages((prev) => {
+                const idx = prev.findIndex((m) => m.id === assistantMsgId);
+                if (idx > -1) {
+                  const updated = [...prev];
+                  updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                  return updated;
+                }
+                return prev;
+              });
+            }
           }
           // 工具结果：拆分成功/失败
           else if (event.type === "ToolSuccess") {
@@ -605,11 +637,15 @@ function MainDashboard() {
               return prev;
             });
           }
-          // Step 生命周期
+          // Step 生命周期：多步 Agent 时用分隔线标记步骤
           else if (event.type === "StepStarted") {
-            // 多步 Agent 执行的 Step 开始
+            currentStep++;
+            if (currentStep > 1) {
+              currentContent += `\n\n---\n*Step ${currentStep}*\n\n`;
+              setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+            }
           } else if (event.type === "StepEnded") {
-            // 多步 Agent 执行的 Step 结束
+            // step 结束（暂不需要处理）
           }
           // 错误事件
           else if (event.type === "Error") {
