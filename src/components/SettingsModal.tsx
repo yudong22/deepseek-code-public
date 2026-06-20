@@ -1,6 +1,18 @@
 import React, { useState } from "react";
 import { bridge } from "@/bridge";
 
+/** 在外部浏览器打开 URL（Tauri 和浏览器双环境兼容）*/
+async function openExternalUrl(url: string) {
+  try {
+    // Tauri 环境：使用 tauri-plugin-opener
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+  } catch {
+    // 浏览器环境：回退到 window.open
+    window.open(url, "_blank");
+  }
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   apiKey: string;
@@ -63,7 +75,7 @@ export default function SettingsModal({
               </pre>
               <button
                 type="button"
-                onClick={() => window.open(`https://github.com/yudong22/deepseek-code-public/releases/tag/v${result.version}`, "_blank")}
+                onClick={() => openExternalUrl(`https://github.com/yudong22/deepseek-code-public/releases/tag/v${result.version}`)}
                 style={{
                   padding: "4px 10px",
                   fontSize: "11px",
@@ -169,7 +181,7 @@ export default function SettingsModal({
             <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>关于与更新</label>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <span style={{ fontSize: "12px", color: "#1d1d1f" }}>当前版本: v0.2.1</span>
+                <span style={{ fontSize: "12px", color: "#1d1d1f" }}>当前版本: v0.2.3</span>
                 <button
                   type="button"
                   className="btn-secondary"
