@@ -125,6 +125,7 @@ export const mockBridge: IBridge = {
     _model: string,
     _messages: any[],
     _workspaceRoot: string,
+    _sessionId: string,
     onEvent: (event: AgentEvent) => void
   ): Promise<void> {
     console.warn("[Bridge Mock] runAgent called. Simulating agent events.");

@@ -401,6 +401,7 @@ function MainDashboard() {
         selectedModel,
         apiMessages,
         savedWorkspacePath || ".",
+        currentSessionId!,
         async (event) => {
           if (event.type === "Thinking") {
             currentThinking += event.payload;
@@ -489,7 +490,8 @@ function MainDashboard() {
     } catch (err: any) {
       activeStreamingSessionRef.current = null;
       console.error("Agent execution failed:", err);
-      showToast(`Agent 执行失败: ${err.message}`);
+      const errMsg = typeof err === "string" ? err : (err?.message || String(err));
+      showToast(`Agent 执行失败: ${errMsg}`);
     }
   }
 

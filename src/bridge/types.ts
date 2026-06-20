@@ -91,6 +91,7 @@ export interface IBridge {
     model: string,
     messages: any[],
     workspaceRoot: string,
+    sessionId: string,
     onEvent: (event: AgentEvent) => void
   ): Promise<void>;
 }

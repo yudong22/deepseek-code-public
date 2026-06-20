@@ -32,14 +32,13 @@ The frontend never calls Tauri APIs directly. All backend communication goes thr
 
 The core is `run_agent_loop` in `src-tauri/src/lib.rs:30` — a Tauri async command that:
 
-1. Receives API key, model name, message history, and workspace root
-2. Maps model string → `ds_api::raw::Model` (reasoner/pro → `DeepseekReasoner`, others → `DeepseekChat`)
-3. Initializes 6 tools from `src-tauri/src/tools/`
-4. Sends streaming POST to `https://api.deepseek.com/chat/completions`
-5. Parses SSE events, accumulating thinking/text/tool_call deltas
-6. Executes tool calls locally, feeds results back into the conversation
-7. Streams all events to the frontend via `Channel<AgentEvent>` (variants: `Thinking`, `Text`, `ToolCall`, `ToolResult`, `Finished`, `Error`)
-8. Runs up to 15 multi-turn steps; stops when the model produces no tool calls
+1. Receives API key, model name, message history, workspace root, and sessionId
+2. Locates and spawns the external sidecar binary `opencode-sidecar` (configured in `tauri.conf.json`)
+3. Passes key, model, workspace, and session ID to the sidecar as environment variables
+4. Writes the last user prompt to the sidecar's `stdin` and closes it
+5. Reads the sidecar's `stdout` stream line-by-line: parses JSON `AgentEvent`s and streams them to the frontend via `Channel<AgentEvent>`
+6. Checks the exit code of the sidecar process, and forwards error logs from `stderr` if the execution failed
+
 
 ### 6 Built-in Tools (`src-tauri/src/tools/`)
 

@@ -230,6 +230,7 @@ export const tauriBridge: IBridge = {
     model: string,
     messages: any[],
     workspaceRoot: string,
+    sessionId: string,
     onEvent: (event: AgentEvent) => void
   ): Promise<void> {
     try {
@@ -242,6 +243,7 @@ export const tauriBridge: IBridge = {
         model,
         messages,
         workspaceRoot,
+        sessionId,
         onEvent: channel,
       });
     } catch (error) {

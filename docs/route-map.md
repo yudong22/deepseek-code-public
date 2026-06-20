@@ -63,7 +63,7 @@ src/
 
 #### 关键路径与通信：
 - **通信桥梁**：前端组件统一导入并调用 `@/bridge`（例如 `bridge.greet(name)` 或数据库接口 `bridge.initDb()`）进行交互，不再直接依赖 `@tauri-apps/api`。内部会自动识别执行环境，若在 Tauri 内则调用 Rust 后端 Command 或使用 `tauri-plugin-sql` 访问本地 SQLite 数据库（`deepseek_code.db`）；若在标准浏览器内则自动使用 `localStorage` 作为模拟数据库进行数据存取，避免出现运行时未定义报错。针对 SQLite 列名序列化在部分环境下因大小写不一致的问题，在加载逻辑中提供了属性名智能容错回退解析；在请求发送阶段，前端通过 `expandHistoryMessages` 提取并重构了符合 API 规范的 `tool_calls` 及对应的 `tool` 回复上下文，实现完整的 Agent 执行记忆继承。
-- **动态 System Prompt 工作区感知**：当触发 Agent 运行时，Tauri 后端的 `lib.rs` 在运行 `run_agent_loop` 前会自动执行本地 Git 查询（分支名称）与工作区文件目录树扫描，生成大纲文本动态追加在 System Prompt 的 `<workspace_context>` 标签中，免去前端多次异步查询的开销，使 Agent 具备完整的物理环境感知。
+- **动态 System Prompt 工作区感知**：由于 Agent 核心执行迁移至外部 sidecar 进程，工作区感知与 Prompt 拼装也解耦转移至 sidecar 中处理。Tauri 后端主要负责从消息历史中提取最新 prompt 并输送给 sidecar，简化了后端的感知负担。
 - **无抖动置顶用户消息栏**：在 `ChatFeed` 消息流中，置顶消息条设计在独立的 `.chat-feed-container` 内部绝对悬浮（`position: absolute`）渲染，脱离了消息列表本身的滚动高度文档流，从根本上解决了频繁展示/隐藏置顶栏时的页面弹动抖动问题。
 - **右侧 Overview 动态 Markdown 与 Mermaid 渲染**：`RightPanel` 组件在右侧折叠面板展开时，会动态提取当前会话历史中最新的助手 Markdown 文档，并通过 `mermaid` 模块自动在页面上将 ` ```mermaid ` 代码块编译渲染为交互式 SVG 架构流程图。
 
@@ -78,7 +78,7 @@ src-tauri/
 │   └── default.json         # 默认允许的应用权限与功能配置
 ├── src/
 │   ├── main.rs              # 应用程序启动入口，调用 lib.rs 中的 run 函数
-│   ├── lib.rs               # 后端核心业务逻辑，注册并实现了 run_agent_loop Tauri 指令（对非 Bash 的快速操作引入 500ms 交互延迟以平滑展示前端动画，及 max_steps 步数告警）
+│   ├── lib.rs               # 后端核心业务逻辑，注册并实现了 run_agent_loop Tauri 指令（启动外部 sidecar 进程 opencode-sidecar，通过 stdin/stdout 流式传输 Prompt 与 AgentEvent）
 │   ├── safety.rs            # [NEW] 安全拦截器，提供工作区路径防越界（Path Jail）校验
 │   └── tools/               # [NEW] 核心本地 Agent 工具集目录
 │       ├── mod.rs           # 统一特质声明 (AgentTool) 与子模块导出
