@@ -102,3 +102,7 @@ bun run test
 ```bash
 bun run tauri build
 ```
+
+---
+
+⭐ 欢迎加星标和贡献代码

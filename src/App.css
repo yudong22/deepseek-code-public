@@ -2272,9 +2272,182 @@ body {
 }
 
 /* ════════════════════════════════════════════════
-   Night Mode — full app dark theme
-   Applied when .night-mode is on .app-container
+   Edit Diff Card — light mode
    ════════════════════════════════════════════════ */
+
+.edit-diff-wrap {
+  font-family: 'Menlo', 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 4px 0;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-diff-header-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.edit-diff-title {
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.edit-diff-title-paren {
+  font-weight: 400;
+}
+
+.edit-diff-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+  display: inline-block;
+  vertical-align: bottom;
+  cursor: default;
+}
+
+.edit-diff-filename-link {
+  color: #007aff;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.edit-diff-elapsed {
+  font-size: 11px;
+  opacity: 0.35;
+  flex-shrink: 0;
+}
+
+.edit-diff-status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.edit-diff-executing,
+.edit-diff-editing {
+  font-size: 11px;
+  font-style: italic;
+  opacity: 0.5;
+}
+
+.edit-diff-cancel {
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.4;
+}
+
+.edit-diff-failed {
+  font-size: 11px;
+  color: #ff3b30;
+}
+
+.edit-diff-counts {
+  font-size: 11px;
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.edit-diff-count-add { color: #28c840; font-weight: 500; }
+.edit-diff-count-del { color: #ff5f57; font-weight: 500; }
+.edit-diff-count-sep { opacity: 0.35; margin: 0 2px; }
+
+/* ── Diff block container ── */
+.edit-diff-block {
+  margin-top: 5px;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  max-height: 360px;
+  overflow-y: auto;
+  background: #fafafa;
+}
+
+/* ── Diff rows ── */
+.edit-diff-row {
+  display: flex;
+  align-items: stretch;
+  min-height: 18px;
+}
+
+.edit-diff-sep {
+  min-height: 6px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.edit-diff-add { background: rgba(0, 180, 60, 0.07); }
+.edit-diff-del { background: rgba(220, 40, 30, 0.07); }
+.edit-diff-ctx { background: transparent; }
+
+/* ── Gutter: line number ── */
+.edit-diff-lnum {
+  display: inline-block;
+  min-width: 34px;
+  text-align: right;
+  padding: 0 6px 0 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.2);
+  user-select: none;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.07);
+  background: rgba(0, 0, 0, 0.025);
+}
+
+.edit-diff-add .edit-diff-lnum {
+  color: rgba(0, 160, 50, 0.4);
+  background: rgba(0, 180, 60, 0.06);
+}
+
+.edit-diff-del .edit-diff-lnum {
+  color: rgba(200, 30, 20, 0.4);
+  background: rgba(220, 40, 30, 0.06);
+}
+
+/* ── +/- prefix column ── */
+.edit-diff-pf {
+  display: inline-block;
+  width: 18px;
+  text-align: center;
+  font-weight: 600;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  user-select: none;
+  color: transparent;
+}
+
+.edit-diff-pf-add { color: #28c840; }
+.edit-diff-pf-del { color: #ff5f57; }
+
+/* ── Code content ── */
+.edit-diff-code {
+  margin: 0 !important;
+  padding: 0 8px !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  white-space: pre-wrap !important;
+  word-break: break-all !important;
+  flex: 1;
+  color: rgba(0, 0, 0, 0.65);
+  background-color: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.edit-diff-add .edit-diff-code { color: #1a6b2a; }
+.edit-diff-del .edit-diff-code { color: #b91c1c; }
+
+
 
 .night-mode body,
 .app-container.night-mode {
@@ -2475,7 +2648,43 @@ body {
   color: #aaa;
 }
 
-/* Right panel — night mode */
+/* Edit Diff Card — night mode */
+.night-mode .edit-diff-filename-link { color: #58a6ff; }
+
+.night-mode .edit-diff-block {
+  background: #1e1e1e;
+  border-color: #333;
+}
+
+.night-mode .edit-diff-sep {
+  border-top-color: rgba(255, 255, 255, 0.06);
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.night-mode .edit-diff-add  { background: rgba(40, 200, 64, 0.10); }
+.night-mode .edit-diff-del  { background: rgba(255, 95, 87, 0.09); }
+
+.night-mode .edit-diff-lnum {
+  color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.03);
+  border-right-color: rgba(255, 255, 255, 0.07);
+}
+
+.night-mode .edit-diff-add .edit-diff-lnum {
+  color: rgba(40, 200, 64, 0.45);
+  background: rgba(40, 200, 64, 0.07);
+}
+
+.night-mode .edit-diff-del .edit-diff-lnum {
+  color: rgba(255, 95, 87, 0.45);
+  background: rgba(255, 95, 87, 0.07);
+}
+
+.night-mode .edit-diff-code          { color: rgba(255, 255, 255, 0.5); }
+.night-mode .edit-diff-add .edit-diff-code { color: #57c464; }
+.night-mode .edit-diff-del .edit-diff-code { color: #e06c75; }
+
+
 .night-mode .right-panel {
   background-color: #1e1e1e;
   border-left-color: #333;

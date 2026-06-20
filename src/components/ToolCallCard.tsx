@@ -147,33 +147,50 @@ function fileBaseName(path: string): string {
 
 // ─── 计时 hook ────────────────────────────────────────────────────────────────
 
-function useElapsed(isDone: boolean): string {
-  const [elapsedText, setElapsedText] = useState("0.0");
+/**
+ * 计时 hook
+ * @param isDone    工具是否有结果（result !== undefined）
+ * @param isActive  工具是否正在真实执行（tc.executing === true）
+ *
+ * 三种状态：
+ *  1. 挂载时 isDone=true → 历史完成工具，不显示耗时
+ *  2. 挂载时 isDone=false 且 isActive=false → 僵尸工具（会话被中断），不显示耗时
+ *  3. 挂载时 isActive=true → 实时执行中，启动计时器直到 isDone 变为 true
+ */
+function useElapsed(isDone: boolean, isActive: boolean): string {
+  // 挂载时快照：只有「真正活跃」的执行才需要计时
+  const shouldTimeRef = useRef(!isDone && isActive);
   const startRef = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  /** 计算耗时（0.5s 精读）并格式化为 "X.Xs" */
-  const fmt = () => {
-    const sec = ((Date.now() - startRef.current) / 1000);
-    return (Math.round(sec * 2) / 2).toFixed(1);
-  };
+  const [elapsedText, setElapsedText] = useState<string>(() =>
+    shouldTimeRef.current ? "0.0" : ""
+  );
 
   useEffect(() => {
+    // 非活跃工具（历史完成 or 僵尸）：永不计时
+    if (!shouldTimeRef.current) return;
+
     if (!isDone) {
       startRef.current = Date.now();
       setElapsedText("0.0");
       timerRef.current = setInterval(() => {
-        setElapsedText(fmt());
+        const sec = (Date.now() - startRef.current) / 1000;
+        setElapsedText((Math.round(sec * 2) / 2).toFixed(1));
       }, 500);
     } else {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-      setElapsedText(fmt());
+      const sec = (Date.now() - startRef.current) / 1000;
+      setElapsedText((Math.round(sec * 2) / 2).toFixed(1));
     }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+
+    return () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
   }, [isDone]);
 
-  return elapsedText + "s";
+  if (!shouldTimeRef.current) return "";
+  return elapsedText ? elapsedText + "s" : "";
 }
+
 
 // ─── 错误检测 ─────────────────────────────────────────────────────────────────
 
@@ -203,7 +220,7 @@ function FileToolCard({ tc, messageId, index, onOpenTab, onCancel, readFile, get
   const isDone = tc.result !== undefined;
   const isError = detectError(tc);
   const isExecuting = tc.executing && !isDone;
-  const elapsed = useElapsed(isDone);
+  const elapsed = useElapsed(isDone, !!tc.executing);
   const name = normalizeToolName(tc.name);
   const argsPreview = getArgsPreview(tc);
   const fileName = fileBaseName(argsPreview);
@@ -366,7 +383,7 @@ function ExpandableToolCard({ tc, onCancel }: {
   const isDone = tc.result !== undefined;
   const isError = detectError(tc);
   const isExecuting = tc.executing && !isDone;
-  const elapsed = useElapsed(isDone);
+  const elapsed = useElapsed(isDone, !!tc.executing);
   const name = normalizeToolName(tc.name);
   const argsPreview = getArgsPreview(tc);
   const { content } = getToolResultDisplay(tc);
@@ -524,7 +541,7 @@ function TodoListCard({ tc, onCancel }: {
 }) {
   const isDone = tc.result !== undefined;
   const isExecuting = tc.executing && !isDone;
-  const elapsed = useElapsed(isDone);
+  const elapsed = useElapsed(isDone, !!tc.executing);
   const items = parseTodoItems(tc);
 
   const doneCount = items.filter((i) => i.status === "completed").length;
@@ -700,7 +717,7 @@ function EditDiffCard({ tc, messageId, index, onOpenTab, onCancel, readFile, get
   const isDone = tc.result !== undefined;
   const isError = detectError(tc);
   const isExecuting = tc.executing && !isDone;
-  const elapsed = useElapsed(isDone);
+  const elapsed = useElapsed(isDone, !!tc.executing);
   const name = normalizeToolName(tc.name);
   const argsPreview = getArgsPreview(tc);
   const fileName = fileBaseName(argsPreview);
@@ -748,48 +765,79 @@ function EditDiffCard({ tc, messageId, index, onOpenTab, onCancel, readFile, get
   const delCount = diffLines.filter(l => l.type === "del").length;
 
   return (
-    <div style={{
-      fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-      fontSize: "12px", lineHeight: "1.6", margin: "4px 0",
-      color: "inherit", display: "flex", flexDirection: "column",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap", marginBottom: isDone && diffLines.length > 0 ? "4px" : "0" }}>
-        <span style={{ color: statusColor, fontSize: "14px", lineHeight: 1, flexShrink: 0, animation: isExecuting ? "tc-pulse 1.5s ease-in-out infinite" : "none" }}>•</span>
-        <span style={{ fontWeight: "bold", opacity: 0.8 }}>{name}</span>
-        <span onClick={handleClick} title={argsPreview}
-          style={{ color: isDone && !isError ? "#007aff" : "inherit", cursor: isDone && !isError ? "pointer" : "default", textDecoration: isDone && !isError ? "underline" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "260px", flexShrink: 1 }}>{fileName}</span>
-        <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}</span>
+    <div className="edit-diff-wrap">
+      {/* ── Header row ── */}
+      <div className="edit-diff-header-row">
+        <span style={{
+          color: statusColor, fontSize: "14px", lineHeight: 1, flexShrink: 0,
+          animation: isExecuting ? "tc-pulse 1.5s ease-in-out infinite" : "none",
+        }}>•</span>
+
+        {/* "name(filename)" label */}
+        <span className="edit-diff-title">
+          {name}<span className="edit-diff-title-paren">(</span>
+          <span
+            onClick={handleClick}
+            title={argsPreview}
+            className={`edit-diff-filename${isDone && !isError ? " edit-diff-filename-link" : ""}`}
+          >{fileName}</span>
+          <span className="edit-diff-title-paren">)</span>
+        </span>
+
+        <span className="edit-diff-elapsed">{elapsed}</span>
+
         {!isDone && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-            {isExecuting ? <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>executing…</span>
-            : <span style={{ fontSize: "11px", opacity: 0.45, fontStyle: "italic" }}>editing…</span>}
-            {onCancel && <span onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ cursor: "pointer", fontSize: "12px", opacity: 0.5 }}>✕</span>}
+          <span className="edit-diff-status-row">
+            {isExecuting
+              ? <span className="edit-diff-executing" style={{ animation: "tc-pulse 1.5s ease-in-out infinite" }}>executing…</span>
+              : <span className="edit-diff-editing">editing…</span>
+            }
+            {onCancel && (
+              <span
+                onClick={(e) => { e.stopPropagation(); onCancel(); }}
+                className="edit-diff-cancel"
+              >✕</span>
+            )}
           </span>
         )}
-        {isDone && isError && <span style={{ fontSize: "11px", color: "#ff3b30" }}>failed</span>}
+
+        {isDone && isError && <span className="edit-diff-failed">failed</span>}
+
         {isDone && !isError && (addCount > 0 || delCount > 0) && (
-          <span style={{ fontSize: "10px", opacity: 0.4 }}>
-            <span style={{ color: "#34c759" }}>+{addCount}</span><span style={{ margin: "0 2px" }}>/</span><span style={{ color: "#ff3b30" }}>-{delCount}</span>
+          <span className="edit-diff-counts">
+            {addCount > 0 && <span className="edit-diff-count-add">+{addCount}</span>}
+            {addCount > 0 && delCount > 0 && <span className="edit-diff-count-sep">/</span>}
+            {delCount > 0 && <span className="edit-diff-count-del">-{delCount}</span>}
           </span>
         )}
       </div>
 
+      {/* ── Diff block ── */}
       {isDone && diffLines.length > 0 && (
-        <div style={{ borderLeft: "2px solid rgba(128,128,128,0.15)", marginLeft: "6px", paddingLeft: "8px", maxHeight: "400px", overflowY: "auto" }}>
+        <div className="edit-diff-block">
           {diffLines.map((line, i) => {
             const isSep = line.type === "ctx" && line.lineNumber === undefined;
-            const lineNum = line.lineNumber !== undefined ? String(line.lineNumber).padStart(3, " ") : "";
-            const pf = isSep ? " " : line.type === "add" ? "+" : line.type === "del" ? "-" : " ";
+            const isAdd = line.type === "add";
+            const isDel = line.type === "del";
+            const lineNum = line.lineNumber !== undefined ? line.lineNumber : "";
+
+            let rowClass = "edit-diff-row";
+            if (isSep) rowClass += " edit-diff-sep";
+            else if (isAdd) rowClass += " edit-diff-add";
+            else if (isDel) rowClass += " edit-diff-del";
+            else rowClass += " edit-diff-ctx";
+
             return (
-              <div key={i} style={{
-                padding: "0 6px", margin: "0 -6px", borderRadius: "2px",
-                background: isSep ? "transparent" : line.type === "add" ? "rgba(52,199,89,0.12)" : line.type === "del" ? "rgba(255,59,48,0.10)" : "transparent",
-                color: line.type === "add" ? "#1a7f37" : line.type === "del" ? "#cf222e" : "inherit",
-                minHeight: isSep ? "4px" : undefined,
-              }}>
-                <pre style={{ margin: 0, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                  {isSep ? " " : `${lineNum} ${pf}  ${line.text}`}
-                </pre>
+              <div key={i} className={rowClass}>
+                {!isSep && (
+                  <>
+                    <span className="edit-diff-lnum">{lineNum}</span>
+                    <span className={`edit-diff-pf${isAdd ? " edit-diff-pf-add" : isDel ? " edit-diff-pf-del" : ""}`}>
+                      {isAdd ? "+" : isDel ? "−" : " "}
+                    </span>
+                    <pre className="edit-diff-code">{line.text}</pre>
+                  </>
+                )}
               </div>
             );
           })}
