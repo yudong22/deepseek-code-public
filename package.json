@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "build:sidecar": "mkdir -p src-tauri/binaries && cd ../opencode && bun build --compile --minify ../deepseek-code-public/src-sidecar/index.ts --outfile ../deepseek-code-public/src-tauri/binaries/opencode-sidecar-$(rustc -Vv | grep host | cut -d ' ' -f 2)",
+    "build:sidecar": "if [ -d ../opencode ]; then mkdir -p src-tauri/binaries && cd ../opencode && bun build --compile --minify ../deepseek-code-public/src-sidecar/index.ts --outfile ../deepseek-code-public/src-tauri/binaries/opencode-sidecar-$(rustc -Vv | grep host | cut -d ' ' -f 2); fi",
     "dev": "bun run build:sidecar && vite",
     "build": "bun run build:sidecar && tsc && vite build",
     "preview": "bun run build:sidecar && tauri dev",
