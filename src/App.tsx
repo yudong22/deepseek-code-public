@@ -500,7 +500,8 @@ function MainDashboard() {
 
       let currentContent = "";
       let currentThinking = "";
-      let currentToolCalls: Array<{ name: string; args: string; result?: string; isError?: boolean; executing?: boolean }> = [];
+      // 追踪 call_id 以精确匹配工具事件
+      let currentToolCalls: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean }> = [];
 
       await bridge.runAgent(
         savedApiKey || "",
@@ -509,38 +510,31 @@ function MainDashboard() {
         savedWorkspacePath || ".",
         currentSessionId!,
         async (event) => {
-          // 推理块：工具执行后的 thinking 注入到 content 中保持顺序
+          // 推理块
           if (event.type === "ThinkingStarted") {
-            if (!currentThinking && !currentToolCalls.some(tc => tc.result !== undefined)) {
+            if (!currentThinking) {
               currentThinking = " ";
               setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
             }
           } else if (event.type === "Thinking") {
-            if (currentToolCalls.some(tc => tc.result !== undefined)) {
-              // 工具执行后的 thinking：追加到 content 中（保持与 text/step 的顺序）
-              currentContent += event.payload;
-              setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
-            } else {
-              currentThinking += event.payload;
-              setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
-            }
+            currentThinking += event.payload;
+            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
           } else if (event.type === "ThinkingEnded") {
-            // 推理结束
+            // 推理结束（暂不处理）
           }
           // 文本块
           else if (event.type === "TextStarted") {
-            // 文本开始
           } else if (event.type === "Text") {
             currentContent += event.payload;
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
           } else if (event.type === "TextEnded") {
-            // 文本结束
           }
           // 工具调用
           else if (event.type === "ToolCall") {
             const toolName = event.payload.name;
             const toolArgs = event.payload.args;
-            currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs }];
+            const callId = event.payload.call_id || "";
+            currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs, call_id: callId }];
             setMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === assistantMsgId);
               if (idx > -1) {
@@ -551,8 +545,9 @@ function MainDashboard() {
               return prev;
             });
           } else if (event.type === "ToolStarted") {
-            const execIdx = [...currentToolCalls].map((tc, i) => tc.result === undefined && !tc.executing ? i : -1).filter(i => i > -1)[0];
-            if (execIdx !== undefined && execIdx > -1) {
+            const callId = event.payload.call_id || "";
+            const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId && tc.result === undefined);
+            if (execIdx > -1) {
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === execIdx ? { ...tc, executing: true } : tc
               );
@@ -567,7 +562,8 @@ function MainDashboard() {
               });
             }
           } else if (event.type === "ToolEnded") {
-            const execIdx = currentToolCalls.findIndex(tc => tc.executing);
+            const callId = event.payload.call_id || "";
+            const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (execIdx > -1) {
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === execIdx ? { ...tc, executing: false } : tc
@@ -583,14 +579,13 @@ function MainDashboard() {
               });
             }
           }
-          // 工具结果：拆分成功/失败
+          // 工具结果：按 call_id 精确匹配
           else if (event.type === "ToolSuccess") {
-            const toolName = event.payload.name;
-            const toolResult = event.payload.result;
-            const tcIdx = [...currentToolCalls].map((tc, i) => tc.name === toolName && tc.result === undefined ? i : -1).filter(i => i > -1).pop() ?? -1;
+            const callId = event.payload.call_id || "";
+            const tcIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (tcIdx > -1) {
               currentToolCalls = currentToolCalls.map((tc, i) =>
-                i === tcIdx ? { ...tc, result: toolResult, isError: false } : tc
+                i === tcIdx ? { ...tc, result: event.payload.result, isError: false } : tc
               );
             }
             setMessages((prev) => {
@@ -603,12 +598,12 @@ function MainDashboard() {
               return prev;
             });
           } else if (event.type === "ToolFailed") {
-            const toolName = event.payload.name;
-            const toolError = event.payload.error;
-            const tcIdx = [...currentToolCalls].map((tc, i) => tc.name === toolName && tc.result === undefined ? i : -1).filter(i => i > -1).pop() ?? -1;
+            const callId = event.payload.call_id || "";
+            const tcIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (tcIdx > -1) {
+              const errorStr = JSON.stringify({ error: event.payload.error });
               currentToolCalls = currentToolCalls.map((tc, i) =>
-                i === tcIdx ? { ...tc, result: JSON.stringify({ error: toolError }), isError: true } : tc
+                i === tcIdx ? { ...tc, result: errorStr, isError: true } : tc
               );
             }
             setMessages((prev) => {
@@ -665,8 +660,10 @@ function MainDashboard() {
           else if (event.type === "Finished") {
             setIsGenerating(false);
             activeStreamingSessionRef.current = null;
-            // 直接使用本地 mutable 数组，无需从 React state 读取
-            const finalToolCalls = currentToolCalls;
+            // 直接使用本地 mutable 数组，去除 UI 专用字段
+            const finalToolCalls = currentToolCalls.length > 0
+              ? currentToolCalls.map(({ executing, ...tc }) => tc)
+              : undefined;
 
             const finalMsg: Message = {
               id: assistantMsgId,
@@ -674,7 +671,7 @@ function MainDashboard() {
               role: "assistant",
               content: currentContent,
               createdAt: new Date().toISOString(),
-              toolCalls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
+              toolCalls: finalToolCalls,
             };
             if (currentThinking) {
               finalMsg.reasoning_content = currentThinking;
