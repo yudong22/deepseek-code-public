@@ -102,7 +102,12 @@ export interface IBridge {
 }
 
 export interface AgentEvent {
-  type: "Thinking" | "Text" | "ToolCall" | "ToolResult" | "Finished" | "Error";
+  type: "Thinking" | "ThinkingStarted" | "ThinkingEnded" |
+        "Text" | "TextStarted" | "TextEnded" |
+        "ToolCall" | "ToolStarted" | "ToolEnded" |
+        "ToolSuccess" | "ToolFailed" |
+        "StepStarted" | "StepEnded" |
+        "Finished" | "Error";
   payload: any;
 }
 

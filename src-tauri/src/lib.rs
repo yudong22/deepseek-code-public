@@ -4,12 +4,35 @@ use tauri::Manager;
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum AgentEvent {
+    /// 推理块边界
+    ThinkingStarted,
+    /// 推理文本增量
     Thinking(String),
+    /// 推理块结束
+    ThinkingEnded,
+    /// 文本块边界
+    TextStarted,
+    /// 回复文本增量
     Text(String),
-    ToolCall { name: String, args: String },
-    ToolResult { name: String, result: String },
+    /// 文本块结束
+    TextEnded,
+    /// 工具被调用
+    ToolCall { name: String, args: String, call_id: String },
+    /// 工具开始执行
+    ToolStarted { call_id: String },
+    /// 工具执行结束
+    ToolEnded { call_id: String },
+    /// 工具成功
+    ToolSuccess { name: String, result: String, call_id: String },
+    /// 工具失败
+    ToolFailed { name: String, error: String, call_id: String },
+    /// Step 生命周期
+    StepStarted,
+    StepEnded,
+    /// Agent 完成
     Finished,
-    Error(String),
+    /// 错误（不一定是致命错误）
+    Error { message: String },
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -135,7 +158,7 @@ async fn run_agent_loop(
             }
         }
         let err_msg = format!("Sidecar 运行失败并退出，退出码: {:?}\n错误日志:\n{}", status.code(), stderr_content);
-        let _ = on_event.send(AgentEvent::Error(err_msg.clone()));
+        let _ = on_event.send(AgentEvent::Error { message: err_msg.clone() });
         return Err(err_msg);
     }
 

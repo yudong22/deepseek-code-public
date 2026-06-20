@@ -502,16 +502,28 @@ function MainDashboard() {
         savedWorkspacePath || ".",
         currentSessionId!,
         async (event) => {
-          if (event.type === "Thinking") {
+          // 推理块
+          if (event.type === "ThinkingStarted") {
+            // 推理开始（可用于 UI 动画提示）
+          } else if (event.type === "Thinking") {
             currentThinking += event.payload;
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+          } else if (event.type === "ThinkingEnded") {
+            // 推理结束
+          }
+          // 文本块
+          else if (event.type === "TextStarted") {
+            // 文本开始
           } else if (event.type === "Text") {
             currentContent += event.payload;
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
-          } else if (event.type === "ToolCall") {
+          } else if (event.type === "TextEnded") {
+            // 文本结束
+          }
+          // 工具调用
+          else if (event.type === "ToolCall") {
             const toolName = event.payload.name;
             const toolArgs = event.payload.args;
-            // 同步更新本地 mutable 数组（与 currentContent 一样的模式）
             currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs }];
             setMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === assistantMsgId);
@@ -522,7 +534,51 @@ function MainDashboard() {
               }
               return prev;
             });
-          } else if (event.type === "ToolResult") {
+          } else if (event.type === "ToolStarted") {
+            // 工具开始执行（可用于 UI 执行计数）
+          } else if (event.type === "ToolEnded") {
+            // 工具执行结束
+          }
+          // 工具结果：拆分成功/失败
+          else if (event.type === "ToolSuccess") {
+            const toolName = event.payload.name;
+            const toolResult = event.payload.result;
+            const tcIdx = [...currentToolCalls].map((tc, i) => tc.name === toolName && tc.result === undefined ? i : -1).filter(i => i > -1).pop() ?? -1;
+            if (tcIdx > -1) {
+              currentToolCalls = currentToolCalls.map((tc, i) =>
+                i === tcIdx ? { ...tc, result: toolResult, isError: false } : tc
+              );
+            }
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === assistantMsgId);
+              if (idx > -1) {
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                return updated;
+              }
+              return prev;
+            });
+          } else if (event.type === "ToolFailed") {
+            const toolName = event.payload.name;
+            const toolError = event.payload.error;
+            const tcIdx = [...currentToolCalls].map((tc, i) => tc.name === toolName && tc.result === undefined ? i : -1).filter(i => i > -1).pop() ?? -1;
+            if (tcIdx > -1) {
+              currentToolCalls = currentToolCalls.map((tc, i) =>
+                i === tcIdx ? { ...tc, result: JSON.stringify({ error: toolError }), isError: true } : tc
+              );
+            }
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === assistantMsgId);
+              if (idx > -1) {
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                return updated;
+              }
+              return prev;
+            });
+          }
+          // 向后兼容：旧版 ToolResult（合并了成功/失败）
+          else if (event.type === "ToolResult") {
             const toolName = event.payload.name;
             const toolResult = event.payload.result;
             let isError = false;
@@ -533,7 +589,6 @@ function MainDashboard() {
               }
             } catch {}
 
-            // 在本地 mutable 数组中找到最后一个同名未完成的工具并填入结果
             const tcIdx = [...currentToolCalls].map((tc, i) => tc.name === toolName && tc.result === undefined ? i : -1).filter(i => i > -1).pop() ?? -1;
             if (tcIdx > -1) {
               currentToolCalls = currentToolCalls.map((tc, i) =>
@@ -549,12 +604,23 @@ function MainDashboard() {
               }
               return prev;
             });
-          } else if (event.type === "Error") {
+          }
+          // Step 生命周期
+          else if (event.type === "StepStarted") {
+            // 多步 Agent 执行的 Step 开始
+          } else if (event.type === "StepEnded") {
+            // 多步 Agent 执行的 Step 结束
+          }
+          // 错误事件
+          else if (event.type === "Error") {
             setIsGenerating(false);
             activeStreamingSessionRef.current = null;
-            currentContent += `\n\n❌ **运行出错：** \`${event.payload}\`\n`;
+            const errMsg = typeof event.payload === "string" ? event.payload : (event.payload?.message || "未知错误");
+            currentContent += `\n\n❌ **运行出错：** \`${errMsg}\`\n`;
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
-          } else if (event.type === "Finished") {
+          }
+          // 完成
+          else if (event.type === "Finished") {
             setIsGenerating(false);
             activeStreamingSessionRef.current = null;
             // 直接使用本地 mutable 数组，无需从 React state 读取

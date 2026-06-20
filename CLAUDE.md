@@ -34,7 +34,7 @@ The frontend never calls Tauri APIs directly. All backend communication goes thr
 
 ### Sidecar Agent Loop (Key Architecture Piece)
 
-The core agent loop runs **outside** the Tauri Rust backend, in an external sidecar process:
+The core agent loop runs **outside** the Tauri Rust backend, in an external sidecar process (`opencode-sidecar`) that wraps the `opencode` package:
 
 1. **`src-tauri/src/lib.rs:run_agent_loop`** — Tauri async command that:
    - Receives API key, model name, message history, workspace root, and sessionId
@@ -48,7 +48,30 @@ The core agent loop runs **outside** the Tauri Rust backend, in an external side
    - Imports `Session` from the external `opencode` package (at `../opencode/packages/core/`)
    - Maps DeepSeek/OpenAI/Anthropic/Google provider IDs from the model string
    - Calls `session.prompt(prompt, callback)` which drives the full agent loop
-   - Emits structured JSON events: `Thinking`, `Text`, `ToolCall`, `ToolResult`, `Finished`, `Error`
+
+### Agent Event Lifecycle (opencode ↔ deepseek-code)
+
+The sidecar bridges opencode's event system to deepseek-code via JSON lines on stdout. The `AgentEvent` enum in `src-tauri/src/lib.rs` defines all recognized event types using `#[serde(tag = "type", content = "payload")]`:
+
+| OpenCode Event | AgentEvent Type | Payload |
+|---|---|---|
+| `reasoning.started` | `ThinkingStarted` | `null` |
+| `reasoning.delta` | `Thinking` | `String` |
+| `reasoning.ended` | `ThinkingEnded` | `null` |
+| `text.started` | `TextStarted` | `null` |
+| `text.delta` | `Text` | `String` |
+| `text.ended` | `TextEnded` | `null` |
+| `tool.called` | `ToolCall` | `{ name, args, callID }` |
+| `tool.started` | `ToolStarted` | `{ callID }` |
+| `tool.success` | `ToolSuccess` | `{ name, result, callID }` |
+| `tool.failed` | `ToolFailed` | `{ name, error, callID }` |
+| `tool.ended` | `ToolEnded` | `{ callID }` |
+| `step.started` | `StepStarted` | `null` |
+| `step.ended` | `StepEnded` | `null` |
+| — (end of session) | `Finished` | `null` |
+| `error` / sidecar crash | `Error` | `{ message }` |
+
+The mapping lives in `src-sidecar/index.ts`. Each line of the sidecar's stdout is deserialized as `AgentEvent` by Rust's `serde_json::from_str` and forwarded through Tauri's `Channel<AgentEvent>` to the frontend's `onEvent` callback in `src/App.tsx:504`.
 
 3. **`.opencode/`** — Local data directory for the sidecar's persistent state (`opencode.db` SQLite database, `opencode.json` configuration with provider definitions)
 

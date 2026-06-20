@@ -138,23 +138,28 @@ export const mockBridge: IBridge = {
     onEvent: (event: AgentEvent) => void
   ): Promise<void> {
     console.warn("[Bridge Mock] runAgent called. Simulating agent events.");
+    onEvent({ type: "ThinkingStarted", payload: null });
     onEvent({ type: "Thinking", payload: "Thinking: 正在扫描工作区..." });
     await new Promise((r) => setTimeout(r, 400));
-    onEvent({
-      type: "ToolCall",
-      payload: { name: "Glob", args: JSON.stringify({ pattern: "**/*.tsx" }) },
-    });
+    onEvent({ type: "ThinkingEnded", payload: null });
+
+    onEvent({ type: "ToolCall", payload: { name: "Glob", args: JSON.stringify({ pattern: "**/*.tsx" }), callID: "call_1" } });
+    onEvent({ type: "ToolStarted", payload: { callID: "call_1" } });
     await new Promise((r) => setTimeout(r, 400));
-    onEvent({
-      type: "ToolResult",
-      payload: { name: "Glob", result: JSON.stringify({ files: ["src/App.tsx", "src/main.tsx"] }) },
-    });
-    await new Promise((r) => setTimeout(r, 400));
+    onEvent({ type: "ToolSuccess", payload: { name: "Glob", result: JSON.stringify({ files: ["src/App.tsx", "src/main.tsx"] }), callID: "call_1" } });
+    onEvent({ type: "ToolEnded", payload: { callID: "call_1" } });
+
+    onEvent({ type: "ThinkingStarted", payload: null });
     onEvent({ type: "Thinking", payload: "Thinking: 已经找到 App.tsx，准备提供答复。" });
     await new Promise((r) => setTimeout(r, 400));
+    onEvent({ type: "ThinkingEnded", payload: null });
+
+    onEvent({ type: "TextStarted", payload: null });
     onEvent({ type: "Text", payload: "你好！这是来自浏览器 Mock 环境的模拟回复。\n\n" });
     onEvent({ type: "Text", payload: "在原生桌面端运行此应用时，我将加载真实的 6 大核心工具（FileRead, FileWrite, FileEdit, Grep, Glob, Bash）并代表您执行真实的任务。" });
     await new Promise((r) => setTimeout(r, 400));
+    onEvent({ type: "TextEnded", payload: null });
+
     onEvent({ type: "Finished", payload: null });
   },
 };

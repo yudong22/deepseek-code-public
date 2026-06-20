@@ -1,12 +1,12 @@
 import { Session } from "../../opencode/packages/core/src/session/wrapper"
 import fs from "fs"
 
-async function main() {
+function main() {
   try {
     // 1. Read prompt from stdin until EOF
     const prompt = fs.readFileSync(0, "utf-8").trim()
     if (!prompt) {
-      printEvent({ type: "Error", payload: "Prompt is empty." })
+      printEvent({ type: "Error", payload: { message: "Prompt is empty." } })
       process.exit(1)
     }
 
@@ -41,58 +41,85 @@ async function main() {
       id: sessionId || undefined
     })
 
-    // Map to track callID -> toolName
-    const toolNameMap = new Map<string, string>()
-
     // 4. Run prompt and stream events
-    await session.prompt(prompt, (event) => {
-      const rawEvent = event.event
+    await session.prompt(prompt, (raw) => {
+      const rawEvent = raw.event
       if (!rawEvent) return
 
-      if (rawEvent.type === "session.next.reasoning.delta") {
-        printEvent({ type: "Thinking", payload: rawEvent.data?.delta })
-      } else if (rawEvent.type === "session.next.text.delta") {
-        printEvent({ type: "Text", payload: rawEvent.data?.delta })
-      } else if (rawEvent.type === "session.next.tool.called") {
-        const callID = rawEvent.data?.callID
-        const toolName = rawEvent.data?.tool
-        if (callID && toolName) {
-          toolNameMap.set(callID, toolName)
-        }
+      const type = rawEvent.type
+      const data = rawEvent.data
+
+      // --- Reasoning blocks ---
+      if (type === "session.next.reasoning.started") {
+        printEvent({ type: "ThinkingStarted", payload: null })
+      } else if (type === "session.next.reasoning.delta") {
+        printEvent({ type: "Thinking", payload: data?.delta ?? "" })
+      } else if (type === "session.next.reasoning.ended") {
+        printEvent({ type: "ThinkingEnded", payload: null })
+      }
+      // --- Text blocks ---
+      else if (type === "session.next.text.started") {
+        printEvent({ type: "TextStarted", payload: null })
+      } else if (type === "session.next.text.delta") {
+        printEvent({ type: "Text", payload: data?.delta ?? "" })
+      } else if (type === "session.next.text.ended") {
+        printEvent({ type: "TextEnded", payload: null })
+      }
+      // --- Tool lifecycle ---
+      else if (type === "session.next.tool.called") {
         printEvent({
           type: "ToolCall",
           payload: {
-            name: toolName,
-            args: JSON.stringify(rawEvent.data?.input)
+            name: data?.tool ?? "",
+            args: JSON.stringify(data?.input ?? {}),
+            callID: data?.callID ?? ""
           }
         })
-      } else if (rawEvent.type === "session.next.tool.success") {
-        const callID = rawEvent.data?.callID
-        const toolName = callID ? toolNameMap.get(callID) : undefined
+      } else if (type === "session.next.tool.started") {
         printEvent({
-          type: "ToolResult",
-          payload: {
-            name: toolName,
-            result: JSON.stringify(rawEvent.data?.result || rawEvent.data?.structured || {})
-          }
+          type: "ToolStarted",
+          payload: { callID: data?.callID ?? "" }
         })
-      } else if (rawEvent.type === "session.next.tool.failed") {
-        const callID = rawEvent.data?.callID
-        const toolName = callID ? toolNameMap.get(callID) : undefined
+      } else if (type === "session.next.tool.success") {
         printEvent({
-          type: "ToolResult",
+          type: "ToolSuccess",
           payload: {
-            name: toolName,
-            result: JSON.stringify({ error: rawEvent.data?.error?.message || "Execution failed" })
+            name: data?.tool ?? "",
+            result: JSON.stringify(data?.result ?? data?.structured ?? {}),
+            callID: data?.callID ?? ""
           }
         })
+      } else if (type === "session.next.tool.failed") {
+        printEvent({
+          type: "ToolFailed",
+          payload: {
+            name: data?.tool ?? "",
+            error: data?.error?.message ?? "Execution failed",
+            callID: data?.callID ?? ""
+          }
+        })
+      } else if (type === "session.next.tool.ended") {
+        printEvent({
+          type: "ToolEnded",
+          payload: { callID: data?.callID ?? "" }
+        })
+      }
+      // --- Step lifecycle ---
+      else if (type === "session.next.step.started") {
+        printEvent({ type: "StepStarted", payload: null })
+      } else if (type === "session.next.step.ended") {
+        printEvent({ type: "StepEnded", payload: null })
+      }
+      // --- Error events ---
+      else if (type === "session.next.error") {
+        printEvent({ type: "Error", payload: { message: data?.message ?? "Unknown error" } })
       }
     })
 
     // 5. Notify completion
     printEvent({ type: "Finished", payload: null })
   } catch (error: any) {
-    printEvent({ type: "Error", payload: error.message || String(error) })
+    printEvent({ type: "Error", payload: { message: error.message || String(error) } })
     process.exit(1)
   }
 }
