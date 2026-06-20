@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import * as Icons from "@/components/Icons";
 import FileAutocomplete from "@/components/FileAutocomplete";
+import SlashAutocomplete, { filterSlashCommands } from "@/components/SlashAutocomplete";
 
 interface EmptyStateProps {
   inputText: string;
@@ -50,6 +51,38 @@ export default function EmptyState({
       onListFiles().then((files) => setAllWorkspaceFiles(files));
     }
   }, [activeWorkspacePath]);
+
+  // --- / Slash 命令自动补全 ---
+  const [slashCommands, setSlashCommands] = useState<{ name: string; aliases: string[]; description: string; icon: string }[]>([]);
+  const [showSlashAutocomplete, setShowSlashAutocomplete] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+
+  // 检测 / 触发（只有输入以 / 开头时才激活）
+  useEffect(() => {
+    if (inputText.startsWith("/")) {
+      const query = inputText.slice(1).toLowerCase();
+      setSlashQuery(query);
+      const filtered = filterSlashCommands(query);
+      setSlashCommands(filtered);
+      setSlashSelectedIndex(0);
+      setShowSlashAutocomplete(filtered.length > 0);
+    } else {
+      setShowSlashAutocomplete(false);
+    }
+  }, [inputText]);
+
+  // 选中 slash 命令
+  const selectSlashCommand = useCallback(
+    (cmd: { name: string; aliases: string[]; description: string; icon: string }) => {
+      onInputChange("/" + cmd.name + " ");
+      setShowSlashAutocomplete(false);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    },
+    [onInputChange]
+  );
 
   // 检测 @ 触发并过滤文件
   useEffect(() => {
@@ -179,6 +212,33 @@ export default function EmptyState({
   }, [onPreviewFile]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // / Slash 命令自动补全导航
+    if (showSlashAutocomplete && !showFileAutocomplete) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => Math.min(prev + 1, slashCommands.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashSelectedIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+        e.preventDefault();
+        const selected = slashCommands[slashSelectedIndex];
+        if (selected) {
+          selectSlashCommand(selected);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setShowSlashAutocomplete(false);
+        return;
+      }
+    }
+
     // @ 自动补全键盘导航
     if (showFileAutocomplete) {
       if (e.key === "ArrowDown") {
@@ -204,6 +264,14 @@ export default function EmptyState({
       if (e.key === "Escape") {
         e.preventDefault();
         setShowFileAutocomplete(false);
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const selected = filesForAutocomplete[fileAutocompleteSelected];
+        if (selected) {
+          selectAutocompleteFile(selected);
+        }
         return;
       }
     }
@@ -318,6 +386,16 @@ export default function EmptyState({
           onClick={handleTextareaClick}
           placeholder="Ask anything, @ to mention, / for actions"
           rows={1}
+        />
+
+        {/* / Slash 命令自动补全下拉框 */}
+        <SlashAutocomplete
+          visible={showSlashAutocomplete && !showFileAutocomplete}
+          commands={slashCommands}
+          query={slashQuery}
+          selectedIndex={slashSelectedIndex}
+          onSelect={selectSlashCommand}
+          onDismiss={() => setShowSlashAutocomplete(false)}
         />
 
         {/* @ 文件自动补全下拉框 */}

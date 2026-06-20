@@ -81,16 +81,28 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
 export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isUserAtBottomRef = useRef(true);
   const [stickyUserMsg, setStickyUserMsg] = useState<string | null>(null);
 
-  // 自动滚动到底部 — 仅当用户已经在底部附近时才跟随
+  // 滚动监听：跟踪用户是否在底部（主动向上滚动即取消自动下滚）
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    // 只有当用户距底部 200px 以内时，才自动跟随滚动
-    if (distanceFromBottom < 200) {
+    const onScroll = () => {
+      const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+      isUserAtBottomRef.current = dist < 50;
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // 自动滚动到底部 — 仅当用户在底部时才跟随
+  useEffect(() => {
+    if (!isUserAtBottomRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const dist = container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (dist < 50) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
@@ -190,48 +202,68 @@ export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAg
               ) : (
                 <>
                   <div className="message-body">
-                    {/* 思维链展示 */}
-                    {msg.reasoning_content !== undefined && (
-                      <ThinkingBlock
-                        content={msg.reasoning_content}
-                        isGenerating={!!isGenerating}
-                        isLastMessage={isLastMessage}
-                      />
+                    {/* 有 sections 时按到达顺序渲染，否则降级为旧格式 */}
+                    {msg.sections && msg.sections.length > 0 ? (
+                      <>
+                        {msg.sections.map((sec, si) => {
+                          if (sec.type === "thinking") {
+                            const tContent = sec.content || "";
+                            const tElapsed = sec.elapsed;
+                            const finalContent = tElapsed ? tContent + `\n⏱ ${tElapsed}s` : tContent;
+                            return (
+                              <ThinkingBlock
+                                key={si}
+                                content={finalContent}
+                                isGenerating={!!isGenerating}
+                                isLastMessage={isLastMessage && si === msg.sections!.length - 1}
+                              />
+                            );
+                          }
+                          if (sec.type === "tools" && sec.toolCalls && sec.toolCalls.length > 0) {
+                            return (
+                              <div key={si} className="message-tool-calls-list">
+                                <ToolCallGroup
+                                  toolCalls={sec.toolCalls}
+                                  messageId={msg.id}
+                                  onOpenTab={onOpenTab}
+                                  onCancel={isGenerating && isLastMessage ? onCancelAgent : undefined}
+                                  readFile={readFile}
+                                  getFileUrl={getFileUrl}
+                                />
+                              </div>
+                            );
+                          }
+                          if (sec.type === "text") {
+                            return <div key={si}>{renderMarkdown(sec.content || "")}</div>;
+                          }
+                          return null;
+                        })}
+                      </>
+                    ) : (
+                      <>
+                        {/* 旧格式降级：thinking → tools → text */}
+                        {msg.reasoning_content !== undefined && (
+                          <ThinkingBlock
+                            content={msg.reasoning_content}
+                            isGenerating={!!isGenerating}
+                            isLastMessage={isLastMessage}
+                          />
+                        )}
+                        {msg.toolCalls && msg.toolCalls.length > 0 && (
+                          <div className="message-tool-calls-list">
+                            <ToolCallGroup
+                              toolCalls={msg.toolCalls}
+                              messageId={msg.id}
+                              onOpenTab={onOpenTab}
+                              onCancel={isGenerating && isLastMessage ? onCancelAgent : undefined}
+                              readFile={readFile}
+                              getFileUrl={getFileUrl}
+                            />
+                          </div>
+                        )}
+                        {renderMarkdown(msg.content)}
+                      </>
                     )}
-
-                    {/* 工具调用组 — 渲染在文本之前（工具在文本生成前执行）*/}
-                    {msg.toolCalls && msg.toolCalls.length > 0 && (
-                      <div className="message-tool-calls-list">
-                        <ToolCallGroup
-                          toolCalls={msg.toolCalls}
-                          messageId={msg.id}
-                          onOpenTab={onOpenTab}
-                          onCancel={isGenerating && isLastMessage ? onCancelAgent : undefined}
-                          readFile={readFile}
-                          getFileUrl={getFileUrl}
-                        />
-                      </div>
-                    )}
-
-                    {/* 实质性的文本总结前加圆点分隔（排除短确认）*/}
-                    {msg.toolCalls && msg.toolCalls.length > 0 && msg.content && msg.content.length > 80 && (
-                      <div style={{
-                        display: "flex",
-                        alignItems: "center",
-                        margin: "4px 0",
-                        fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-                      }}>
-                        <span style={{
-                          color: "inherit",
-                          fontSize: "14px",
-                          lineHeight: 1,
-                          userSelect: "none",
-                          flexShrink: 0,
-                        }}>•</span>
-                      </div>
-                    )}
-
-                    {renderMarkdown(msg.content)}
                   </div>
 
                   <div className="message-footer">

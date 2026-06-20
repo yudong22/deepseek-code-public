@@ -98,6 +98,11 @@ export const tauriBridge: IBridge = {
       } catch (e) {
         // column may already exist
       }
+      try {
+        await db.execute("ALTER TABLE messages ADD COLUMN sections TEXT");
+      } catch (e) {
+        // column may already exist
+      }
       await db.execute(`
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
@@ -163,7 +168,7 @@ export const tauriBridge: IBridge = {
     try {
       const db = await getDb();
       await db.execute(
-        "INSERT OR REPLACE INTO messages (id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts, toolCalls) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR REPLACE INTO messages (id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts, toolCalls, sections) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           msg.id,
           msg.sessionId,
@@ -174,6 +179,7 @@ export const tauriBridge: IBridge = {
           msg.filesChanged ? JSON.stringify(msg.filesChanged) : null,
           msg.artifacts ? JSON.stringify(msg.artifacts) : null,
           msg.toolCalls ? JSON.stringify(msg.toolCalls) : null,
+          msg.sections ? JSON.stringify(msg.sections) : null,
         ]
       );
     } catch (error) {
@@ -186,7 +192,7 @@ export const tauriBridge: IBridge = {
     try {
       const db = await getDb();
       const rows = await db.select<any[]>(
-        "SELECT id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts, toolCalls FROM messages WHERE sessionId = ? ORDER BY createdAt ASC",
+        "SELECT id, sessionId, role, content, createdAt, reasoningContent, filesChanged, artifacts, toolCalls, sections FROM messages WHERE sessionId = ? ORDER BY createdAt ASC",
         [sessionId]
       );
       return rows.map((row) => {
@@ -196,6 +202,7 @@ export const tauriBridge: IBridge = {
         const files = row.filesChanged !== undefined ? row.filesChanged : row.fileschanged;
         const arts = row.artifacts !== undefined ? row.artifacts : row.artifacts; // note: row.artifacts is already lowercase but added for symmetry
         const tCalls = row.toolCalls !== undefined ? row.toolCalls : row.toolcalls;
+        const sec = row.sections !== undefined ? row.sections : row.sections;
 
         return {
           id: row.id,
@@ -207,6 +214,7 @@ export const tauriBridge: IBridge = {
           filesChanged: files ? JSON.parse(files) : undefined,
           artifacts: arts ? JSON.parse(arts) : undefined,
           toolCalls: tCalls ? JSON.parse(tCalls) : undefined,
+          sections: sec ? JSON.parse(sec) : undefined,
         };
       });
     } catch (error) {

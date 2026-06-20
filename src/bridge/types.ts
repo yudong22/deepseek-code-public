@@ -24,6 +24,14 @@ export interface Message {
   filesChanged?: Array<{ name: string; path: string }>;
   artifacts?: Array<{ name: string; type: string }>;
   toolCalls?: Array<{ name: string; args: string; call_id?: string; result?: string; isError?: boolean; step?: number }>;
+  /** 事件时序分段：按实际到达顺序记录 thinking/tool/text 交替 */
+  sections?: Array<{
+    type: "thinking" | "tools" | "text" | "step";
+    content?: string;
+    toolCalls?: Array<{ name: string; args: string; call_id?: string; result?: string; isError?: boolean; step?: number }>;
+    step?: number;
+    elapsed?: string;
+  }>;
 }
 
 export interface IBridge {
@@ -128,6 +136,7 @@ export interface AgentEvent {
         "ToolSuccess" | "ToolFailed" |
         "ToolResult" |
         "StepStarted" | "StepEnded" |
+        "Usage" |
         "Finished" | "Error";
   payload: any;
 }

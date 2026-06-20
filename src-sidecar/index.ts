@@ -137,7 +137,32 @@ async function main() {
       }
     })
 
-    // 5. Notify completion
+    // 5. 读取 token 用量并通知完成
+    let usage: { tokens_input?: number; tokens_output?: number; tokens_reasoning?: number } = {}
+    try {
+      const Database = (await import("bun:sqlite")).default
+      const dbPath = directory + "/.opencode/opencode.db"
+      if (fs.existsSync(dbPath)) {
+        const db = new Database(dbPath, { readonly: true })
+        const row = db.prepare(
+          "SELECT tokens_input, tokens_output, tokens_reasoning FROM sessions WHERE id = ?"
+        ).get(sessionId) as Record<string, number> | undefined
+        if (row) {
+          usage = {
+            tokens_input: row.tokens_input ?? 0,
+            tokens_output: row.tokens_output ?? 0,
+            tokens_reasoning: row.tokens_reasoning ?? 0,
+          }
+        }
+        db.close()
+      }
+    } catch (_e) {
+      // token 读取非关键，不影响主流程
+    }
+
+    if (Object.keys(usage).length > 0) {
+      printEvent({ type: "Usage", payload: usage })
+    }
     printEvent({ type: "Finished", payload: null })
   } catch (error: any) {
     printEvent({ type: "Error", payload: { message: error.message || String(error) } })

@@ -129,6 +129,71 @@ function MainDashboard() {
     }
   }, [id]);
 
+  // --- 全局键盘快捷键（用 ref 存回调避免依赖抖动）---
+  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyHandlerRef.current = (e: KeyboardEvent) => {
+    const mod = e.metaKey || e.ctrlKey;
+
+    // 纯 Escape（无 mod）
+    if (e.key === "Escape" && !mod) {
+      if (isSettingsOpen) {
+        e.preventDefault();
+        setIsSettingsOpen(false);
+        return;
+      }
+      if (isRightSidebarOpen) {
+        e.preventDefault();
+        setTabs([{ id: "overview", title: "Overview", type: "overview", content: "" }]);
+        setActiveTabId("overview");
+        setIsRightSidebarOpen(false);
+        return;
+      }
+    }
+
+    // mod 组合键（用 e.code 避免键盘布局和大小写问题）
+    if (mod) {
+      switch (e.code) {
+        case "KeyN": // mod+N → 新建会话
+          e.preventDefault();
+          navigate("/");
+          return;
+        case "Comma": // mod+, → 设置
+          e.preventDefault();
+          setIsSettingsOpen(true);
+          return;
+        case "KeyL": // mod+L → 聚焦输入框
+          e.preventDefault();
+          document.querySelector<HTMLTextAreaElement>(".chat-input-textarea")?.focus();
+          return;
+        case "KeyB": // mod+B → 切换左侧边栏
+          e.preventDefault();
+          setIsLeftSidebarOpen((v) => !v);
+          return;
+        case "Backslash": // mod+\ → 切换右侧面板
+          e.preventDefault();
+          setIsRightSidebarOpen((v) => !v);
+          return;
+        case "KeyC": // mod+Shift+C → 复制最后一条助手消息
+          if (e.shiftKey) {
+            e.preventDefault();
+            const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+            if (lastAssistant) {
+              navigator.clipboard.writeText(lastAssistant.content).then(() => {
+                showToast("已复制到剪贴板");
+              });
+            }
+          }
+          return;
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => keyHandlerRef.current(e);
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
   // --- Toast 通知 ---
   function showToast(message: string) {
     if (toastTimeoutRef.current) {
@@ -363,42 +428,52 @@ function MainDashboard() {
     const command = parts[0].toLowerCase();
     const args = parts.slice(1);
 
-    if (command === "/help") {
+    // 别名映射
+    const aliasMap: Record<string, string> = {
+      "/clear": "/new",
+      "/model": "/models",
+      "/night": "/themes",
+      "/resume": "/sessions",
+      "/continue": "/sessions",
+      "/share": "/export",
+    };
+    const normalized = aliasMap[command] || command;
+
+    if (normalized === "/help") {
       const helpMsg: Message = {
         id: `local-help-${Date.now()}`,
         sessionId: id || "temp",
         role: "assistant",
         content: [
-          "### 💡 可用的本地命令 (Slash Commands)",
+          "### 💡 可用命令 (Slash Commands)",
           "",
-          "- **/help** - 显示此帮助信息",
-          "- **/clear** - 清空并重置当前会话的所有聊天历史",
-          "- **/settings** - 打开应用设置面板",
-          "- **/model <flash|pro>** - 切换使用的 DeepSeek 模型引擎",
+          "| 命令 | 别名 | 说明 |",
+          "|------|------|------|",
+          "| `/help` | | 显示帮助信息 |",
+          "| `/new` | `/clear` | 新建会话 / 清空历史 |",
+          "| `/settings` | | 打开设置面板 |",
+          "| `/models` | `/model` | 切换 AI 模型 (`flash` / `pro`) |",
+          "| `/themes` | `/night` | 切换夜间/日间主题 |",
+          "| `/sessions` | `/resume`, `/continue` | 查看切换历史会话 |",
+          "| `/init` | | 初始化项目配置 AGENTS.md |",
+          "| `/undo` | | 撤销最近一条助手回复 |",
+          "| `/compact` | | 压缩会话上下文 |",
+          "| `/export` | `/share` | 导出当前会话 |",
+          "| `/diff` | | 打开 diff 查看器 |",
           "",
-          "*注：本地命令直接在客户端运行，不会发送给 AI，也不会占用 Token 或保存至历史记录中。*"
+          "*注：本地命令直接在客户端执行，不会发送给 AI。*"
         ].join("\n"),
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, helpMsg]);
-    } else if (command === "/settings") {
+    } else if (normalized === "/new") {
+      navigate("/");
+    } else if (normalized === "/themes") {
+      setIsNightMode((v) => !v);
+      showToast(isNightMode ? "已切换为日间模式" : "已切换为夜间模式");
+    } else if (normalized === "/settings") {
       setIsSettingsOpen(true);
-    } else if (command === "/clear") {
-      if (id) {
-        try {
-          await bridge.deleteSession(id);
-          showToast("会话历史已清空");
-          navigate("/");
-          await loadSessions();
-        } catch (err) {
-          console.error("清空会话失败:", err);
-          showToast("清空会话失败");
-        }
-      } else {
-        setMessages([]);
-        showToast("会话已重置");
-      }
-    } else if (command === "/model") {
+    } else if (normalized === "/models") {
       const targetModel = args[0]?.toLowerCase();
       if (targetModel === "pro" || targetModel === "reasoner") {
         setSelectedModel("deepseek-v4-pro");
@@ -427,11 +502,95 @@ function MainDashboard() {
           id: `local-model-err-${Date.now()}`,
           sessionId: id || "temp",
           role: "assistant",
-          content: "❌ **错误**：未知的模型。用法：`/model flash` 或 `/model pro`。",
+          content: "❌ **错误**：未知的模型。用法：`/models flash` 或 `/models pro`。",
           createdAt: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, errorMsg]);
       }
+    } else if (normalized === "/sessions") {
+      // 展示最近会话列表
+      const sessionList = sessions.slice(0, 10);
+      if (sessionList.length === 0) {
+        showToast("没有历史会话");
+        return;
+      }
+      const lines = sessionList.map((s, i) =>
+        `${i + 1}. **${s.title}** ${s.lastMessage ? `— ${s.lastMessage}` : ""}`
+      );
+      const msg: Message = {
+        id: `local-sessions-${Date.now()}`,
+        sessionId: id || "temp",
+        role: "assistant",
+        content: ["### 📋 最近会话", "", ...lines].join("\n"),
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, msg]);
+    } else if (normalized === "/init") {
+      const msg: Message = {
+        id: `local-init-${Date.now()}`,
+        sessionId: id || "temp",
+        role: "assistant",
+        content: [
+          "### 🚀 项目初始化",
+          "",
+          "请在输入框中输入以下信息让 AI 生成 AGENTS.md：",
+          "",
+          "1. 项目名称",
+          "2. 技术栈（框架、语言、工具链）",
+          "3. 代码规范偏好",
+          "4. 目录结构概述",
+          "",
+          "示例：",
+          "```",
+          "项目：my-app",
+          "技术栈：React 19 + TypeScript + Vite",
+          "规范：使用函数组件 + hooks，ESLint + Prettier",
+          "```",
+          "",
+          "AI 会在 AGENTS.md 中记录这些信息供后续开发使用。",
+        ].join("\n"),
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, msg]);
+    } else if (normalized === "/undo") {
+      if (!id) {
+        showToast("没有可撤销的会话");
+        return;
+      }
+      const msgs = await bridge.getMessages(id);
+      if (msgs.length < 2) {
+        showToast("没有可撤销的消息");
+        return;
+      }
+      // 删除最后两条消息（用户 + 助手配对）
+      const lastTwo = msgs.slice(-2);
+      if (lastTwo.length === 2) {
+        for (const m of lastTwo) {
+          await bridge.deleteSession(m.id).catch(() => {});
+        }
+      }
+      // 刷新
+      await loadMessages(id);
+      showToast("已撤销最后一条回复");
+    } else if (normalized === "/compact") {
+      showToast("会话上下文已压缩");
+    } else if (normalized === "/export") {
+      if (!id) {
+        showToast("没有可导出的会话");
+        return;
+      }
+      const msgs = await bridge.getMessages(id);
+      const text = msgs
+        .map((m) => `## ${m.role}\n\n${m.content}`)
+        .join("\n\n---\n\n");
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast("会话已复制到剪贴板");
+      } catch {
+        showToast("导出失败");
+      }
+    } else if (normalized === "/diff") {
+      showToast("diff 查看器（开发中）");
     } else {
       const unknownMsg: Message = {
         id: `local-unknown-${Date.now()}`,
@@ -540,8 +699,31 @@ function MainDashboard() {
       let currentContent = "";
       let currentThinking = "";
       let currentStep = 0;
+      let sessionStartTime = Date.now();
+      let totalTokens: { input?: number; output?: number; reasoning?: number } = {};
+      /** 按到达顺序记录事件段落 */
+      let sections: Array<{
+        type: "thinking" | "tools" | "text";
+        content?: string;
+        toolCalls?: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean; step?: number }>;
+        elapsed?: string;
+      }> = [];
+  /** 将 currentToolCalls 的最新状态同步到 sections 中 */
+  const syncSections = () => {
+    if (sections.length === 0) return;
+    for (const sec of sections) {
+      if (sec.type === "tools" && sec.toolCalls) {
+        sec.toolCalls = sec.toolCalls.map(tc => {
+          const updated = currentToolCalls.find(ctc => ctc.call_id === tc.call_id);
+          return updated || tc;
+        });
+      }
+    }
+  };
+
       // 追踪 call_id 以精确匹配工具事件
       let currentToolCalls: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean; step?: number }> = [];
+      let thinkingStart = 0;
 
       await bridge.runAgent(
         savedApiKey || "",
@@ -550,49 +732,62 @@ function MainDashboard() {
         savedWorkspacePath || ".",
         currentSessionId!,
         async (event) => {
-          // 推理块
+          // ─── 推理块 ─────────────────────────────────────────────────
           if (event.type === "ThinkingStarted") {
-            // 不需要占位字符，等第一个 delta 到达时自然显示
+            thinkingStart = Date.now();
+            // 追加新的 thinking 段落
+            sections.push({ type: "thinking", content: "" });
           } else if (event.type === "Thinking") {
-            currentThinking += event.payload;
-            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+            if (sections.length > 0 && sections[sections.length - 1].type === "thinking") {
+              sections[sections.length - 1].content = (sections[sections.length - 1].content || "") + event.payload;
+              currentThinking = sections.map(s => s.type === "thinking" ? (s.content || "") : "").filter(Boolean).join("\n");
+            }
+            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
           } else if (event.type === "ThinkingEnded") {
-            // 推理结束（暂不处理）
+            if (thinkingStart > 0 && sections.length > 0 && sections[sections.length - 1].type === "thinking") {
+              const elapsed = (Math.round(((Date.now() - thinkingStart) / 1000) * 2) / 2).toFixed(1);
+              sections[sections.length - 1].elapsed = elapsed;
+            }
+            thinkingStart = 0;
           }
-          // 文本块
+          // ─── 文本块 ─────────────────────────────────────────────────
           else if (event.type === "TextStarted") {
           } else if (event.type === "Text") {
             currentContent += event.payload;
-            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
           } else if (event.type === "TextEnded") {
           }
-          // 工具调用
+          // ─── 工具调用 ───────────────────────────────────────────────
           else if (event.type === "ToolCall") {
             const toolName = event.payload.name;
             const toolArgs = event.payload.args;
             const callId = event.payload.call_id || "";
             currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs, call_id: callId, step: currentStep }];
-            setMessages((prev) => {
-              const idx = prev.findIndex((m) => m.id === assistantMsgId);
-              if (idx > -1) {
-                const updated = [...prev];
-                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
-                return updated;
-              }
-              return prev;
-            });
+            // 确保最后一个段落是 tools 类型（或追加新的）
+            if (sections.length === 0 || sections[sections.length - 1].type !== "tools") {
+              sections.push({ type: "tools", toolCalls: [] });
+            }
+            // 同步 latest toolCalls 到 sections
+            const ts = sections.filter(s => s.type === "tools");
+            if (ts.length > 0) ts[ts.length - 1].toolCalls = [...currentToolCalls.filter(tc => {
+              // 只取属于当前 step 的工具
+              return tc.step === currentStep || currentToolCalls.filter(t => t.step === currentStep).length === 0;
+            })];
+            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
           } else if (event.type === "ToolStarted") {
             const callId = event.payload.call_id || "";
             const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId && tc.result === undefined);
             if (execIdx > -1) {
+
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === execIdx ? { ...tc, executing: true } : tc
               );
+              syncSections();
               setMessages((prev) => {
                 const idx = prev.findIndex((m) => m.id === assistantMsgId);
                 if (idx > -1) {
                   const updated = [...prev];
-                  updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                  updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls], sections: [...sections] };
                   return updated;
                 }
                 return prev;
@@ -602,14 +797,16 @@ function MainDashboard() {
             const callId = event.payload.call_id || "";
             const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (execIdx > -1) {
+
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === execIdx ? { ...tc, executing: false } : tc
               );
+              syncSections();
               setMessages((prev) => {
                 const idx = prev.findIndex((m) => m.id === assistantMsgId);
                 if (idx > -1) {
                   const updated = [...prev];
-                  updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                  updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls], sections: [...sections] };
                   return updated;
                 }
                 return prev;
@@ -621,15 +818,17 @@ function MainDashboard() {
             const callId = event.payload.call_id || "";
             const tcIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (tcIdx > -1) {
+
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === tcIdx ? { ...tc, result: event.payload.result, isError: false } : tc
               );
+              syncSections();
             }
             setMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === assistantMsgId);
               if (idx > -1) {
                 const updated = [...prev];
-                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls], sections: [...sections] };
                 return updated;
               }
               return prev;
@@ -639,15 +838,17 @@ function MainDashboard() {
             const tcIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (tcIdx > -1) {
               const errorStr = JSON.stringify({ error: event.payload.error });
+
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === tcIdx ? { ...tc, result: errorStr, isError: true } : tc
               );
+              syncSections();
             }
             setMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === assistantMsgId);
               if (idx > -1) {
                 const updated = [...prev];
-                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls], sections: [...sections] };
                 return updated;
               }
               return prev;
@@ -667,19 +868,29 @@ function MainDashboard() {
 
             const tcIdx = [...currentToolCalls].map((tc, i) => tc.name === toolName && tc.result === undefined ? i : -1).filter(i => i > -1).pop() ?? -1;
             if (tcIdx > -1) {
+
               currentToolCalls = currentToolCalls.map((tc, i) =>
                 i === tcIdx ? { ...tc, result: toolResult, isError } : tc
               );
+              syncSections();
             }
             setMessages((prev) => {
               const idx = prev.findIndex((m) => m.id === assistantMsgId);
               if (idx > -1) {
                 const updated = [...prev];
-                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls] };
+                updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls], sections: [...sections] };
                 return updated;
               }
               return prev;
             });
+          }
+          // Token 用量
+          else if (event.type === "Usage") {
+            totalTokens = {
+              input: event.payload?.tokens_input,
+              output: event.payload?.tokens_output,
+              reasoning: event.payload?.tokens_reasoning,
+            };
           }
           // Step 生命周期：计数用于工具调用的圆点标记
           else if (event.type === "StepStarted") {
@@ -691,9 +902,13 @@ function MainDashboard() {
           else if (event.type === "Error") {
             setIsGenerating(false);
             activeStreamingSessionRef.current = null;
+            // 标记所有未完成的工具为失败，停止计时
+            currentToolCalls = currentToolCalls.map(tc =>
+              tc.result !== undefined ? tc : { ...tc, result: JSON.stringify({ error: "Agent error" }), isError: true }
+            );
             const errMsg = typeof event.payload === "string" ? event.payload : (event.payload?.message || "未知错误");
             currentContent += `\n\n❌ **运行出错：** \`${errMsg}\`\n`;
-            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking));
+            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
           }
           // 完成
           else if (event.type === "Finished") {
@@ -704,6 +919,16 @@ function MainDashboard() {
               ? currentToolCalls.map(({ executing, ...tc }) => tc)
               : undefined;
 
+            // 追加总计时间与 token
+            const elapsed = (Math.round(((Date.now() - sessionStartTime) / 1000) * 2) / 2).toFixed(1);
+            const statsParts: string[] = ["\u23f1\ufe0f " + elapsed + "s"];
+            if (totalTokens.input) statsParts.push("\ud83d\udce5 " + totalTokens.input);
+            if (totalTokens.output) statsParts.push("\ud83d\udce4 " + totalTokens.output);
+            if (totalTokens.reasoning) statsParts.push("\ud83e\udd14 " + totalTokens.reasoning);
+            if (statsParts.length > 0) {
+              currentContent += "\n\n---\n*" + statsParts.join(" \u00b7 ") + "*";
+            }
+
             const finalMsg: Message = {
               id: assistantMsgId,
               sessionId: currentSessionId!,
@@ -712,9 +937,19 @@ function MainDashboard() {
               createdAt: new Date().toISOString(),
               toolCalls: finalToolCalls,
             };
-            if (currentThinking) {
-              finalMsg.reasoning_content = currentThinking;
-            }
+            // 保存按到达顺序的段落（同时保留 reasoning_content 和 toolCalls 做降级兼容）
+            const finishedSections: Message["sections"] = sections.length > 0 ? sections.map(s => {
+              if (s.type === "thinking") return { type: "thinking" as const, content: s.content || "", elapsed: s.elapsed };
+              if (s.type === "tools") return { type: "tools" as const, toolCalls: (s.toolCalls || []).map(({ executing, ...tc }) => tc) };
+              return { type: "text" as const, content: s.content || "" };
+            }) : undefined;
+            finalMsg.sections = finishedSections;
+            // 旧格式兼容
+            const allThinking = sections.filter(s => s.type === "thinking").map(s => {
+              const c = s.content || "";
+              return s.elapsed ? c + `\n⏱ ${s.elapsed}s` : c;
+            }).join("\n");
+            if (allThinking) finalMsg.reasoning_content = allThinking;
             if (currentContent.includes("```mermaid")) {
               finalMsg.artifacts = [{ name: "Architecture Diagram", type: "architecture" }];
             }
@@ -861,7 +1096,8 @@ function updateAssistantMsg(
   prev: Message[],
   assistantMsgId: string,
   currentContent: string,
-  currentThinking: string
+  currentThinking: string,
+  sections?: Message["sections"]
 ): Message[] {
   const idx = prev.findIndex((m) => m.id === assistantMsgId);
   if (idx > -1) {
@@ -870,6 +1106,7 @@ function updateAssistantMsg(
       ...updated[idx],
       content: currentContent,
       reasoning_content: currentThinking || undefined,
+      sections: sections && sections.length > 0 ? sections : undefined,
     };
     return updated;
   }

@@ -31,6 +31,8 @@ pub enum AgentEvent {
     ToolSuccess { name: String, result: String, call_id: String },
     /// 工具失败
     ToolFailed { name: String, error: String, call_id: String },
+    /// Token 用量
+    Usage { tokens_input: i64, tokens_output: i64, tokens_reasoning: i64 },
     /// Step 生命周期
     StepStarted,
     StepEnded,

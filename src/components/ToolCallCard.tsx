@@ -147,24 +147,32 @@ function fileBaseName(path: string): string {
 
 // ─── 计时 hook ────────────────────────────────────────────────────────────────
 
-function useElapsed(isDone: boolean): number {
-  const [elapsed, setElapsed] = useState(0);
+function useElapsed(isDone: boolean): string {
+  const [elapsedText, setElapsedText] = useState("0.0");
   const startRef = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /** 计算耗时（0.5s 精读）并格式化为 "X.Xs" */
+  const fmt = () => {
+    const sec = ((Date.now() - startRef.current) / 1000);
+    return (Math.round(sec * 2) / 2).toFixed(1);
+  };
 
   useEffect(() => {
     if (!isDone) {
       startRef.current = Date.now();
+      setElapsedText("0.0");
       timerRef.current = setInterval(() => {
-        setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
-      }, 1000);
+        setElapsedText(fmt());
+      }, 500);
     } else {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      setElapsedText(fmt());
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isDone]);
 
-  return elapsed;
+  return elapsedText + "s";
 }
 
 // ─── 错误检测 ─────────────────────────────────────────────────────────────────
@@ -311,7 +319,7 @@ function FileToolCard({ tc, messageId, index, onOpenTab, onCancel, readFile, get
       </span>
 
       {/* 耗时 */}
-      <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}s</span>
+      <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}</span>
 
       {/* 状态附言 + 取消按钮 */}
       {!isDone && (
@@ -402,7 +410,7 @@ function ExpandableToolCard({ tc, onCancel }: {
           {/* 参数预览 */}
           <span style={{ opacity: 0.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>({argsPreview})</span>
           {/* 耗时 */}
-          <span style={{ fontSize: "11px", opacity: 0.35, marginLeft: "4px" }}>{elapsed}s</span>
+          <span style={{ fontSize: "11px", opacity: 0.35, marginLeft: "4px" }}>{elapsed}</span>
           {/* 执行中标记 + 取消 */}
           {isExecuting && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
@@ -562,7 +570,7 @@ function TodoListCard({ tc, onCancel }: {
           </span>
         )}
         <span style={{ fontSize: "11px", opacity: 0.35, fontWeight: 400, marginLeft: "4px" }}>
-          {elapsed}s
+          {elapsed}
         </span>
         {isExecuting && (
           <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", fontWeight: 400 }}>
@@ -619,25 +627,64 @@ function TodoListCard({ tc, onCancel }: {
   );
 }
 
-// ─── edit / fileedit 差异展示 ──────────────────────────────────────────────────
+// ─── EditDiffCard 差异展示组件 ──────────────────────────────────────────────
 
-/** 解析 diff 内容，提取带 +/- 标记的行 */
-function parseDiffLines(content: string): { type: "add" | "del" | "ctx"; text: string }[] {
-  if (!content) return [];
-  const lines = content.split("\n");
-  // 去掉末尾空行
-  if (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
-  
-  const result: { type: "add" | "del" | "ctx"; text: string }[] = [];
-  for (const line of lines) {
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      result.push({ type: "add", text: line });
-    } else if (line.startsWith("-") && !line.startsWith("---")) {
-      result.push({ type: "del", text: line });
-    } else {
-      result.push({ type: "ctx", text: line });
+interface DiffLine {
+  type: "add" | "del" | "ctx";
+  text: string;
+  lineNumber?: number;
+}
+
+function getEditArgs(tc: ToolCallData): { oldString: string; newString: string } | null {
+  try {
+    const args = JSON.parse(tc.args);
+    if (args.oldString !== undefined && args.newString !== undefined) {
+      return { oldString: args.oldString || "", newString: args.newString || "" };
+    }
+  } catch {}
+  return null;
+}
+
+function buildDiffWithContext(fileContent: string, oldString: string, newString: string): DiffLine[] {
+  const fileLines = fileContent.split("\n");
+  const oldLines = oldString.split("\n").filter(l => l.trim());
+  const newLines = newString.split("\n").filter(l => l.trim());
+  if (oldLines.length === 0 && newLines.length === 0) return [];
+
+  const oldStart = oldLines[0];
+  let matchIdx = -1;
+  for (let i = 0; i <= fileLines.length - oldLines.length; i++) {
+    if (fileLines[i] === oldStart) {
+      let allMatch = true;
+      for (let j = 0; j < oldLines.length; j++) {
+        if (fileLines[i + j] !== oldLines[j]) { allMatch = false; break; }
+      }
+      if (allMatch) { matchIdx = i; break; }
     }
   }
+
+  const result: DiffLine[] = [];
+  const CTX = 2;
+
+  if (matchIdx === -1) {
+    for (const l of oldLines) result.push({ type: "del", text: l });
+    result.push({ type: "ctx", text: "", lineNumber: undefined });
+    for (const l of newLines) result.push({ type: "add", text: l });
+    return result;
+  }
+
+  const ctxStart = Math.max(0, matchIdx - CTX);
+  for (let i = ctxStart; i < matchIdx; i++)
+    result.push({ type: "ctx", text: fileLines[i], lineNumber: i + 1 });
+  for (let i = 0; i < oldLines.length; i++)
+    result.push({ type: "del", text: oldLines[i], lineNumber: matchIdx + i + 1 });
+  result.push({ type: "ctx", text: "", lineNumber: undefined });
+  for (let i = 0; i < newLines.length; i++)
+    result.push({ type: "add", text: newLines[i], lineNumber: matchIdx + i + 1 });
+  const ctxEnd = Math.min(fileLines.length, matchIdx + oldLines.length + CTX);
+  for (let i = matchIdx + oldLines.length; i < ctxEnd; i++)
+    result.push({ type: "ctx", text: fileLines[i], lineNumber: i + 1 });
+
   return result;
 }
 
@@ -658,44 +705,43 @@ function EditDiffCard({ tc, messageId, index, onOpenTab, onCancel, readFile, get
   const argsPreview = getArgsPreview(tc);
   const fileName = fileBaseName(argsPreview);
   const { content } = getToolResultDisplay(tc);
-  const diffLines = isDone ? parseDiffLines(content) : [];
+  const [diffLines, setDiffLines] = useState<DiffLine[]>([]);
+
+  useEffect(() => {
+    if (!isDone || isError) return;
+    const editArgs = getEditArgs(tc);
+    if (!editArgs) { setDiffLines([]); return; }
+    if (readFile && argsPreview) {
+      readFile(argsPreview).then((fc) => {
+        setDiffLines(buildDiffWithContext(fc, editArgs.oldString, editArgs.newString));
+      }).catch(() => {
+        const oldL = editArgs.oldString.split("\n").filter(Boolean);
+        const newL = editArgs.newString.split("\n").filter(Boolean);
+        const s: DiffLine[] = [];
+        for (const l of oldL) s.push({ type: "del", text: l });
+        s.push({ type: "ctx", text: "", lineNumber: undefined });
+        for (const l of newL) s.push({ type: "add", text: l });
+        setDiffLines(s);
+      });
+    }
+  }, [isDone, isError]);
 
   let statusColor = "#007aff";
   if (isDone) statusColor = isError ? "#ff3b30" : "#34c759";
 
-  const actionLabel: Record<string, string> = {
-    edit: "editing", fileedit: "editing",
-  };
-
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isDone || isError) return;
-    
     const ext = argsPreview.split(".").pop()?.toLowerCase() || "text";
-    const imageExts = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"]);
-
-    if (imageExts.has(ext) && getFileUrl) {
-      try {
-        const url = await getFileUrl(argsPreview);
-        if (url) {
-          onOpenTab({ id: `file-${argsPreview}-${messageId}`, title: fileName, type: "image", content: url, language: ext });
-          return;
-        }
-      } catch {}
+    const img = new Set(["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"]);
+    if (img.has(ext) && getFileUrl) {
+      try { const url = await getFileUrl(argsPreview); if (url) { onOpenTab({ id: `file-${argsPreview}-${messageId}`, title: fileName, type: "image", content: url, language: ext }); return; } } catch {}
     }
-    
     if (readFile) {
-      try {
-        const fileContent = await readFile(argsPreview);
-        onOpenTab({ id: `file-${argsPreview}-${messageId}`, title: fileName, type: "tool_result", content: fileContent, language: ext });
-        return;
-      } catch {}
+      try { const fc = await readFile(argsPreview); onOpenTab({ id: `file-${argsPreview}-${messageId}`, title: fileName, type: "tool_result", content: fc, language: ext }); return; } catch {}
     }
-
     const { language } = getToolResultDisplay(tc);
-    if (content) {
-      onOpenTab({ id: `tool-${messageId}-${index}`, title: fileName, type: "tool_result", content, language });
-    }
+    if (content) { onOpenTab({ id: `tool-${messageId}-${index}`, title: fileName, type: "tool_result", content, language }); }
   };
 
   const addCount = diffLines.filter(l => l.type === "add").length;
@@ -704,123 +750,54 @@ function EditDiffCard({ tc, messageId, index, onOpenTab, onCancel, readFile, get
   return (
     <div style={{
       fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-      fontSize: "12px",
-      lineHeight: "1.6",
-      margin: "4px 0",
-      color: "inherit",
-      display: "flex",
-      flexDirection: "column",
+      fontSize: "12px", lineHeight: "1.6", margin: "4px 0",
+      color: "inherit", display: "flex", flexDirection: "column",
     }}>
-      {/* 头部行 */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "5px",
-        flexWrap: "wrap",
-        marginBottom: isDone && diffLines.length > 0 ? "4px" : "0",
-      }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap", marginBottom: isDone && diffLines.length > 0 ? "4px" : "0" }}>
         <span style={{ color: statusColor, fontSize: "14px", lineHeight: 1, flexShrink: 0, animation: isExecuting ? "tc-pulse 1.5s ease-in-out infinite" : "none" }}>•</span>
         <span style={{ fontWeight: "bold", opacity: 0.8 }}>{name}</span>
-        <span
-          onClick={handleClick}
-          title={argsPreview}
-          style={{
-            color: isDone && !isError ? "#007aff" : "inherit",
-            cursor: isDone && !isError ? "pointer" : "default",
-            textDecoration: isDone && !isError ? "underline" : "none",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            maxWidth: "260px",
-            flexShrink: 1,
-          }}
-        >
-          {fileName}
-        </span>
-        <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}s</span>
+        <span onClick={handleClick} title={argsPreview}
+          style={{ color: isDone && !isError ? "#007aff" : "inherit", cursor: isDone && !isError ? "pointer" : "default", textDecoration: isDone && !isError ? "underline" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "260px", flexShrink: 1 }}>{fileName}</span>
+        <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}</span>
         {!isDone && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-            {isExecuting ? (
-              <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>executing…</span>
-            ) : (
-              <span style={{ fontSize: "11px", opacity: 0.45, fontStyle: "italic" }}>{actionLabel[name] ?? "running"}…</span>
-            )}
-            {onCancel && (
-              <span onClick={(e) => { e.stopPropagation(); onCancel(); }} title="Cancel"
-                style={{ cursor: "pointer", fontSize: "12px", opacity: 0.5, lineHeight: 1, padding: "1px 4px", borderRadius: "3px" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>✕</span>
-            )}
+            {isExecuting ? <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>executing…</span>
+            : <span style={{ fontSize: "11px", opacity: 0.45, fontStyle: "italic" }}>editing…</span>}
+            {onCancel && <span onClick={(e) => { e.stopPropagation(); onCancel(); }} style={{ cursor: "pointer", fontSize: "12px", opacity: 0.5 }}>✕</span>}
           </span>
         )}
-        {isDone && isError && (
-          <span style={{ fontSize: "11px", color: "#ff3b30", flexShrink: 0 }}>failed</span>
-        )}
+        {isDone && isError && <span style={{ fontSize: "11px", color: "#ff3b30" }}>failed</span>}
         {isDone && !isError && (addCount > 0 || delCount > 0) && (
-          <span style={{ fontSize: "10px", opacity: 0.4, flexShrink: 0 }}>
-            <span style={{ color: "#34c759" }}>+{addCount}</span>
-            <span style={{ margin: "0 2px" }}>/</span>
-            <span style={{ color: "#ff3b30" }}>-{delCount}</span>
+          <span style={{ fontSize: "10px", opacity: 0.4 }}>
+            <span style={{ color: "#34c759" }}>+{addCount}</span><span style={{ margin: "0 2px" }}>/</span><span style={{ color: "#ff3b30" }}>-{delCount}</span>
           </span>
         )}
       </div>
 
-      {/* diff 内容区：默认展开 */}
       {isDone && diffLines.length > 0 && (
-        <div style={{
-          borderLeft: "2px solid rgba(128,128,128,0.15)",
-          marginLeft: "6px",
-          paddingLeft: "8px",
-          maxHeight: "320px",
-          overflowY: "auto",
-        }}>
-          {diffLines.map((line, i) => (
-            <div
-              key={i}
-              style={{
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
-                padding: "1px 6px",
-                margin: "0 -6px",
-                borderRadius: "2px",
-                background: line.type === "add" ? "rgba(52, 199, 89, 0.12)"
-                           : line.type === "del" ? "rgba(255, 59, 48, 0.10)"
-                           : "transparent",
-                color: line.type === "add" ? "#1a7f37"
-                     : line.type === "del" ? "#cf222e"
-                     : "inherit",
-              }}
-            >
-              {line.text || " "}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 无 diff 但有结果时：显示操作摘要 */}
-      {isDone && !isError && diffLines.length === 0 && content && (
-        <div style={{
-          marginLeft: "6px",
-          paddingLeft: "8px",
-          borderLeft: "2px solid rgba(128,128,128,0.15)",
-          fontSize: "11px",
-          opacity: 0.7,
-          whiteSpace: "pre-wrap",
-        }}>
-          {content}
-        </div>
-      )}
-
-      {/* 执行中 */}
-      {!isDone && (
-        <div style={{ marginLeft: "6px", opacity: 0.5, fontSize: "11px" }}>
-          <span>… 正在编辑中</span>
+        <div style={{ borderLeft: "2px solid rgba(128,128,128,0.15)", marginLeft: "6px", paddingLeft: "8px", maxHeight: "400px", overflowY: "auto" }}>
+          {diffLines.map((line, i) => {
+            const isSep = line.type === "ctx" && line.lineNumber === undefined;
+            const lineNum = line.lineNumber !== undefined ? String(line.lineNumber).padStart(3, " ") : "";
+            const pf = isSep ? " " : line.type === "add" ? "+" : line.type === "del" ? "-" : " ";
+            return (
+              <div key={i} style={{
+                padding: "0 6px", margin: "0 -6px", borderRadius: "2px",
+                background: isSep ? "transparent" : line.type === "add" ? "rgba(52,199,89,0.12)" : line.type === "del" ? "rgba(255,59,48,0.10)" : "transparent",
+                color: line.type === "add" ? "#1a7f37" : line.type === "del" ? "#cf222e" : "inherit",
+                minHeight: isSep ? "4px" : undefined,
+              }}>
+                <pre style={{ margin: 0, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                  {isSep ? " " : `${lineNum} ${pf}  ${line.text}`}
+                </pre>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
-
 
 // ─── 主入口：按工具分类分派 ───────────────────────────────────────────────────
 

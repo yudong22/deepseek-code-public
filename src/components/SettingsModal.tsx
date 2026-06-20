@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { bridge } from "@/bridge";
 import { version as appVersion } from "../../package.json";
 
@@ -44,6 +44,19 @@ export default function SettingsModal({
     type: "info" | "success" | "error";
     message: React.ReactNode;
   } | null>(null);
+
+  // Escape 关闭
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
