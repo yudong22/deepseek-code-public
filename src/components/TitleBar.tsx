@@ -73,7 +73,7 @@ export default function TitleBar({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "100%" }}>
             {hasActiveSession && activeSession && (
-              <button className="titlebar-btn" style={{ background: "#f2f2f7", border: "1px solid #e3e3e3" }} onClick={() => showToast("待开发")}>
+              <button className="titlebar-btn titlebar-ide-btn" onClick={() => showToast("待开发")}>
                 <Icons.IDE />
                 Open IDE
               </button>
