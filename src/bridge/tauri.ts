@@ -1,6 +1,7 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { IBridge, UpdateResult, Session, Message, AgentEvent } from "./types";
+import { version as appVersion } from "../../package.json";
 
 let dbInstance: Database | null = null;
 
@@ -35,7 +36,7 @@ export const tauriBridge: IBridge = {
             return { hasUpdate: false };
           }
           const latestVersion = latest.tag_name?.replace(/^v/, "");
-          const currentVersion = "0.2.3";
+          const currentVersion = appVersion;
           if (latestVersion && latestVersion !== currentVersion) {
             return {
               hasUpdate: true,

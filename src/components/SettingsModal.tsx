@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { bridge } from "@/bridge";
+import { version as appVersion } from "../../package.json";
 
 /** 在外部浏览器打开 URL（Tauri 和浏览器双环境兼容）*/
 async function openExternalUrl(url: string) {
@@ -181,7 +182,7 @@ export default function SettingsModal({
             <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>关于与更新</label>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <span style={{ fontSize: "12px", color: "#1d1d1f" }}>当前版本: v0.2.3</span>
+                <span style={{ fontSize: "12px", color: "#1d1d1f" }}>当前版本: v{appVersion}</span>
                 <button
                   type="button"
                   className="btn-secondary"
