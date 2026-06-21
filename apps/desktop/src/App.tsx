@@ -266,7 +266,7 @@ function MainDashboard() {
         ].join("\n"),
         createdAt: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, helpMsg]);
+      await bridge.saveMessage(helpMsg); setMessages((prev) => [...prev, helpMsg]);
     } else if (normalized === "/new") {
       navigate("/");
     } else if (normalized === "/themes") {
@@ -287,7 +287,7 @@ function MainDashboard() {
           content: "🔄 **系统提示**：已切换模型为 `deepseek-v4-pro`（逻辑推理增强引擎）。",
           createdAt: new Date().toISOString(),
         };
-        setMessages((prev) => [...prev, modelMsg]);
+        await bridge.saveMessage(modelMsg); setMessages((prev) => [...prev, modelMsg]);
       } else if (targetModel === "flash" || targetModel === "chat") {
         setSelectedModel("deepseek-v4-flash");
         showToast("已切换到模型：deepseek-v4-flash");
@@ -298,7 +298,7 @@ function MainDashboard() {
           content: "🔄 **系统提示**：已切换模型为 `deepseek-v4-flash`（低延迟极速引擎）。",
           createdAt: new Date().toISOString(),
         };
-        setMessages((prev) => [...prev, modelMsg]);
+        await bridge.saveMessage(modelMsg); setMessages((prev) => [...prev, modelMsg]);
       } else {
         const errorMsg: Message = {
           id: `local-model-err-${Date.now()}`,
@@ -307,7 +307,7 @@ function MainDashboard() {
           content: "❌ **错误**：未知的模型。用法：`/models flash` 或 `/models pro`。",
           createdAt: new Date().toISOString(),
         };
-        setMessages((prev) => [...prev, errorMsg]);
+        await bridge.saveMessage(errorMsg); setMessages((prev) => [...prev, errorMsg]);
       }
     } else if (normalized === "/sessions") {
       const sessionId = await ensureSession("/sessions");
@@ -327,7 +327,7 @@ function MainDashboard() {
         content: ["### 📋 最近会话", "", ...lines].join("\n"),
         createdAt: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, msg]);
+      await bridge.saveMessage(msg); setMessages((prev) => [...prev, msg]);
     } else if (normalized === "/init") {
       const sessionId = await ensureSession("/init");
       const msg: Message = {
@@ -355,7 +355,7 @@ function MainDashboard() {
         ].join("\n"),
         createdAt: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, msg]);
+      await bridge.saveMessage(msg); setMessages((prev) => [...prev, msg]);
     } else if (normalized === "/plan") {
       const sessionId = await ensureSession("/plan");
       setPlanMode(true);
@@ -376,7 +376,7 @@ function MainDashboard() {
         ].join("\n"),
         createdAt: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, msg]);
+      await bridge.saveMessage(msg); setMessages((prev) => [...prev, msg]);
       showToast("📋 已进入规划模式（只读分析）");
     } else if (normalized === "/plan:exit") {
       const sessionId = await ensureSession("/plan:exit");
@@ -388,7 +388,7 @@ function MainDashboard() {
         content: "✏️ **规划模式已退出**。Agent 现在可以正常读/写文件。",
         createdAt: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, msg]);
+      await bridge.saveMessage(msg); setMessages((prev) => [...prev, msg]);
       showToast("✏️ 已退出规划模式");
     } else if (normalized === "/undo") {
       if (!id) {
@@ -438,7 +438,7 @@ function MainDashboard() {
         content: `❌ **未知命令**：\`${command}\`。输入 \`/help\` 查看所有可用命令。`,
         createdAt: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, unknownMsg]);
+      await bridge.saveMessage(unknownMsg); setMessages((prev) => [...prev, unknownMsg]);
     }
   }
 
