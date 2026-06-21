@@ -1,14 +1,14 @@
 {
-  "version": "0.4.4",
-  "notes": "### 🚀 新功能；- feat: 新增 handleMemorySync 和 handleQuestion 测试，优化 bump-version 终端输出",
-  "pub_date": "2026-06-21T14:50:21Z",
+  "version": "0.4.5",
+  "notes": "### 🚀 新功能；- feat: 更新 changelog 和测试合约文档；- feat: 新增 handleMemorySync 和 handleQuestion 测试，优化 bump-version 终端输出",
+  "pub_date": "2026-06-21T14:52:17Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.4/deepseek-code_aarch64.app.tar.gz",
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.5/deepseek-code_aarch64.app.tar.gz",
       "signature": ""
     },
     "darwin-x86_64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.4/deepseek-code_x86_64.app.tar.gz",
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.5/deepseek-code_x86_64.app.tar.gz",
       "signature": ""
     }
   }
