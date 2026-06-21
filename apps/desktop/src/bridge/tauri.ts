@@ -93,7 +93,13 @@ export const tauriBridge: IBridge = {
       await relaunch();
     } catch (error: any) {
       console.error("Tauri installUpdate failed:", error);
-      onStatus?.({ status: "error", error: error.message || String(error) });
+      const msg = error.message || String(error);
+      // 签名无效时引导用户手动下载
+      if (msg.includes("minisign") || msg.includes("signature") || msg.includes("sign")) {
+        onStatus?.({ status: "error", error: `自动更新签名验证失败，请前往 GitHub Releases 手动下载最新版本: https://github.com/yudong22/deepseek-code-public/releases` });
+      } else {
+        onStatus?.({ status: "error", error: msg });
+      }
     }
   },
 
