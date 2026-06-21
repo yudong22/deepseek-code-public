@@ -1,7 +1,7 @@
 {
   "version": "0.4.2",
-  "notes": "交互式 Q&A（CLI + 桌面端）、QuestionCard 组件、Sidecar 行协议、CLI 单元测试补充、空闲检测优化",
-  "pub_date": "2026-06-21T10:52:04Z",
+  "notes": "无显著变更。",
+  "pub_date": "2026-06-21T11:13:37Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.2/deepseek-code_aarch64.app.tar.gz",
