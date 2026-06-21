@@ -289,6 +289,7 @@ export const tauriBridge: IBridge = {
     messages: any[],
     workspaceRoot: string,
     sessionId: string,
+    agentMode: string | undefined,
     onEvent: (event: AgentEvent) => void
   ): Promise<void> {
     try {
@@ -302,6 +303,7 @@ export const tauriBridge: IBridge = {
         messages,
         workspaceRoot,
         sessionId,
+        agentMode: agentMode || null,
         onEvent: channel,
       });
     } catch (error) {

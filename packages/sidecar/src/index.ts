@@ -15,6 +15,7 @@ async function main() {
     const modelStr = process.env.OPENCODE_MODEL || "deepseek-chat"
     const directory = process.env.WORKSPACE_PATH || "."
     const sessionId = process.env.OPENCODE_SESSION_ID
+    const agentMode = process.env.OPENCODE_AGENT_MODE || ""
 
     // Map DeepSeek/OpenAI compat API Key to OPENAI_API_KEY
     if (apiKey) {
@@ -38,7 +39,8 @@ async function main() {
     const session = await Session.make({
       directory,
       model,
-      id: sessionId || undefined
+      id: sessionId || undefined,
+      agent: agentMode || undefined
     })
 
     // 用 callID 映射工具名（opencode 的 success/failed 事件不包含 tool 字段）

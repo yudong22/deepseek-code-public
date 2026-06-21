@@ -40,6 +40,7 @@ function MainDashboard() {
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
 
   const [isGenerating, setIsGenerating] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
   const activeStreamingSessionRef = useRef<string | null>(null);
 
   // --- 1. Toast Notification Hook ---
@@ -213,6 +214,8 @@ function MainDashboard() {
       "/resume": "/sessions",
       "/continue": "/sessions",
       "/share": "/export",
+      "/plan_exit": "/plan:exit",
+      "/planexit": "/plan:exit",
     };
     const normalized = aliasMap[command] || command;
 
@@ -228,6 +231,8 @@ function MainDashboard() {
           "|------|------|------|",
           "| `/help` | | 显示帮助信息 |",
           "| `/new` | `/clear` | 新建会话 / 清空历史 |",
+          "| `/plan` | | 进入规划模式（只读分析，不写代码） |",
+          "| `/plan:exit` | `/plan_exit` | 退出规划模式，恢复写权限 |",
           "| `/settings` | | 打开设置面板 |",
           "| `/models` | `/model` | 切换 AI 模型 (`flash` / `pro`) |",
           "| `/themes` | `/night` | 切换夜间/日间主题 |",
@@ -329,6 +334,38 @@ function MainDashboard() {
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, msg]);
+    } else if (normalized === "/plan") {
+      setPlanMode(true);
+      const msg: Message = {
+        id: `local-plan-${Date.now()}`,
+        sessionId: id || "temp",
+        role: "assistant",
+        content: [
+          "### 📋 规划模式已激活",
+          "",
+          "Agent 将仅执行**读取和分析**操作：",
+          "- 🔍 搜索和浏览工作区文件",
+          "- 📖 读取文件内容",
+          "- 🧠 提供架构分析和技术方案",
+          "- ✅ **不会创建或修改任何文件**",
+          "",
+          "输入 `/plan:exit` 或 `/plan_exit` 退出规划模式，恢复完整的读写能力。",
+        ].join("\n"),
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, msg]);
+      showToast("📋 已进入规划模式（只读分析）");
+    } else if (normalized === "/plan:exit") {
+      setPlanMode(false);
+      const msg: Message = {
+        id: `local-plan-exit-${Date.now()}`,
+        sessionId: id || "temp",
+        role: "assistant",
+        content: "✏️ **规划模式已退出**。Agent 现在可以正常读/写文件。",
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, msg]);
+      showToast("✏️ 已退出规划模式");
     } else if (normalized === "/undo") {
       if (!id) {
         showToast("没有可撤销的会话");
@@ -449,17 +486,23 @@ function MainDashboard() {
       setIsGenerating(true);
       activeStreamingSessionRef.current = currentSessionId;
       const historyMsgs = await bridge.getMessages(currentSessionId);
+      const planSystemPrompt = planMode ? [
+        "You are now in **PLAN MODE** — you must ONLY read, search, and analyze files.",
+        "You CANNOT create, edit, or write any files. All write operations are forbidden.",
+        "Focus on: code review, architecture analysis, research, and providing recommendations.",
+        "When the user asks you to make changes, explain HOW they could be made instead of doing them directly.",
+        "The user will exit plan mode when they are ready for you to make changes.",
+        "You still have: FileRead, Grep, and Glob tools available for exploration.",
+      ].join(" ") : [
+        "You are a helpful programming assistant with access to local file system tools.",
+        "You have: FileRead, FileWrite, FileEdit, Grep, Glob, and Bash tools.",
+        "IMPORTANT: Always use RELATIVE paths (e.g. 'src/main.rs', 'README.md') — never absolute paths like '/Users/...' or 'C:\\...'.",
+        "All file operations are sandboxed to the workspace root. Relative paths are automatically resolved within the workspace.",
+        "You run autonomously without requiring user approval.",
+      ].join(" ");
+
       const apiMessages = [
-        {
-          role: "system",
-          content: [
-            "You are a helpful programming assistant with access to local file system tools.",
-            "You have: FileRead, FileWrite, FileEdit, Grep, Glob, and Bash tools.",
-            "IMPORTANT: Always use RELATIVE paths (e.g. 'src/main.rs', 'README.md') — never absolute paths like '/Users/...' or 'C:\\...'.",
-            "All file operations are sandboxed to the workspace root. Relative paths are automatically resolved within the workspace.",
-            "You run autonomously without requiring user approval.",
-          ].join(" "),
-        },
+        { role: "system", content: planSystemPrompt },
         ...expandHistoryMessages(historyMsgs)
       ];
 
@@ -502,12 +545,14 @@ function MainDashboard() {
       let currentToolCalls: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean; step?: number }> = [];
       let thinkingStart = 0;
 
+      const currentAgentMode = planMode ? "plan" : undefined;
       await bridge.runAgent(
         savedApiKey || "",
         selectedModel,
         apiMessages,
         savedWorkspacePath || ".",
         currentSessionId!,
+        currentAgentMode,
         async (event) => {
           // ─── 推理块 ─────────────────────────────────────────────────
           if (event.type === "ThinkingStarted") {
@@ -817,6 +862,7 @@ function MainDashboard() {
         isRightSidebarOpen={isRightSidebarOpen}
         activeSession={activeSession}
         hasActiveSession={!!id && !!activeSession}
+        planMode={planMode}
         tabs={tabs}
         activeTabId={activeTabId}
         onToggleLeftSidebar={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
@@ -854,6 +900,7 @@ function MainDashboard() {
             <>
               <ChatFeed
                 messages={messages}
+                planMode={planMode}
                 onOpenTab={openTab}
                 isGenerating={isGenerating}
                 onCancelAgent={handleCancel}

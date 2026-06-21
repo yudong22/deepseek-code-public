@@ -6,6 +6,7 @@ import { ToolCallGroup } from "@/components/ToolCallCard";
 
 interface ChatFeedProps {
   messages: Message[];
+  planMode?: boolean;
   onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
   isGenerating?: boolean;
   onCancelAgent?: () => void;
@@ -79,7 +80,7 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
   );
 }
 
-export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast }: ChatFeedProps) {
+export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserAtBottomRef = useRef(true);
@@ -151,6 +152,14 @@ export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAg
         <div className="sticky-user-bar">
           <span className="sticky-user-bar-icon">💬</span>
           <span className="sticky-user-bar-text">{stickyMsg.content}</span>
+        </div>
+      )}
+
+      {/* 规划模式横幅 */}
+      {planMode && (
+        <div className="plan-mode-banner">
+          <span className="plan-mode-banner-icon">📋</span>
+          <span>规划模式 — Agent 仅执行读取和分析，不会修改文件</span>
         </div>
       )}
 

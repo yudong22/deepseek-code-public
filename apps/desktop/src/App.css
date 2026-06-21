@@ -1437,6 +1437,29 @@ body {
   font-weight: 500;
 }
 
+/* 规划模式徽章 */
+.plan-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: #007aff;
+  background: rgba(0, 122, 255, 0.1);
+  border: 1px solid rgba(0, 122, 255, 0.25);
+  border-radius: 4px;
+  white-space: nowrap;
+  user-select: none;
+}
+.night-mode .plan-mode-badge {
+  color: #5e9eff;
+  background: rgba(94, 158, 255, 0.12);
+  border-color: rgba(94, 158, 255, 0.3);
+}
+
 .titlebar-actions {
   display: flex;
   align-items: center;
@@ -2152,6 +2175,32 @@ body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+/* 规划模式横幅 */
+.plan-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 24px 0;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #007aff;
+  background: rgba(0, 122, 255, 0.06);
+  border: 1px solid rgba(0, 122, 255, 0.18);
+  border-radius: 6px;
+  white-space: nowrap;
+  user-select: none;
+  flex-shrink: 0;
+}
+.night-mode .plan-mode-banner {
+  color: #5e9eff;
+  background: rgba(94, 158, 255, 0.08);
+  border-color: rgba(94, 158, 255, 0.2);
+}
+.plan-mode-banner-icon {
+  font-size: 13px;
 }
 
 .sticky-user-bar {

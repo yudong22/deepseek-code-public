@@ -17,6 +17,8 @@ interface SlashAutocompleteProps {
 const COMMANDS_LIST: SlashCommand[] = [
   { name: "help", aliases: [], description: "显示帮助信息", icon: "💡" },
   { name: "new", aliases: ["clear"], description: "新建会话 / 清空历史", icon: "✨" },
+  { name: "plan", aliases: [], description: "进入规划模式（只读分析，不写代码）", icon: "📋" },
+  { name: "plan:exit", aliases: ["plan_exit"], description: "退出规划模式，恢复写权限", icon: "✏️" },
   { name: "settings", aliases: [], description: "打开设置面板", icon: "⚙️" },
   { name: "models", aliases: ["model"], description: "切换 AI 模型 (flash|pro)", icon: "🧠" },
   { name: "themes", aliases: ["night"], description: "切换夜间/日间主题", icon: "🎨" },

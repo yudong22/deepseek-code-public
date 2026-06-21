@@ -15,6 +15,7 @@ interface TitleBarProps {
   isRightSidebarOpen: boolean;
   activeSession: Session | undefined;
   hasActiveSession: boolean;
+  planMode?: boolean;
   tabs: Tab[];
   activeTabId: string;
   onToggleLeftSidebar: () => void;
@@ -34,6 +35,7 @@ export default function TitleBar({
   isRightSidebarOpen,
   activeSession,
   hasActiveSession,
+  planMode,
   tabs,
   activeTabId,
   onToggleLeftSidebar,
@@ -70,6 +72,11 @@ export default function TitleBar({
         <div className="titlebar-middle" data-tauri-drag-region>
           <div className="titlebar-breadcrumbs" data-tauri-drag-region style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             <span className="titlebar-breadcrumb-session">{activeSession ? activeSession.title : "New Conversation"}</span>
+            {planMode && (
+              <span className="plan-mode-badge" title="规划模式 — 只读分析">
+                📋 Plan
+              </span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "100%" }}>
             {hasActiveSession && activeSession && (

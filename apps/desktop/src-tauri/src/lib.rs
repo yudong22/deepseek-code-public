@@ -56,6 +56,7 @@ async fn run_agent_loop(
     messages: Vec<ds_api::raw::Message>,
     workspace_root: String,
     session_id: String,
+    agent_mode: Option<String>,
     on_event: Channel<AgentEvent>,
 ) -> Result<(), String> {
     // 1. 解析工作区路径为绝对路径
@@ -106,6 +107,10 @@ async fn run_agent_loop(
         .env("OPENCODE_MODEL", &model)
         .env("WORKSPACE_PATH", &workspace_path)
         .env("OPENCODE_SESSION_ID", &session_id);
+
+    if let Some(ref mode) = agent_mode {
+        cmd.env("OPENCODE_AGENT_MODE", mode);
+    }
 
     let mut child = cmd.spawn().map_err(|e| format!("无法启动 sidecar {}: {}", sidecar_path.display(), e))?;
 

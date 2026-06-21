@@ -100,6 +100,7 @@ export interface IBridge {
 
   /**
    * 调起带 tools 的 agent 循环
+   * @param agentMode 可选 "plan" | undefined — 切换到规划模式（只读不写）
    */
   runAgent(
     apiKey: string,
@@ -107,6 +108,7 @@ export interface IBridge {
     messages: any[],
     workspaceRoot: string,
     sessionId: string,
+    agentMode: string | undefined,
     onEvent: (event: AgentEvent) => void
   ): Promise<void>;
 

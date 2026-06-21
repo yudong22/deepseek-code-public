@@ -135,9 +135,10 @@ export const mockBridge: IBridge = {
     _messages: any[],
     _workspaceRoot: string,
     _sessionId: string,
+    _agentMode: string | undefined,
     onEvent: (event: AgentEvent) => void
   ): Promise<void> {
-    console.warn("[Bridge Mock] runAgent called. Simulating agent events.");
+    console.warn(`[Bridge Mock] runAgent called. agentMode=${_agentMode || "default"} Simulating agent events.`);
     onEvent({ type: "ThinkingStarted", payload: null });
     onEvent({ type: "Thinking", payload: "Thinking: 正在扫描工作区..." });
     await new Promise((r) => setTimeout(r, 400));
