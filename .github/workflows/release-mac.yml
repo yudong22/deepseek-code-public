@@ -108,13 +108,15 @@ jobs:
             SIGNATURE=$(npx @tauri-apps/cli@latest signer sign \
               -k <(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}") \
               -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
-              "$TAR_PATH" 2>/dev/null | grep -oP 'signature: \K\S+' || true)
+              "$TAR_PATH" 2>/dev/null | sed -n 's/.*signature: *//p' | tr -d '\n\r' | head -1 || true)
+            echo "Got signature: ${SIGNATURE:0:20}..."
           elif [ -n "$DMG_PATH" ]; then
             echo "Signing $DMG_PATH (no .tar.gz found) ..."
             SIGNATURE=$(npx @tauri-apps/cli@latest signer sign \
               -k <(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}") \
               -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
-              "$DMG_PATH" 2>/dev/null | grep -oP 'signature: \K\S+' || true)
+              "$DMG_PATH" 2>/dev/null | sed -n 's/.*signature: *//p' | tr -d '\n\r' | head -1 || true)
+            echo "Got signature: ${SIGNATURE:0:20}..."
           else
             echo "⚠️  No bundle artifacts found, skipping signing"
           fi
