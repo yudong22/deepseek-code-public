@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::Manager;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 
 /// 全局取消标记，供 cancel_agent 和 run_agent_loop 共享
@@ -133,8 +134,7 @@ async fn run_agent_loop(
 
     // 5. 将结构化 JSON 写入 sidecar stdin，保持开启以支持交互式 Q&A
     let stdin_handle = child.stdin.take().ok_or("无法打开 sidecar stdin".to_string())?;
-    // 先写入 stdin 再存储句柄
-    use tokio::io::AsyncWriteExt;
+    // 先写入 stdin 再存储句柄（保持开启，不 drop）
     let mut write_guard = stdin_handle;
     write_guard.write_all(input_str.as_bytes()).await
         .map_err(|e| format!("写入 sidecar stdin 失败: {}", e))?;
@@ -195,7 +195,6 @@ async fn run_agent_loop(
 /// 向运行中的 sidecar 发送用户输入（回答 question 工具的问题）
 #[tauri::command]
 async fn respond_to_agent(app: tauri::AppHandle, answer: String) -> Result<(), String> {
-    use tokio::io::AsyncWriteExt;
     let agent_stdin = app.state::<AgentStdin>();
     let mut guard = agent_stdin.0.lock().await;
     if let Some(stdin) = guard.as_mut() {
