@@ -474,6 +474,7 @@ function MainDashboard() {
   // --- 取消 Agent 执行 ---
   const handleCancel = async () => {
     setIsGenerating(false);
+    setPendingQuestion(null);
     activeStreamingSessionRef.current = null;
     await bridge.cancelAgent();
   };
@@ -712,10 +713,6 @@ function MainDashboard() {
           // 工具结果：按 call_id 精确匹配
           else if (event.type === "ToolSuccess") {
             const callId = event.payload.call_id || "";
-            // 清除已完成的提问卡片
-            if (event.payload.name === "question") {
-              setPendingQuestion(null);
-            }
             const tcIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (tcIdx > -1) {
               currentToolCalls = currentToolCalls.map((tc, i) =>
