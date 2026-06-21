@@ -83,7 +83,7 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
   );
 }
 
-export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast }: ChatFeedProps) {
+export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast, onAnswerQuestion }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserAtBottomRef = useRef(true);
