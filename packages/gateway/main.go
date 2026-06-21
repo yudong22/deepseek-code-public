@@ -18,13 +18,28 @@ import (
 )
 
 var (
-	jwtSecret       = []byte("openhands-secret-key-1234567890")
+	jwtSecretStr    = os.Getenv("JWT_SECRET")
+	jwtSecret       []byte
+	validClientID   = os.Getenv("GATEWAY_CLIENT_ID")
+	validClientSecret = os.Getenv("GATEWAY_CLIENT_SECRET")
 	deepseekAPIKey  = os.Getenv("DEEPSEEK_API_KEY")
 	deepseekAPIBase = os.Getenv("DEEPSEEK_API_BASE") // e.g. https://api.deepseek.com/v1
 	qdrantURL       = os.Getenv("QDRANT_URL")       // e.g. http://qdrant:6333
 )
 
 func init() {
+	if jwtSecretStr == "" {
+		jwtSecretStr = "openhands-secret-key-1234567890"
+		log.Println("⚠️  Warning: JWT_SECRET not set, using default (insecure)")
+	}
+	jwtSecret = []byte(jwtSecretStr)
+
+	if validClientID == "" {
+		validClientID = "openhands"
+	}
+	if validClientSecret == "" {
+		validClientSecret = "secret123"
+	}
 	if deepseekAPIBase == "" {
 		deepseekAPIBase = "https://api.deepseek.com/v1"
 	}
@@ -108,7 +123,7 @@ func handleLogin(c *gin.Context) {
 
 	// Mock Client Credentials verification
 	// In production, verify against database or identity provider
-	if req.ClientID != "openhands" || req.ClientSecret != "secret123" {
+	if req.ClientID != validClientID || req.ClientSecret != validClientSecret {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid client credentials"})
 		return
 	}

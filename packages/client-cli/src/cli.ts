@@ -244,7 +244,33 @@ async function handleRun(args: string[]) {
   const sandboxDir = path.join(sandboxRoot, taskId);
 
   log(`初始化本地影子沙箱工作区隔离 [ai/${taskId}]...`);
-  
+
+  // 清理残留工作区
+  if (fs.existsSync(sandboxDir)) {
+    log(`发现残留工作区 ${sandboxDir}，正在清理...`);
+    try {
+      execSync(`git worktree remove ${sandboxDir} --force`, { cwd: rootDir, stdio: 'ignore' });
+    } catch (_e) {}
+    try {
+      execSync(`git branch -D ai/${taskId} 2>/dev/null`, { cwd: rootDir });
+    } catch (_e) {}
+  }
+  // 同时清理 24 小时前的过期工作区
+  try {
+    const worktreeList = execSync('git worktree list', { cwd: rootDir, encoding: 'utf-8' });
+    const lines = worktreeList.split('\n').filter(l => l.includes('/tmp/ai-workers/'));
+    for (const line of lines) {
+      const wPath = line.split(/\s+/)[0];
+      if (wPath && fs.existsSync(wPath)) {
+        const stats = fs.statSync(wPath);
+        if (Date.now() - stats.mtimeMs > 24 * 60 * 60 * 1000) {
+          log(`清理过期工作区: ${wPath}`);
+          execSync(`git worktree remove ${wPath} --force`, { cwd: rootDir, stdio: 'ignore' });
+        }
+      }
+    }
+  } catch (_e) {}
+
   if (!fs.existsSync(sandboxRoot)) {
     fs.mkdirSync(sandboxRoot, { recursive: true });
   }
@@ -315,59 +341,60 @@ async function handleRun(args: string[]) {
     // 4. Spawn Hermes
     log("唤醒主力开发 Agent (Hermes) 开始写代码...");
     // Inject the proxy env so openhands-call spawns agent connected to Go server
+    // Use try-finally to ensure process.env is restored on ALL exit paths
     const originalEnv = process.env;
-    Object.assign(process.env, proxyEnv);
-    
+    let proxyEnvApplied = false;
     try {
-      await callAgent({
-        agent: 'hermes',
-        promptVal: taskDesc,
-        rulesPath: dynamicRulesPath,
-        sandboxDir,
-        rootDir
-      });
-    } catch (e: any) {
-      throw new Error(`Hermes 运行期间发生错误: ${e.message}`);
-    }
+      Object.assign(process.env, proxyEnv);
+      proxyEnvApplied = true;
 
-    // 5. Validation and OpenCode Heal loop
-    let healCount = 0;
-    const maxHeals = 3;
-    let isPassed = false;
-
-    while (!isPassed && healCount < maxHeals) {
       try {
-        log("触发极速门禁验证验证...");
-        await fastValidate({ rootDir, sandboxDir });
-        isPassed = true;
-      } catch (validationError: any) {
-        healCount++;
-        logError(`[验证失败] 第 ${healCount} 次唤醒 OpenCode CI 自愈...`);
+        await callAgent({
+          agent: 'hermes',
+          promptVal: taskDesc,
+          rulesPath: dynamicRulesPath,
+          sandboxDir,
+          rootDir
+        });
+      } catch (e: any) {
+        throw new Error(`Hermes 运行期间发生错误: ${e.message}`);
+      }
 
-        const errorLog = validationError.message;
-        const lastErrorLogPath = path.join(sandboxAgentsDir, 'last_error.log');
-        fs.writeFileSync(lastErrorLogPath, errorLog);
+      // 5. Validation and OpenCode Heal loop
+      let healCount = 0;
+      const maxHeals = 3;
+      let isPassed = false;
 
+      while (!isPassed && healCount < maxHeals) {
         try {
-          await callAgent({
-            agent: 'opencode',
-            rulesPath: dynamicRulesPath,
-            fixTarget: lastErrorLogPath,
-            sandboxDir,
-            rootDir
-          });
-        } catch (e: any) {
-          logError(`OpenCode 运行期间抛出异常: ${e.message}`);
+          log("触发极速门禁验证验证...");
+          await fastValidate({ rootDir, sandboxDir });
+          isPassed = true;
+        } catch (validationError: any) {
+          healCount++;
+          logError(`[验证失败] 第 ${healCount} 次唤醒 OpenCode CI 自愈...`);
+
+          const errorLog = validationError.message;
+          const lastErrorLogPath = path.join(sandboxAgentsDir, 'last_error.log');
+          fs.writeFileSync(lastErrorLogPath, errorLog);
+
+          try {
+            await callAgent({
+              agent: 'opencode',
+              rulesPath: dynamicRulesPath,
+              fixTarget: lastErrorLogPath,
+              sandboxDir,
+              rootDir
+            });
+          } catch (e: any) {
+            logError(`OpenCode 运行期间抛出异常: ${e.message}`);
+          }
         }
       }
-    }
 
-    // Restore original env
-    process.env = originalEnv;
-
-    if (!isPassed) {
-      throw new Error(`OpenCode 自愈达到最大上限次数 (${maxHeals})，代码仍有错误！`);
-    }
+      if (!isPassed) {
+        throw new Error(`OpenCode 自愈达到最大上限次数 (${maxHeals})，代码仍有错误！`);
+      }
 
     // 6. Final Commit
     log("验证全部通过！正在生成本地原子提交...");
@@ -397,6 +424,11 @@ async function handleRun(args: string[]) {
       logError(`清理工作区失败: ${e.message}`);
     }
     process.exit(1);
+  } finally {
+    // 确保 process.env 在所有路径上恢复，防止环境泄露
+    if (proxyEnvApplied) {
+      process.env = originalEnv;
+    }
   }
 }
 

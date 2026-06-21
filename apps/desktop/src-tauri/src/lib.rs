@@ -67,13 +67,13 @@ async fn run_agent_loop(
             .map_err(|e| format!("无法创建工作区目录: {}", e))?;
     }
 
-    // 2. 提取最新一条用户消息作为提示词
-    let last_user_prompt = messages
-        .iter()
-        .rev()
-        .find(|m| matches!(m.role, ds_api::raw::Role::User))
-        .and_then(|m| m.content.as_ref())
-        .ok_or_else(|| "未找到用户提示词 (user prompt)".to_string())?;
+    // 2. 序列化完整消息 + agent_mode 为 JSON 传给 sidecar stdin
+    let input_payload = serde_json::json!({
+        "messages": messages,
+        "agentMode": agent_mode,
+    });
+    let input_str = serde_json::to_string(&input_payload)
+        .map_err(|e| format!("序列化 sidecar 输入失败: {}", e))?;
 
     // 3. 确定并解析 sidecar 路径 (Tauri places sidecars in the same directory as the executable)
     let app_dir = std::env::current_exe()
@@ -117,9 +117,9 @@ async fn run_agent_loop(
     // 注册取消标记，供 cancel_agent 使用
     app.manage(AgentCancelled(AtomicBool::new(false)));
 
-    // 5. 将用户 Prompt 写入 sidecar stdin，并关闭 stdin
+    // 5. 将结构化 JSON 写入 sidecar stdin，并关闭 stdin
     let mut stdin = child.stdin.take().ok_or("无法打开 sidecar stdin".to_string())?;
-    stdin.write_all(last_user_prompt.as_bytes()).await
+    stdin.write_all(input_str.as_bytes()).await
         .map_err(|e| format!("写入 sidecar stdin 失败: {}", e))?;
     drop(stdin); // 关闭 stdin，sidecar 会读取到 EOF 并开始处理
 
