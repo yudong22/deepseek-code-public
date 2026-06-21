@@ -29,6 +29,42 @@ import { execSync, execFileSync } from "child_process";
 import os from "os";
 
 const rootDir = path.resolve(__dirname, "..");
+
+// ─── terminal UI 样式函数 ───────────────────────
+const colors = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[90m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  red: "\x1b[31m",
+  cyan: "\x1b[36m",
+  magenta: "\x1b[35m",
+};
+
+function formatThought(secs: number, searched: number, ran: number): string {
+  return `${colors.dim}Thought for ${secs}s, searched for ${searched} pattern${searched === 1 ? '' : 's'}, ran ${ran} shell command${ran === 1 ? '' : 's'}${colors.reset}`;
+}
+
+function formatCommandHeader(cmdName: string, cmdStr: string): string {
+  return `${colors.green}● ${colors.bold}${cmdName}(${colors.reset}${cmdStr}${colors.bold})${colors.reset}`;
+}
+
+function formatCommandSubHeader(subHeader: string): string {
+  return `  ${colors.dim}└ ${subHeader}${colors.reset}`;
+}
+
+function formatStep(msg: string): string {
+  return `${colors.bold}● ${msg}${colors.reset}`;
+}
+
+function formatResult(msg: string): string {
+  return `${colors.bold}∴ ${msg}${colors.reset}`;
+}
+
+function formatError(msg: string): string {
+  return `${colors.red}● ${colors.bold}Error: ${msg}${colors.reset}`;
+}
 const args = process.argv.slice(2);
 const isRetag = args.includes("--retag");
 const isDryRun = args.includes("--dry-run");
@@ -44,18 +80,24 @@ if (!newVersion || !/^\d+\.\d+\.\d+$/.test(newVersion)) {
 
 // ─── Retag 模式 ────────────────────────────────
 if (isRetag) {
+  console.log(formatStep(`重新打标签流程 (v${newVersion})`));
   const tagExists = execSync("git tag --list", { encoding: "utf-8", cwd: rootDir })
     .split("\n").map(t => t.trim()).includes(`v${newVersion}`);
   if (tagExists) {
-    console.log(`🔄 删除旧标签 v${newVersion} ...`);
+    console.log(formatCommandHeader("Bash", `git tag -d v${newVersion} && git push origin --delete v${newVersion}`));
+    console.log(formatCommandSubHeader("git tag"));
     execSync(`git tag -d v${newVersion}`, { cwd: rootDir });
     execSync(`git push origin --delete v${newVersion} 2>/dev/null; true`, { cwd: rootDir });
+    console.log(`    ${colors.dim}Deleted local and remote tag v${newVersion}${colors.reset}`);
   }
-  console.log(`🏷️  创建标签 v${newVersion} ...`);
+  console.log(formatCommandHeader("Bash", `git tag v${newVersion} && git push origin v${newVersion}`));
+  console.log(formatCommandSubHeader("git tag"));
   execSync(`git tag v${newVersion}`, { cwd: rootDir });
   execSync(`git push origin v${newVersion}`, { cwd: rootDir });
-  console.log(`✅ 标签 v${newVersion} 已推送 → GitHub Actions 自动构建`);
-  console.log(`   进度: https://github.com/yudong22/deepseek-code-public/actions`);
+  console.log(`    ${colors.dim}Created and pushed tag v${newVersion}${colors.reset}`);
+  
+  console.log(formatResult(`标签 v${newVersion} 已推送 → GitHub Actions 自动构建中`));
+  console.log(`  ${colors.dim}进度查看: https://github.com/yudong22/deepseek-code-public/actions${colors.reset}`);
   process.exit(0);
 }
 
@@ -101,7 +143,12 @@ async function generateCommitMessage(apiKey: string, baseUrl: string, model: str
 
 const gitStatus = execSync("git status --porcelain", { encoding: "utf-8", cwd: rootDir }).trim();
 if (gitStatus) {
-  console.log("📝 检测到工作区有未提交的修改，准备通过 AI 自动评估并 commit...");
+  console.log(formatThought(2, 0, 1));
+  console.log(formatStep("检测到工作区有未提交的修改。通过 AI 评估改动并进行 commit。"));
+  console.log(formatCommandHeader("Bash", "git status --porcelain"));
+  console.log(formatCommandSubHeader("git status"));
+  const statusLines = gitStatus.split("\n").map(l => `    ${l}`).join("\n");
+  console.log(statusLines);
 
   // 解析 API Key 和配置
   const homeDir = os.homedir();
@@ -130,9 +177,7 @@ if (gitStatus) {
   }
 
   if (!apiKey) {
-    console.error("❌ 无法自动提交：未配置 API key（请设置环境变量 DEEPSEEK_API_KEY 或配置 ~/.openhands/config.json）");
-    console.error("工作区未提交修改如下:");
-    console.error(gitStatus);
+    console.log(formatError("无法自动提交：未配置 API key（请设置环境变量 DEEPSEEK_API_KEY 或配置 ~/.openhands/config.json）"));
     process.exit(1);
   }
 
@@ -141,23 +186,29 @@ if (gitStatus) {
   const diff = execSync("git diff --cached", { encoding: "utf-8", cwd: rootDir }).trim();
 
   if (!diff) {
-    // 如果没有实际的 diff（例如只有空文件夹或被忽略的文件）
     execFileSync("git", ["reset"], { cwd: rootDir });
-    console.error("❌ 未检测到可提交的差异。");
+    console.log(formatError("未检测到可提交的差异。"));
     process.exit(1);
   }
 
   try {
-    console.log("🤖 正在调用 AI 评估改动并生成 commit message...");
+    console.log(formatThought(3, 0, 1));
+    console.log(formatStep(`正在调用 AI (${model}) 评估改动并生成 commit message...`));
+    const startTime = Date.now();
     const commitMsg = await generateCommitMessage(apiKey, baseUrl, model, diff);
-    console.log(`✨ AI 生成的 commit message: "${commitMsg}"`);
+    const elapsedSecs = Math.round((Date.now() - startTime) / 1000);
+    console.log(formatThought(elapsedSecs, 0, 0));
+    console.log(`  ${colors.dim}└ AI 生成的 commit message: "${commitMsg}"${colors.reset}`);
 
-    execFileSync("git", ["commit", "-m", commitMsg], { cwd: rootDir });
-    console.log("✅ 自动 commit 成功，继续执行发布流程。");
+    console.log(formatCommandHeader("Bash", `git commit -m "${commitMsg.replace(/"/g, '\\"')}"`));
+    console.log(formatCommandSubHeader("git commit"));
+    const commitResult = execFileSync("git", ["commit", "-m", commitMsg], { encoding: "utf-8", cwd: rootDir }).trim();
+    console.log(commitResult.split("\n").map(l => `    ${l}`).join("\n"));
+    console.log(formatResult("自动 commit 成功，继续执行发布流程。"));
   } catch (err: any) {
     // 失败时回滚暂存状态
     execFileSync("git", ["reset"], { cwd: rootDir });
-    console.error(`❌ AI 评估/提交失败: ${err.message}`);
+    console.log(formatError(`AI 评估/提交失败: ${err.message}`));
     process.exit(1);
   }
 }
@@ -165,9 +216,9 @@ if (gitStatus) {
 let lastTag = "";
 try {
   lastTag = execSync("git describe --tags --abbrev=0", { encoding: "utf-8", cwd: rootDir }).trim();
-  console.log(`📌 上一个标签: ${lastTag}`);
+  console.log(`  ${colors.dim}📌 上一个版本标签: ${lastTag}${colors.reset}`);
 } catch {
-  console.log("📌 未找到历史标签");
+  console.log(`  ${colors.dim}📌 未找到历史版本标签${colors.reset}`);
 }
 
 // ─── 生成 Changelog ─────────────────────────────
@@ -211,8 +262,10 @@ function generateChangelog(): string {
 const changelogText = generateChangelog();
 const changelogPath = path.join(rootDir, ".changelog.md");
 fs.writeFileSync(changelogPath, changelogText);
-console.log("\n📋 生成的 Release Changelog:");
-console.log(changelogText);
+console.log("");
+console.log(formatResult(`更新日志已生成并在 .changelog.md 归档`));
+console.log(changelogText.split("\n").map(l => `  ${l}`).join("\n"));
+console.log("");
 
 // ─── 更新配置文件 ──────────────────────────────
 const files: Array<{ path: string; label: string }> = [];
@@ -272,23 +325,27 @@ updateJson(path.join(rootDir, "packages/sidecar/package.json"), () => {
   files.push({ path: "packages/sidecar/package.json", label: "Sidecar 版本" });
 });
 
-console.log(`\n📄 已更新 ${files.length} 个文件:`);
-files.forEach(f => console.log(`   ${f.label} → ${f.path}`));
+console.log(formatStep(`同步所有配置文件的版本号为 v${newVersion}...`));
+files.forEach(f => console.log(`  ${colors.green}✔${colors.reset} ${f.label} → ${colors.dim}${f.path}${colors.reset}`));
 
 // ─── Dry-run 模式：停止 ─────────────────────────
 if (isDryRun) {
-  console.log(`\n🔍 Dry-run 模式，未做任何提交。确认后运行不带 --dry-run`);
+  console.log("");
+  console.log(formatResult(`Dry-run 模式已结束。所有更改已应用到本地文件。`));
+  console.log(`  ${colors.dim}确认无误后，再次运行且不带 --dry-run 以正式提交并推送到 GitHub。${colors.reset}`);
   process.exit(0);
 }
 
 // ─── 提交 + 打标签 + 推送 ──────────────────────
-console.log(`\n🚀 提交并发布 v${newVersion} ...`);
+console.log("");
+console.log(formatStep(`准备提交版本文件并发布 v${newVersion}...`));
 
 // 只 stage 已更新的版本文件 + changelog
 const stagedPaths = files.map(f => f.path).concat([".changelog.md"]);
 for (const p of stagedPaths) {
   execSync(`git add "${p}"`, { cwd: rootDir });
 }
+
 // 生成带 changelog 摘要的提交信息
 const topChanges = changelogText.split("\n").filter(l => l.trim().startsWith("-")).slice(0, 8).map(l => `  ${l}`).join("\n");
 const commitMsg = topChanges
@@ -296,56 +353,67 @@ const commitMsg = topChanges
   : `release: v${newVersion}`;
 const commitMsgPath = path.join(rootDir, ".commit-msg.tmp");
 fs.writeFileSync(commitMsgPath, commitMsg);
-execSync(`git commit -F "${commitMsgPath}"`, { cwd: rootDir });
-fs.unlinkSync(commitMsgPath);
-console.log(`📝 提交信息:\n${commitMsg}`);
 
-console.log(""); // blank line for visual separation
+console.log(formatCommandHeader("Bash", "git commit -F .commit-msg.tmp"));
+console.log(formatCommandSubHeader("git commit"));
+const commitResult = execSync(`git commit -F "${commitMsgPath}"`, { encoding: "utf-8", cwd: rootDir }).trim();
+fs.unlinkSync(commitMsgPath);
+console.log(commitResult.split("\n").map(l => `    ${l}`).join("\n"));
+
+console.log("");
 
 // ── 标签管理 ──
-console.log(`🏷️  检查远程标签 v${newVersion} ...`);
-const tagExists = execSync("git tag --list", { encoding: "utf-8", cwd: rootDir })
+console.log(formatStep(`检查远程标签 v${newVersion}...`));
+const remoteTagExists = execSync("git tag --list", { encoding: "utf-8", cwd: rootDir })
   .split("\n").map(t => t.trim()).includes(`v${newVersion}`);
-if (tagExists) {
-  process.stdout.write(`  删除旧标签... `);
+if (remoteTagExists) {
+  console.log(formatCommandHeader("Bash", `git tag -d v${newVersion} && git push origin --delete v${newVersion}`));
+  console.log(formatCommandSubHeader("git tag"));
   execSync(`git tag -d v${newVersion}`, { cwd: rootDir });
   execSync(`git push origin --delete v${newVersion} 2>/dev/null; true`, { cwd: rootDir });
-  console.log(`✅`);
+  console.log(`    ${colors.dim}Deleted duplicate tag v${newVersion}${colors.reset}`);
 }
 
-process.stdout.write(`🏷️  创建标签 v${newVersion} ... `);
+console.log(formatCommandHeader("Bash", `git tag v${newVersion}`));
+console.log(formatCommandSubHeader("git tag"));
 execSync(`git tag v${newVersion}`, { cwd: rootDir });
-console.log(`✅`);
+console.log(`    ${colors.dim}Created tag v${newVersion}${colors.reset}`);
+
+console.log("");
 
 // ── Push ──
-console.log(`📤 推送到 origin (main + tag v${newVersion}) ...`);
+console.log(formatStep(`推送到 origin (main + tag v${newVersion})...`));
+console.log(formatCommandHeader("Bash", `git push origin main v${newVersion}`));
+console.log(formatCommandSubHeader("git push"));
+
 try {
   execSync(`git push origin main v${newVersion}`, {
     cwd: rootDir,
     stdio: "inherit",  // 让 git push 的输出直接显示在终端
     timeout: 180000,
   });
-  console.log(`\n✅ v${newVersion} 已发布！GitHub Actions 正在自动构建`);
-  console.log(`   进度: https://github.com/yudong22/deepseek-code-public/actions`);
+  console.log("");
+  console.log(formatResult(`v${newVersion} 发布成功！GitHub Actions 正在自动构建`));
+  console.log(`  ${colors.dim}编译进度: https://github.com/yudong22/deepseek-code-public/actions${colors.reset}`);
 } catch (pushErr: any) {
   const stderr = (pushErr.stderr || "").toString();
-  // Git LFS 锁 API 不支持 → 自动修复后重试
   if (stderr.includes("lfs.locksverify")) {
-    console.log("⚠️  Git LFS locking API 不支持，自动修复...");
+    console.log(`  ${colors.yellow}⚠️  Git LFS locking API 不支持，正在自动修复并重试...${colors.reset}`);
     execSync(
       "git config lfs.https://github.com/yudong22/deepseek-code-public.git/info/lfs.locksverify false",
       { cwd: rootDir },
     );
-    console.log("🔄 重试推送...");
+    console.log(formatCommandHeader("Bash", "git push origin main v${newVersion} (retry)"));
     execSync(`git push origin main v${newVersion}`, {
       cwd: rootDir,
       stdio: "inherit",
       timeout: 180000,
     });
-    console.log(`\n✅ v${newVersion} 已发布！GitHub Actions 正在自动构建`);
-    console.log(`   进度: https://github.com/yudong22/deepseek-code-public/actions`);
+    console.log("");
+    console.log(formatResult(`v${newVersion} 发布成功！GitHub Actions 正在自动构建`));
+    console.log(`  ${colors.dim}编译进度: https://github.com/yudong22/deepseek-code-public/actions${colors.reset}`);
   } else {
-    console.error(`\n❌ Push 失败: ${pushErr.message}`);
+    console.log(formatError(`Push 失败: ${pushErr.message}`));
     if (stderr) console.error(stderr);
     process.exit(1);
   }

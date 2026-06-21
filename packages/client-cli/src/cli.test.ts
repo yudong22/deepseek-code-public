@@ -2,7 +2,7 @@
  * CLI 主入口单元测试
  * 测试：本地记忆管理、配置解析、plan 子命令（mocked API）、参数解析
  */
-import { describe, expect, test, mock, afterAll, beforeAll, beforeEach } from "bun:test";
+import { describe, expect, test, mock, afterAll, beforeAll, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -458,6 +458,155 @@ describe("resolveProviderConfig", () => {
     const cfg = { providers: { deepseek: { apiKey: "sk", model: "deepseek-chat" } } };
     const result = resolveProviderConfig("deepseek", undefined, cfg);
     expect(result.modelWarning).toBeUndefined();
+  });
+});
+
+// ─── handleMemorySync 测试 ───────────────────────
+describe("handleMemorySync", () => {
+  const configPath = path.join(os.homedir(), ".openhands/config.json");
+  let origConfigContent: string | null = null;
+  let origFetch: any;
+
+  // 共享可变状态，控制 mock 行为
+  let mockGitLogOutput = "";
+  let mockGitDiffOutput = "";
+  let mockFetchResponse: Response = {} as Response;
+
+  beforeAll(() => {
+    // 保存原始配置文件
+    if (fs.existsSync(configPath)) {
+      origConfigContent = fs.readFileSync(configPath, "utf-8");
+    }
+    origFetch = globalThis.fetch;
+
+    // 统一 mock child_process — 通过可变状态控制行为
+    mock.module("child_process", () => ({
+      execSync: (cmd: string, options: any) => {
+        if (cmd.includes("git log")) return mockGitLogOutput;
+        if (cmd.includes("git diff")) return mockGitDiffOutput;
+        return "";
+      },
+    }));
+  });
+
+  afterAll(() => {
+    // 恢复原始配置
+    if (origConfigContent !== null) {
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, origConfigContent);
+    } else if (fs.existsSync(configPath)) {
+      try {
+        const content = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        if (content._testMarker === "openhands-cli-test") {
+          fs.unlinkSync(configPath);
+        }
+      } catch {}
+    }
+    globalThis.fetch = origFetch;
+    // 恢复 child_process mock
+    mock.module("child_process", () => require("child_process"));
+  });
+
+  beforeEach(() => {
+    mockGitLogOutput = "";
+    mockGitDiffOutput = "";
+    mockFetchResponse = { ok: true, status: 200, json: async () => ({}) } as Response;
+    // 确保测试前测试配置文件已清理
+    if (fs.existsSync(configPath)) {
+      try {
+        const c = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        if (c._testMarker) fs.unlinkSync(configPath);
+      } catch {}
+    }
+  });
+
+  function writeTestConfig(overrides: Record<string, any> = {}) {
+    const testCfg = {
+      _testMarker: "openhands-cli-test",
+      serverUrl: "http://localhost:8080",
+      ...overrides,
+    };
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(testCfg));
+  }
+
+  test("should throw when no JWT configured", async () => {
+    writeTestConfig({ jwt: undefined });
+    const { handleMemorySync } = await import("./cli.ts");
+    await expect(handleMemorySync(["--commit", "HEAD"])).rejects.toThrow(
+      "请先运行 'openhands login'"
+    );
+  });
+
+  test("should throw when no --commit arg provided", async () => {
+    writeTestConfig({ jwt: "test-jwt-token" });
+    const { handleMemorySync } = await import("./cli.ts");
+    await expect(handleMemorySync([])).rejects.toThrow(
+      "必须指定 commit_id 参数"
+    );
+  });
+
+  test("should POST to /api/memory/sync on success", async () => {
+    writeTestConfig({ jwt: "test-jwt-token" });
+    mockGitLogOutput = "ai(task-123): fix type error (修复完成)";
+    mockGitDiffOutput = "--- a/file\n+++ b/file";
+
+    let fetchCalled = false;
+    let fetchBody: any = null;
+    globalThis.fetch = mock(async (url: string, options: any) => {
+      fetchCalled = true;
+      expect(url).toBe("http://localhost:8080/api/memory/sync");
+      expect(options.method).toBe("POST");
+      expect(options.headers.Authorization).toBe("Bearer test-jwt-token");
+      fetchBody = JSON.parse(options.body as string);
+      expect(fetchBody.prompt).toBeDefined();
+      expect(fetchBody.git_diff).toBeDefined();
+      expect(fetchBody.project_id).toBeDefined();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      } as Response;
+    });
+
+    const { handleMemorySync } = await import("./cli.ts");
+    await handleMemorySync(["--commit", "HEAD"]);
+
+    expect(fetchCalled).toBe(true);
+    expect(fetchBody.error_log).toBe("");
+    expect(fetchBody.heal_count).toBe(0);
+  });
+
+  test("should throw on POST failure with error message", async () => {
+    writeTestConfig({ jwt: "test-jwt-token" });
+    mockGitLogOutput = "fix: simple bugfix";
+    mockGitDiffOutput = "";
+
+    globalThis.fetch = mock(async () => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({ error: "Qdrant connection failed" }),
+    } as Response));
+
+    const { handleMemorySync } = await import("./cli.ts");
+    await expect(handleMemorySync(["--commit", "HEAD"])).rejects.toThrow(
+      "网关上报记忆失败"
+    );
+  });
+
+  test("should parse git log prompt correctly via regex", () => {
+    // 测试 commit message 解析正则（handleMemorySync 内部逻辑）
+    const commitMsg = "ai(task-abc): add user login page (修复完成)";
+    const match = commitMsg.match(/ai\(.*?\):\s*(.*?)\s*\(/);
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("add user login page");
+
+    // 无匹配时回退到完整 commit message
+    const plainMsg = "fix: simple bugfix";
+    const noMatch = plainMsg.match(/ai\(.*?\):\s*(.*?)\s*\(/);
+    const prompt = noMatch && noMatch[1] ? noMatch[1] : plainMsg;
+    expect(prompt).toBe("fix: simple bugfix");
   });
 });
 

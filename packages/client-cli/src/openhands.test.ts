@@ -1,9 +1,9 @@
-import { describe, expect, test, mock, afterAll, afterEach, beforeAll, beforeEach } from "bun:test";
+import { describe, expect, test, mock, afterAll, afterEach, beforeAll, beforeEach, spyOn } from "bun:test";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { fastValidate } from "./fast-validate.js";
-import { callAgent } from "./openhands-call.js";
+import { callAgent, handleQuestion } from "./openhands-call.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -336,5 +336,178 @@ describe("fastValidate - additional edge cases", () => {
     const result = parseYaml(yaml);
     expect(result.verification_pipeline.test_all.match).toBe("src/**/*.ts");
     expect(result.verification_pipeline.test_all.cmd).toBe("tsc");
+  });
+});
+
+// ─── handleQuestion: 交互式 Q&A 协议测试 ─────────
+describe("handleQuestion - Interactive Q&A Protocol", () => {
+  let logSpy: any;
+  let stdinMock: { write: (data: string) => void; end: () => void };
+  const origStdinOnce = process.stdin.once;
+  const origStdinResume = process.stdin.resume;
+  const origStdinPause = process.stdin.pause;
+
+  beforeAll(() => {
+    // 全局 mock process.stdin 交互方法，防止真实终端等待
+    process.stdin.once = mock((event: string, cb: Function) => process.stdin as any);
+    process.stdin.resume = mock(() => process.stdin as any);
+    process.stdin.pause = mock(() => process.stdin as any);
+  });
+
+  afterAll(() => {
+    process.stdin.once = origStdinOnce;
+    process.stdin.resume = origStdinResume;
+    process.stdin.pause = origStdinPause;
+  });
+
+  beforeEach(() => {
+    logSpy = spyOn(console, "log").mockImplementation(() => {});
+    stdinMock = {
+      write: mock(() => {}),
+      end: mock(() => {}),
+    };
+    spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  test("should parse question field from args JSON", () => {
+    const args = JSON.stringify({
+      question: "Which approach should we use?",
+      options: [   // 注意: 顶层 options 被忽略，只有 questions[0].options 有效
+        { label: "Redux", description: "State management" },
+        { label: "Zustand", description: "Lightweight" },
+      ],
+    });
+
+    handleQuestion(args, stdinMock as any);
+
+    // 验证 console.log 包含问题文本
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    const questionLine = logCalls.find((l: string) => l.includes("Which approach should we use?"));
+    expect(questionLine).toBeDefined();
+    expect(questionLine).toContain("❓");
+  });
+
+  test("should parse questions array format", () => {
+    const args = JSON.stringify({
+      questions: [
+        {
+          question: "Select a framework",
+          options: [
+            { label: "React" },
+            { label: "Vue" },
+            { label: "Svelte" },
+          ],
+        },
+      ],
+    });
+
+    handleQuestion(args, stdinMock as any);
+
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    expect(logCalls.some((l: string) => l.includes("Select a framework"))).toBe(true);
+  });
+
+  test("should display options with numbering (questions array format)", () => {
+    // handleQuestion 只读取 questions[0].options，不读取顶层 options
+    const args = JSON.stringify({
+      questions: [
+        {
+          question: "Pick one",
+          options: [
+            { label: "Option A" },
+            { label: "Option B (Recommended)", description: "Best choice" },
+            { label: "Option C" },
+          ],
+        },
+      ],
+    });
+
+    handleQuestion(args, stdinMock as any);
+
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    expect(logCalls.some((l: string) => l.includes("1.") && l.includes("Option A"))).toBe(true);
+    expect(logCalls.some((l: string) => l.includes("2.") && l.includes("Option B (Recommended)"))).toBe(true);
+    expect(logCalls.some((l: string) => l.includes("3.") && l.includes("Option C"))).toBe(true);
+    // Recommended option should have checkmark
+    expect(logCalls.some((l: string) => l.includes("✅"))).toBe(true);
+  });
+
+  test("should show 'Agent 提出了一个问题' as default when no question field", () => {
+    // 顶层 options 被忽略，无 question 时显示默认文案
+    const args = JSON.stringify({ options: [{ label: "Yes" }, { label: "No" }] });
+
+    handleQuestion(args, stdinMock as any);
+
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    expect(logCalls.some((l: string) => l.includes("Agent 提出了一个问题"))).toBe(true);
+  });
+
+  test("should handle empty options array", () => {
+    const args = JSON.stringify({
+      question: "Input your answer:",
+      options: [],
+    });
+
+    expect(() => handleQuestion(args, stdinMock as any)).not.toThrow();
+
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    expect(logCalls.some((l: string) => l.includes("Input your answer:"))).toBe(true);
+  });
+
+  test("should handle missing options field gracefully", () => {
+    const args = JSON.stringify({
+      question: "What is your name?",
+    });
+
+    expect(() => handleQuestion(args, stdinMock as any)).not.toThrow();
+
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    expect(logCalls.some((l: string) => l.includes("What is your name?"))).toBe(true);
+  });
+
+  test("should tolerate invalid JSON args without crashing", () => {
+    const badJson = "{ question: broken json }";
+
+    expect(() => handleQuestion(badJson, stdinMock as any)).not.toThrow();
+
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    expect(logCalls.some((l: string) => l.includes("Agent 提出了一个问题"))).toBe(true);
+  });
+
+  test("should tolerate empty string args without crashing", () => {
+    expect(() => handleQuestion("", stdinMock as any)).not.toThrow();
+
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    expect(logCalls.some((l: string) => l.includes("Agent 提出了一个问题"))).toBe(true);
+  });
+
+  test("should tolerate null/undefined args without crashing", () => {
+    // @ts-ignore - 故意测试边界情况
+    expect(() => handleQuestion("null", stdinMock as any)).not.toThrow();
+    // @ts-ignore
+    expect(() => handleQuestion("{}", stdinMock as any)).not.toThrow();
+  });
+
+  test("should use options label or value fallback", () => {
+    const args = JSON.stringify({
+      questions: [{
+        question: "Choose",
+        options: [
+          { label: "Nice Label" },
+          { value: "val-only" }, // no label → falls back to [object Object]
+        ],
+      }],
+    });
+
+    handleQuestion(args, stdinMock as any);
+
+    const logCalls = logSpy.mock.calls.map((c: any) => c[0]);
+    expect(logCalls.some((l: string) => l.includes("Nice Label"))).toBe(true);
+    // 无 label 时回退到 opt 对象本身（[object Object]）
+    expect(logCalls.some((l: string) => l.includes("[object Object]"))).toBe(true);
   });
 });

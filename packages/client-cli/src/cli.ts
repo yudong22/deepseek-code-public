@@ -790,7 +790,7 @@ async function handleRun(args: string[]) {
   }
 }
 
-async function handleMemorySync(args: string[]) {
+export async function handleMemorySync(args: string[]) {
   const cfg = loadConfig();
   if (!cfg || !cfg.jwt) {
     throw new Error("请先运行 'openhands login' 完成授权登录。");
