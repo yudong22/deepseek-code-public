@@ -86,21 +86,68 @@ jobs:
           tauriScript: bun run tauri
           args: --target aarch64-apple-darwin
 
-      - name: Generate updater signature for release
+      - name: Generate updater signature and update update.json
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          DMG_PATH="apps/desktop/src-tauri/target/release/bundle/dmg/deepseek-code_${VERSION}_aarch64.dmg"
+          ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
+          SIGNATURE=""
 
-          if [ -f "$DMG_PATH" ]; then
-            # 生成签名
-            npx @tauri-apps/cli@latest signer sign \
+          # Tauri 构建时若设置了 TAURI_SIGNING_PRIVATE_KEY 会自动签名并输出签名
+          # 这里从构建日志或 artifacts 中获取签名
+          # 优先查找 .tar.gz（updater 格式），回退到 .dmg
+          TAR_PATH=$(find "$ARCHIVE_DIR" -name "*.tar.gz" -print -quit 2>/dev/null || true)
+          DMG_PATH=$(find "$ARCHIVE_DIR" -name "*.dmg" -print -quit 2>/dev/null || true)
+
+          if [ -n "$TAR_PATH" ]; then
+            echo "Signing $TAR_PATH ..."
+            SIGNATURE=$(npx @tauri-apps/cli@latest signer sign \
               -k <(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}") \
               -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
-              "$DMG_PATH" \
-              2>/dev/null || echo "Warning: signing failed"
-
-            echo "✅ Update signing completed"
+              "$TAR_PATH" 2>/dev/null | grep -oP 'signature: \K\S+' || true)
+          elif [ -n "$DMG_PATH" ]; then
+            echo "Signing $DMG_PATH (no .tar.gz found) ..."
+            SIGNATURE=$(npx @tauri-apps/cli@latest signer sign \
+              -k <(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}") \
+              -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
+              "$DMG_PATH" 2>/dev/null | grep -oP 'signature: \K\S+' || true)
           else
-            echo "⚠️  DMG not found at $DMG_PATH, skipping updater signing"
+            echo "⚠️  No bundle artifacts found, skipping signing"
+          fi
+
+          # 将签名写入 update.json
+          if [ -n "$SIGNATURE" ] && [ -f "update.json" ]; then
+            # 使用 Python 或 node 更新 JSON
+            node -e "
+              const fs = require('fs');
+              const up = JSON.parse(fs.readFileSync('update.json', 'utf-8'));
+              up.version = '$VERSION';
+              up.pub_date = new Date().toISOString().replace(/\.\d{3}Z/, 'Z');
+              if (up.platforms) {
+                const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
+                const key = 'darwin-' + arch;
+                if (up.platforms[key]) {
+                  up.platforms[key].signature = '$SIGNATURE';
+                  up.platforms[key].url = 'https://github.com/yudong22/deepseek-code-public/releases/download/v$VERSION/deepseek-code_' + arch + '.app.tar.gz';
+                }
+              }
+              fs.writeFileSync('update.json', JSON.stringify(up, null, 2) + '\n');
+              console.log('✅ update.json updated with signature');
+            "
+          else
+            echo "⚠️  No signature generated, update.json unchanged"
+          fi
+
+      - name: Commit update.json signature
+        shell: bash
+        run: |
+          if git diff --quiet update.json; then
+            echo "update.json unchanged, skipping commit"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add update.json
+            git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
+            git push
+            echo "✅ update.json signature committed"
           fi
