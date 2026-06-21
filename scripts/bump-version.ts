@@ -222,12 +222,12 @@ try {
 }
 
 // ─── 生成 Changelog ─────────────────────────────
-function generateChangelog(): string {
+function generateChangelog(): { text: string; summary: string } {
   const range = lastTag ? `${lastTag}..HEAD` : "--all";
   let log = "";
   try {
     log = execSync(`git log --oneline --no-decorate ${range}`, { encoding: "utf-8", cwd: rootDir });
-  } catch { return "无提交记录。"; }
+  } catch { return { text: "无提交记录。", summary: "" }; }
 
   const lines = log.trim().split("\n").filter(Boolean);
   const groups: Record<string, string[]> = {
@@ -236,11 +236,20 @@ function generateChangelog(): string {
   };
 
   for (const line of lines) {
-    const match = line.match(/^[a-f0-9]+\s+(feat|fix|docs|refactor|style|perf|test|chore)[:(]/);
+    // 匹配 conventional commit 前缀：feat:/fix: 等
+    const match = line.match(/^[a-f0-9]+\s+(feat|fix|docs|refactor|style|perf|test|chore)[(:]/);
     const raw = line.replace(/^[a-f0-9]+\s+/, "");
     if (match && groups[match[1]]) groups[match[1]].push(raw);
     else groups.other.push(raw);
   }
+
+  // 生成摘要：feat:3 fix:1 docs:2
+  const summaryParts: string[] = [];
+  for (const key of ["feat","fix","docs","refactor","perf","test","chore"]) {
+    const n = groups[key]?.length || 0;
+    if (n > 0) summaryParts.push(`${key}:${n}`);
+  }
+  if (groups.other.length > 0) summaryParts.push(`other:${groups.other.length}`);
 
   const labels: Record<string, string> = {
     feat: "🚀 新功能", fix: "🐛 Bug 修复", docs: "📝 文档",
@@ -256,10 +265,13 @@ function generateChangelog(): string {
       changelog += "\n";
     }
   }
-  return changelog.trim() || "无显著变更。";
+  return {
+    text: changelog.trim() || "无显著变更。",
+    summary: summaryParts.join(" "),
+  };
 }
 
-const changelogText = generateChangelog();
+const { text: changelogText, summary: changelogSummary } = generateChangelog();
 const changelogPath = path.join(rootDir, ".changelog.md");
 fs.writeFileSync(changelogPath, changelogText);
 console.log("");
@@ -347,9 +359,10 @@ for (const p of stagedPaths) {
 }
 
 // 生成带 changelog 摘要的提交信息
+const summaryTag = changelogSummary ? ` (${changelogSummary})` : "";
 const topChanges = changelogText.split("\n").filter(l => l.trim().startsWith("-")).slice(0, 8).map(l => `  ${l}`).join("\n");
 const commitMsg = topChanges
-  ? `release: v${newVersion}\n\n${topChanges}`
+  ? `release: v${newVersion}${summaryTag}\n\n${topChanges}`
   : `release: v${newVersion}`;
 const commitMsgPath = path.join(rootDir, ".commit-msg.tmp");
 fs.writeFileSync(commitMsgPath, commitMsg);
