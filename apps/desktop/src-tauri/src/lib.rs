@@ -138,6 +138,8 @@ async fn run_agent_loop(
     let mut write_guard = stdin_handle;
     write_guard.write_all(input_str.as_bytes()).await
         .map_err(|e| format!("写入 sidecar stdin 失败: {}", e))?;
+    write_guard.write_all(b"\n").await
+        .map_err(|e| format!("写入 stdin 换行符失败: {}", e))?;
     // 存储 stdin 句柄到全局状态，保持开启
     app.manage(AgentStdin(Mutex::new(Some(write_guard))));
 
