@@ -4,6 +4,7 @@ import os from 'os';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { parseYaml } from './yaml-parser.js';
+import { renderToolLine, formatDuration } from './ui-utils.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -185,7 +186,7 @@ ${errorLog}
       if (elapsed > IDLE_WARN_MS && !idleWarnShown) {
         idleWarnShown = true;
         const elapsedSec = Math.round(elapsed / 1000);
-        console.error(`\n⏳ [openhands-call] ${elapsedSec}s 未收到 Agent 事件 (最后事件: ${lastEventType})，仍在等待 API 响应...\n`);
+        console.error(`  ⏳ ${elapsedSec}s 无事件 (最后: ${lastEventType})，等待 API 中...\n`);
       }
     }, 10000);
 
@@ -200,6 +201,9 @@ ${errorLog}
         `\n  提示: 可通过环境变量 SIDECAR_TIMEOUT_MS 调整超时时间（默认 180s）`
       ));
     }, SIDECAR_TIMEOUT_MS);
+
+    // 工具执行计时（call_id → start_time）
+    const toolTimers = new Map();
 
     let buffer = '';
     child.stdout.on('data', (data) => {
@@ -217,16 +221,16 @@ ${errorLog}
           lastEventType = event.type || 'unknown';
           switch (event.type) {
             case 'ThinkingStarted':
-              process.stdout.write(`🤔 [Thinking] `);
+              process.stdout.write(`  🤔 `);
               break;
             case 'Thinking':
-              process.stdout.write(event.payload);
+              process.stdout.write(`\x1b[90m${event.payload}\x1b[0m`);
               break;
             case 'ThinkingEnded':
               process.stdout.write(`\n`);
               break;
             case 'TextStarted':
-              process.stdout.write(`💬 [Response] `);
+              process.stdout.write(`  💬 `);
               break;
             case 'Text':
               process.stdout.write(event.payload);
@@ -236,28 +240,43 @@ ${errorLog}
               break;
             case 'ToolCall':
               if (event.payload.name === 'question') {
-                // 交互式提问：显示问题并等待用户输入
                 handleQuestion(event.payload.args, child.stdin);
               } else {
-                console.log(`🛠️  [工具调用] ${event.payload.name}(${event.payload.args})`);
+                const callId = event.payload.call_id || '';
+                toolTimers.set(callId, Date.now());
+                const line = renderToolLine('◇', event.payload.name, event.payload.args, '');
+                console.log(line);
               }
               break;
             case 'ToolStarted':
+              // ToolStarted 不含完整信息，用 call_id 追溯
               break;
-            case 'ToolSuccess':
-              console.log(`✅ [工具成功] ${event.payload.name}`);
+            case 'ToolSuccess': {
+              const callId = event.payload.call_id || '';
+              const startTime = toolTimers.get(callId) || Date.now();
+              const dur = formatDuration(Date.now() - startTime);
+              toolTimers.delete(callId);
+              const line = renderToolLine('\x1b[32m✓\x1b[0m', event.payload.name, '', dur);
+              console.log(line);
               break;
-            case 'ToolFailed':
-              console.log(`❌ [工具失败] ${event.payload.name}: ${event.payload.error}`);
+            }
+            case 'ToolFailed': {
+              const callId = event.payload.call_id || '';
+              const startTime = toolTimers.get(callId) || Date.now();
+              const dur = formatDuration(Date.now() - startTime);
+              toolTimers.delete(callId);
+              const line = renderToolLine('\x1b[31m✗\x1b[0m', event.payload.name, '', dur, event.payload.error);
+              console.error(line);
               break;
+            }
             case 'Finished':
-              console.log(`✨ [Agent] 任务完成`);
+              console.log(`\n  ✨ Agent 任务完成\n`);
               break;
             case 'Error':
-              console.error(`🚨 [Agent 错误] ${event.payload.message}`);
+              console.error(`  🚨 Agent 错误: ${event.payload.message}`);
               break;
             case 'Usage':
-              console.log(`📊 [Token 用量] 输入: ${event.payload.tokens_input}, 输出: ${event.payload.tokens_output}`);
+              console.log(`  📊 Token 用量: 输入 ${event.payload.tokens_input} → 输出 ${event.payload.tokens_output}`);
               break;
             default:
               console.log(line);
@@ -298,16 +317,16 @@ function handleQuestion(argsJson, stdin) {
     }
   } catch {}
 
-  console.log(`\n❓ [Agent 提问] ${questionText}`);
+  console.log(`\n  ❓ ${questionText}`);
   if (options.length > 0) {
     options.forEach((opt, i) => {
       const rec = opt.label?.includes('Recommended') ? ' ✅' : '';
-      console.log(`   ${i + 1}. ${opt.label || opt}${rec}`);
+      console.log(`     ${i + 1}. ${opt.label || opt}${rec}`);
     });
   }
 
   // 从终端读取一行用户输入
-  process.stdout.write('> ');
+  process.stdout.write('  > ');
   const origMode = process.stdin.isRaw;
   try { process.stdin.setRawMode && process.stdin.setRawMode(false); } catch {}
   process.stdin.resume();

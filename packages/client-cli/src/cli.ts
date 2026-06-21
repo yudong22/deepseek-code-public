@@ -6,6 +6,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { callAgent } from './openhands-call.js';
 import { fastValidate } from './fast-validate.js';
+import { renderStatusBar, clearStatusBar, formatDuration } from './ui-utils.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -415,6 +416,62 @@ async function handleRun(args: string[]) {
     throw new Error("必须指定任务描述参数。例如: openhands run \"修复类型错误\"");
   }
 
+  // ─── 底部状态仪表盘 ─────────────────────────
+  const pipelineStartTime = Date.now();
+  const STAGES = [
+    { label: '影子沙箱隔离' },
+    { label: '记忆检索' },
+    { label: 'Agent 执行代码开发' },
+    { label: '门禁验证与自愈' },
+    { label: '提交与记忆同步' },
+    { label: '清理沙箱' },
+  ];
+  let currentStage = 0;
+  let currentToolName = '';
+  let statusTimer: ReturnType<typeof setInterval> | null = null;
+  let statusLines = 0;
+
+  function updateDashboard(stage: number, tool?: string) {
+    currentStage = Math.max(stage, currentStage);
+    if (tool) currentToolName = tool;
+    if (statusTimer) return; // 定时器已经启动
+  }
+
+  function startDashboard() {
+    if (statusTimer) return;
+    statusTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - pipelineStartTime) / 1000);
+      const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const ss = String(elapsed % 60).padStart(2, '0');
+      const stage = STAGES[Math.min(currentStage, STAGES.length - 1)];
+
+      // 清除旧状态栏
+      if (statusLines > 0) process.stderr.write(clearStatusBar(statusLines));
+
+      const bar = renderStatusBar({
+        step: currentStage + 1,
+        totalSteps: STAGES.length,
+        label: stage.label,
+        currentTool: currentToolName || undefined,
+        model: cliModel || process.env.OPENCODE_MODEL || undefined,
+        elapsed: `${mm}:${ss}`,
+      });
+      process.stderr.write(bar + '\n');
+      statusLines = bar.split('\n').length;
+    }, 200);
+  }
+
+  function stopDashboard() {
+    if (statusTimer) {
+      clearInterval(statusTimer);
+      statusTimer = null;
+    }
+    if (statusLines > 0) {
+      process.stderr.write(clearStatusBar(statusLines));
+      statusLines = 0;
+    }
+  }
+
   const rootDir = path.resolve(__dirname, '../../..');
   const sandboxRoot = "/tmp/ai-workers";
   const sandboxDir = path.join(sandboxRoot, taskId);
@@ -461,6 +518,9 @@ async function handleRun(args: string[]) {
     fs.mkdirSync(sandboxAgentsDir, { recursive: true });
   }
 
+  startDashboard();
+  updateDashboard(1);
+
   try {
     // 2. Copy .plan.md into sandbox if --from-plan provided
     if (fromPlanPath) {
@@ -474,6 +534,7 @@ async function handleRun(args: string[]) {
     }
 
     // 3. Fetch memory
+    updateDashboard(2);
     let memoriesStr = '';
     if (hasGateway) {
       log("正在向网关拉取相关长期相似经验...");
@@ -586,6 +647,7 @@ async function handleRun(args: string[]) {
     }
 
     // 5. OpenCode agent — write code
+    updateDashboard(3);
     log("唤醒 OpenCode Agent 开始写代码...");
 
     await callAgent({
@@ -598,6 +660,7 @@ async function handleRun(args: string[]) {
     });
 
     // 6. Validation and Heal loop
+    updateDashboard(4);
     let healCount = 0;
     const maxHeals = 3;
     let isPassed = false;
@@ -637,6 +700,7 @@ async function handleRun(args: string[]) {
     }
 
     // 7. Final Commit
+    updateDashboard(5);
     log("验证全部通过！正在生成本地原子提交...");
     execSync(`git add . && git commit -m "ai(${taskId}): ${taskDesc} (自愈次数: ${healCount})"`, { cwd: sandboxDir });
 
@@ -667,8 +731,10 @@ async function handleRun(args: string[]) {
       }
     }
 
+    stopDashboard();
     // Cleanup worktree
     process.chdir(rootDir);
+    updateDashboard(6);
     log("清理影子物理沙箱...");
     execSync(`git worktree remove ${sandboxDir}`, { cwd: rootDir });
 
@@ -680,6 +746,7 @@ async function handleRun(args: string[]) {
     console.log('└──────────────────────────────────────────────────────────────────┘\n');
 
   } catch (error: any) {
+    stopDashboard();
     logError(`流水线崩溃，正在执行安全回滚: ${error.message}`);
     process.chdir(rootDir);
     try {
