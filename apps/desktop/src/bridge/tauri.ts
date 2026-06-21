@@ -61,7 +61,7 @@ export const tauriBridge: IBridge = {
       onStatus?.({ status: "checking" });
       const update = await check();
       if (!update) {
-        onStatus?.({ status: "error", error: "没有可用的更新" });
+        onStatus?.({ status: "error", error: "没有可用的更新，请前往 GitHub Releases 手动下载: https://github.com/yudong22/deepseek-code-public/releases" });
         return;
       }
 

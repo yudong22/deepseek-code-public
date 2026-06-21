@@ -1,14 +1,14 @@
 {
-  "version": "0.3.1",
-  "notes": "feat: /plan 规划模式, Tauri updater 静默自动更新, 斜杠命令持久化, session UUID 格式, CLAUDE.md 全面更新",
-  "pub_date": "2026-06-21T10:00:00Z",
+  "version": "0.4.1",
+  "notes": "交互式 Q&A（CLI + 桌面端）、QuestionCard 组件、Sidecar 行协议、CLI 单元测试补充、空闲检测优化",
+  "pub_date": "2026-06-21T18:00:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.3.1/deepseek-code_aarch64.app.tar.gz",
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.1/deepseek-code_aarch64.app.tar.gz",
       "signature": ""
     },
     "darwin-x86_64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.3.1/deepseek-code_x86_64.app.tar.gz",
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.1/deepseek-code_x86_64.app.tar.gz",
       "signature": ""
     }
   }
