@@ -70,12 +70,37 @@ export function renderMarkdown(text: string) {
     tableAlignments = [];
   };
 
+  // 列表状态
+  let currentListType: "ul" | "ol" | null = null;
+  let currentListItems: React.ReactNode[] = [];
+
+  const pushList = (keyIndex: number) => {
+    if (!currentListType) return;
+    if (currentListType === "ul") {
+      elements.push(
+        <ul key={`ul-${keyIndex}`} style={{ margin: "4px 0 6px 20px" }}>
+          {currentListItems}
+        </ul>
+      );
+    } else if (currentListType === "ol") {
+      elements.push(
+        <ol key={`ol-${keyIndex}`} style={{ margin: "4px 0 6px 20px" }}>
+          {currentListItems}
+        </ol>
+      );
+    }
+    // 重置
+    currentListType = null;
+    currentListItems = [];
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // 代码块
     if (line.startsWith("```")) {
       if (inTable) pushTable(i);
+      if (currentListType) pushList(i);
       if (inCodeBlock) {
         // 代码块结束
         if (codeBlockLang === "mermaid") {
@@ -104,9 +129,17 @@ export function renderMarkdown(text: string) {
       continue;
     }
 
+    // 空行
+    if (line.trim() === "") {
+      if (inTable) pushTable(i);
+      if (currentListType) pushList(i);
+      continue;
+    }
+
     // Markdown 表格解析
     const isTableRow = line.trim().startsWith("|") && line.trim().endsWith("|");
     if (isTableRow) {
+      if (currentListType) pushList(i);
       if (!inTable) {
         // 检查下一行是否是分隔符行
         const nextLine = lines[i + 1];
@@ -137,16 +170,19 @@ export function renderMarkdown(text: string) {
 
     // 标题
     if (line.startsWith("### ")) {
+      if (currentListType) pushList(i);
       elements.push(<h3 key={`h3-${i}`} style={{ marginTop: "14px", marginBottom: "6px", fontSize: "14px", fontWeight: "600" }}>{parseInlineMarkdown(line.slice(4))}</h3>);
       continue;
     }
 
     // 无序列表
     if (line.startsWith("- ")) {
-      elements.push(
-        <ul key={`ul-${i}`} style={{ margin: "4px 0 6px 20px" }}>
-          <li>{parseInlineMarkdown(line.slice(2))}</li>
-        </ul>
+      if (currentListType === "ol") pushList(i);
+      if (!currentListType) {
+        currentListType = "ul";
+      }
+      currentListItems.push(
+        <li key={`li-${i}`}>{parseInlineMarkdown(line.slice(2))}</li>
       );
       continue;
     }
@@ -154,23 +190,27 @@ export function renderMarkdown(text: string) {
     // 有序列表
     const numMatch = line.match(/^(\d+)\.\s(.*)/);
     if (numMatch) {
-      elements.push(
-        <ol key={`ol-${i}`} style={{ margin: "4px 0 6px 20px" }}>
-          <li>{parseInlineMarkdown(numMatch[2])}</li>
-        </ol>
+      if (currentListType === "ul") pushList(i);
+      if (!currentListType) {
+        currentListType = "ol";
+      }
+      currentListItems.push(
+        <li key={`li-${i}`}>{parseInlineMarkdown(numMatch[2])}</li>
       );
       continue;
     }
 
     // 纯文本 / 段落
-    if (line.trim() !== "") {
-      elements.push(<p key={`p-${i}`} style={{ marginBottom: "10px" }}>{parseInlineMarkdown(line)}</p>);
-    }
+    if (currentListType) pushList(i);
+    elements.push(<p key={`p-${i}`} style={{ marginBottom: "10px" }}>{parseInlineMarkdown(line)}</p>);
   }
 
-  // 循环结束，检查是否还有未输出的表格
+  // 循环结束，检查是否还有未输出的表格或列表
   if (inTable) {
     pushTable(lines.length);
+  }
+  if (currentListType) {
+    pushList(lines.length);
   }
 
   return elements;
