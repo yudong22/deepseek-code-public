@@ -57,18 +57,20 @@ export function derivePlanSessionId(sessionId?: string): string | undefined {
 async function main() {
   try {
     // 1. Read first line from stdin (JSON with messages[] or plain text)
-    //    Uses readline for line-by-line protocol to support interactive Q&A
+    //    Uses readline 'line' event (not async iterator) to ensure clean process exit
     const rl = createInterface({ input: process.stdin, terminal: false })
-    const stdinLines = rl[Symbol.asyncIterator]()
 
-    const firstLine = await stdinLines.next()
-    if (firstLine.done || !firstLine.value?.trim()) {
+    const firstLine = await new Promise<string>((resolve, reject) => {
+      rl.once('line', (line) => resolve(line))
+      rl.once('close', () => reject(new Error('stdin closed before first line')))
+    })
+    if (!firstLine?.trim()) {
       printEvent({ type: "Error", payload: { message: "Prompt is empty." } })
       process.exit(1)
     }
 
     // 2. Parse input
-    const rawInput = firstLine.value.trim()
+    const rawInput = firstLine.trim()
     const { prompt, systemMessages, parsedInput } = parseStdinInput(rawInput)
 
     // 3. Read configuration from environment variables
@@ -222,17 +224,24 @@ async function main() {
     }
 
     // 4b. 运行 agent 循环（并发的回答读取器支持交互式 Q&A）
-    const promptPromise = session.prompt(prompt, onEvent).finally(() => rl.close())
+    const ac = new AbortController()
+    const promptPromise = session.prompt(prompt, onEvent).finally(() => ac.abort())
 
     // 从 stdin 读取后续行作为用户对 question 工具的回复
-    const answerReader = (async () => {
-      for await (const line of stdinLines) {
+    // 使用 'line' 事件而非 for-await 避免进程不退出
+    const answerReader = new Promise<void>(resolve => {
+      rl.on('line', (line: string) => {
+        if (ac.signal.aborted) return
         if (line.trim()) {
-          try { await session.respond(line.trim()) }
-          catch (_e) { /* respond 失败不影响主流程 */ }
+          session.respond(line.trim()).catch(() => {})
         }
-      }
-    })()
+      })
+      rl.on('close', () => resolve())
+      ac.signal.addEventListener('abort', () => {
+        rl.close()
+        resolve()
+      })
+    })
 
     await Promise.all([promptPromise, answerReader])
 
