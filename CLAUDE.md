@@ -21,14 +21,20 @@ bun run preview                      # 桌面端开发模式 (Tauri + Rust + SQL
 bun run build:desktop                # 构建前端 (sidecar + tsc + vite build)，tauri build 会自动调用
 bun run build:mac                    # 构建 macOS .app，终止旧实例，复制到 /Applications
 bun run build:sidecar                # 单独编译 sidecar 二进制 (packages/sidecar/src/index.ts → Bun)
-bun run test                         # 全量检查：cargo check + bun test
+bun run test                         # 全量检查：203 tests, 7 文件 (cargo check + bun test)
 bun run scripts/bump-version.ts <ver> # 统一更新所有配置文件的版本号
 ```
 
 **Test specific targets:**
 ```bash
-bun test apps/desktop/src/bridge/bridge.test.ts   # Mock bridge unit tests
-bun test packages/client-cli/src/openhands.test.ts # CLI pipeline unit tests
+bun test apps/desktop/src/bridge/bridge.test.ts           # Mock bridge (14 tests)
+bun test packages/client-cli/src/openhands.test.ts         # CLI pipeline + Q&A protocol (28 tests)
+bun test packages/client-cli/src/cli.test.ts               # Config/plan/memory sync (34 tests)
+bun test packages/sidecar/src/index.test.ts                # Sidecar event routing (49 tests)
+bun test packages/client-cli/src/ui-utils.test.ts          # UI utils pure functions (21 tests)
+bun test packages/client-cli/src/protocol.test.ts          # Sidecar stdin/stdout contract (29 tests)
+bun test apps/desktop/src/ag-ui/adapter.test.ts            # AG-UI adapter mapping (24 tests)
+bun test ./apps/desktop/src/utils/markdown.test.tsx         # Markdown renderer (4 tests)
 ```
 
 **Go Gateway:**
@@ -235,6 +241,20 @@ packages/sidecar/src/index.ts → bun build --compile → apps/desktop/src-tauri
 - Requires `../opencode` project directory to exist (the `@opencode/core` package dependency at `../opencode/packages/core/`)
 - Binary is tracked via **Git LFS** (`.gitattributes` configured)
 - If `../opencode` is absent, `build:sidecar` gracefully skips the build
+
+### Rust Sidecar 重构测试合约
+
+当前测试覆盖已为 v0.5.x Rust sidecar 重构建立了完整的协议合约：
+
+| 合约 | 测试文件 | 测试数 | 覆盖内容 |
+|------|----------|--------|----------|
+| stdin/stdout 协议 | `protocol.test.ts` | 29 | JSON 行格式、env 变量、退出码语义 |
+| 事件路由 | `sidecar/index.test.ts` | 49 | 17 种 AgentEvent 映射、模型供应商映射 |
+| AG-UI 映射 | `adapter.test.ts` | 24 | 15 种 AG-UI 事件转换、消息树累积 |
+| 交互式 Q&A | `openhands.test.ts` | 10 | question 工具参数解析、选项显示、容错 |
+| CLI 管线 | `cli.test.ts` | 34 | 配置解析、plan/memorySync、模型归一化 |
+
+**重构验收标准**：Rust sidecar 实现通过 `protocol.test.ts` + `sidecar/index.test.ts` + `adapter.test.ts`（共 102 tests）即证明行为与当前 TS 实现一致。
 
 ### Docker Compose
 

@@ -1,7 +1,7 @@
 {
   "version": "0.4.4",
-  "notes": "### 🚀 新功能；- feat: 版本升级至0.4.4并更新tauri配置；- feat: 支持自动提交并更新tauri配置",
-  "pub_date": "2026-06-21T14:41:11Z",
+  "notes": "### 🚀 新功能；- feat: 新增 handleMemorySync 和 handleQuestion 测试，优化 bump-version 终端输出",
+  "pub_date": "2026-06-21T14:50:21Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.4/deepseek-code_aarch64.app.tar.gz",
