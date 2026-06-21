@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 1. 解析参数并且提供导出
-export async function callAgent({ agent, promptVal, rulesPath, fixTarget, sandboxDir, rootDir }) {
+export async function callAgent({ agent, promptVal, rulesPath, fixTarget, sandboxDir, rootDir, env }) {
   if (agent !== 'hermes' && agent !== 'opencode') {
     throw new Error('必须指定 agent 参数为 hermes 或 opencode');
   }
@@ -152,7 +152,7 @@ ${errorLog}
     return new Promise((resolve, reject) => {
       const child = spawn(hermesCmd, hermesArgs, {
         stdio: 'inherit',
-        env: process.env,
+        env: env || process.env,
         cwd: resolvedSandboxDir
       });
       
@@ -178,33 +178,50 @@ ${errorLog}
     }
     const sidecarPrompt = `请在当前工作区中修复编译/语法报错。报错内容：${errorLogContent || '详见 AGENTS.md'}`;
     
-    const env = {
-      ...process.env,
-      OPENCODE_MODEL: model,
-      WORKSPACE_PATH: resolvedSandboxDir,
-      OPENCODE_SESSION_ID: `session-${agent}-${Date.now()}`
-    };
-    
+    const spawnEnv = env || process.env;
+
     return new Promise((resolve, reject) => {
       const child = spawn('bun', ['run', sidecarTsPath], {
         stdio: ['pipe', 'pipe', 'inherit'],
-        env,
+        env: {
+          ...spawnEnv,
+          OPENCODE_MODEL: model,
+          WORKSPACE_PATH: resolvedSandboxDir,
+          OPENCODE_SESSION_ID: `session-${agent}-${Date.now()}`
+        },
         cwd: resolvedSandboxDir
       });
-      
-      child.stdin.write(sidecarPrompt);
+
+      // Read AGENTS.md content and send as JSON with system message
+      const agentsMdContent = fs.existsSync(agentsMdPath)
+        ? fs.readFileSync(agentsMdPath, 'utf-8')
+        : '';
+      const stdinInput = JSON.stringify({
+        messages: [
+          { role: "system", content: agentsMdContent },
+          { role: "user", content: sidecarPrompt }
+        ]
+      });
+      child.stdin.write(stdinInput);
       child.stdin.end();
-      
+
+      // Sidecar timeout handling
+      const SIDECAR_TIMEOUT_MS = parseInt(process.env.SIDECAR_TIMEOUT_MS || "120000", 10);
+      const timeout = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error(`OpenCode 侧车进程超时 (${SIDECAR_TIMEOUT_MS}ms)，已强制终止`));
+      }, SIDECAR_TIMEOUT_MS);
+
       let buffer = '';
       child.stdout.on('data', (data) => {
         buffer += data.toString();
         let lines = buffer.split('\n');
         buffer = lines.pop();
-        
+
         for (let line of lines) {
           line = line.trim();
           if (!line) continue;
-          
+
           try {
             const event = JSON.parse(line);
             switch (event.type) {
@@ -254,8 +271,9 @@ ${errorLog}
           }
         }
       });
-      
+
       child.on('close', (code) => {
+        clearTimeout(timeout);
         if (code !== 0) {
           reject(new Error(`Agent [${agent}] 异常退出，退出码: ${code}`));
         } else {
@@ -263,6 +281,8 @@ ${errorLog}
           resolve();
         }
       });
+
+      child.on('error', () => clearTimeout(timeout));
     });
   }
 }

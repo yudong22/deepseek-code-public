@@ -214,13 +214,13 @@ async function handleDoctor() {
 
 async function handleRun(args: string[]) {
   const cfg = loadConfig();
-  if (!cfg || !cfg.jwt) {
-    throw new Error("请先运行 'openhands login' 完成授权登录。");
-  }
+  const hasGateway = cfg && cfg.jwt && Date.now() < cfg.expiresAt;
 
-  // Token Expiration check
-  if (Date.now() >= cfg.expiresAt) {
-    throw new Error("授权凭证已过期，请重新运行 'openhands login'。");
+  if (!hasGateway) {
+    log("未检测到网关凭证，将以离线模式直连 DeepSeek API（需要 DEEPSEEK_API_KEY 环境变量）...");
+    if (!process.env.DEEPSEEK_API_KEY) {
+      throw new Error("离线模式需要设置环境变量 DEEPSEEK_API_KEY。请先 export DEEPSEEK_API_KEY=sk-...");
+    }
   }
 
   let taskId = `task-${Date.now()}`;
@@ -286,48 +286,54 @@ async function handleRun(args: string[]) {
   }
 
   try {
-    // 2. Fetch memory from Go gateway
-    log("正在向网关拉取相关长期相似经验...");
+    // 2. Fetch memory from Go gateway (only when gateway available)
     let memoriesStr = '';
-    try {
-      const searchResp = await fetch(`${cfg.serverUrl}/api/memory/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${cfg.jwt}`
-        },
-        body: JSON.stringify({ prompt: taskDesc })
-      });
-      if (searchResp.ok) {
-        const searchResult = await searchResp.json();
-        const memories = searchResult.memories || [];
-        if (memories.length > 0) {
-          memoriesStr += "\n## 💡 【网关历史推荐经验参考】\n";
-          memories.forEach((m: any, idx: number) => {
-            memoriesStr += `### 推荐案例 ${idx + 1} (相似度: ${(m.score * 100).toFixed(1)}%)\n`;
-            memoriesStr += `- **任务描述**：${m.prompt}\n`;
-            memoriesStr += `- **修改方案 (Git Diff)**：\n\`\`\`diff\n${m.git_diff}\n\`\`\`\n`;
-            if (m.error_log) {
-              memoriesStr += `- **前置报错**：\n\`\`\`\n${m.error_log}\n\`\`\`\n`;
-            }
-          });
-        } else {
-          log("未匹配到相关开发经验，启动全新探索模式。");
+    if (hasGateway) {
+      log("正在向网关拉取相关长期相似经验...");
+      try {
+        const searchResp = await fetch(`${cfg.serverUrl}/api/memory/search`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cfg.jwt}`
+          },
+          body: JSON.stringify({ prompt: taskDesc })
+        });
+        if (searchResp.ok) {
+          const searchResult = await searchResp.json();
+          const memories = searchResult.memories || [];
+          if (memories.length > 0) {
+            memoriesStr += "\n## 💡 【网关历史推荐经验参考】\n";
+            memories.forEach((m: any, idx: number) => {
+              memoriesStr += `### 推荐案例 ${idx + 1} (相似度: ${(m.score * 100).toFixed(1)}%)\n`;
+              memoriesStr += `- **任务描述**：${m.prompt}\n`;
+              memoriesStr += `- **修改方案 (Git Diff)**：\n\`\`\`diff\n${m.git_diff}\n\`\`\`\n`;
+              if (m.error_log) {
+                memoriesStr += `- **前置报错**：\n\`\`\`\n${m.error_log}\n\`\`\`\n`;
+              }
+            });
+          } else {
+            log("未匹配到相关开发经验，启动全新探索模式。");
+          }
         }
+      } catch (e: any) {
+        log(`连接网关记忆库失败: ${e.message}。将跳过检索。`);
       }
-    } catch (e: any) {
-      log(`连接网关记忆库失败: ${e.message}。将跳过检索。`);
+    } else {
+      log("离线模式：跳过网关记忆检索。");
     }
 
     // 3. Setup rules and AGENTS.md
-    // We override local environment variables to route LLM requests through the proxy gateway
-    const proxyEnv = {
-      ...process.env,
-      OPENAI_BASE_URL: `${cfg.serverUrl}/v1`,
-      OPENAI_API_KEY: cfg.jwt,
-      DEEPSEEK_API_KEY: cfg.jwt,
-      WORKSPACE_PATH: sandboxDir
-    };
+    // Build the env for agent spawn — no global process.env mutation
+    const spawnEnv = hasGateway
+      ? {
+          ...process.env,
+          OPENAI_BASE_URL: `${cfg.serverUrl}/v1`,
+          OPENAI_API_KEY: cfg.jwt,
+          DEEPSEEK_API_KEY: cfg.jwt,
+          WORKSPACE_PATH: sandboxDir
+        }
+      : { ...process.env, WORKSPACE_PATH: sandboxDir };
 
     // Temporarily write the injected memory context to rules md
     const originalRulesPath = path.join(rootDir, '.agents/agent.md');
@@ -340,65 +346,66 @@ async function handleRun(args: string[]) {
 
     // 4. Spawn Hermes
     log("唤醒主力开发 Agent (Hermes) 开始写代码...");
-    // Inject the proxy env so openhands-call spawns agent connected to Go server
-    // Use try-finally to ensure process.env is restored on ALL exit paths
-    const originalEnv = process.env;
-    let proxyEnvApplied = false;
-    try {
-      Object.assign(process.env, proxyEnv);
-      proxyEnvApplied = true;
 
+    await callAgent({
+      agent: 'hermes',
+      promptVal: taskDesc,
+      rulesPath: dynamicRulesPath,
+      sandboxDir,
+      rootDir,
+      env: spawnEnv
+    });
+
+    // 5. Validation and OpenCode Heal loop
+    let healCount = 0;
+    const maxHeals = 3;
+    let isPassed = false;
+
+    while (!isPassed && healCount < maxHeals) {
       try {
-        await callAgent({
-          agent: 'hermes',
-          promptVal: taskDesc,
-          rulesPath: dynamicRulesPath,
-          sandboxDir,
-          rootDir
-        });
-      } catch (e: any) {
-        throw new Error(`Hermes 运行期间发生错误: ${e.message}`);
-      }
+        log("触发极速门禁验证验证...");
+        await fastValidate({ rootDir, sandboxDir });
+        isPassed = true;
+      } catch (validationError: any) {
+        healCount++;
+        logError(`[验证失败] 第 ${healCount} 次唤醒 OpenCode CI 自愈...`);
 
-      // 5. Validation and OpenCode Heal loop
-      let healCount = 0;
-      const maxHeals = 3;
-      let isPassed = false;
+        const errorLog = validationError.message;
+        const lastErrorLogPath = path.join(sandboxAgentsDir, 'last_error.log');
+        fs.writeFileSync(lastErrorLogPath, errorLog);
 
-      while (!isPassed && healCount < maxHeals) {
         try {
-          log("触发极速门禁验证验证...");
-          await fastValidate({ rootDir, sandboxDir });
-          isPassed = true;
-        } catch (validationError: any) {
-          healCount++;
-          logError(`[验证失败] 第 ${healCount} 次唤醒 OpenCode CI 自愈...`);
-
-          const errorLog = validationError.message;
-          const lastErrorLogPath = path.join(sandboxAgentsDir, 'last_error.log');
-          fs.writeFileSync(lastErrorLogPath, errorLog);
-
-          try {
-            await callAgent({
-              agent: 'opencode',
-              rulesPath: dynamicRulesPath,
-              fixTarget: lastErrorLogPath,
-              sandboxDir,
-              rootDir
-            });
-          } catch (e: any) {
-            logError(`OpenCode 运行期间抛出异常: ${e.message}`);
-          }
+          await callAgent({
+            agent: 'opencode',
+            rulesPath: dynamicRulesPath,
+            fixTarget: lastErrorLogPath,
+            sandboxDir,
+            rootDir,
+            env: process.env  // 使用干净的环境变量（无网关代理）
+          });
+        } catch (e: any) {
+          logError(`OpenCode 运行期间抛出异常: ${e.message}`);
         }
       }
+    }
 
-      if (!isPassed) {
-        throw new Error(`OpenCode 自愈达到最大上限次数 (${maxHeals})，代码仍有错误！`);
-      }
+    if (!isPassed) {
+      throw new Error(`OpenCode 自愈达到最大上限次数 (${maxHeals})，代码仍有错误！`);
+    }
 
     // 6. Final Commit
     log("验证全部通过！正在生成本地原子提交...");
     execSync(`git add . && git commit -m "ai(${taskId}): ${taskDesc} (自愈次数: ${healCount})"`, { cwd: sandboxDir });
+
+    // 6b. Auto-sync memory if gateway available
+    if (hasGateway) {
+      log("正在同步经验到网关记忆库...");
+      try {
+        await handleMemorySync(['--commit', 'HEAD']);
+      } catch (e: any) {
+        log(`记忆同步失败（非致命）: ${e.message}`);
+      }
+    }
 
     // Cleanup worktree
     process.chdir(rootDir);
@@ -424,11 +431,6 @@ async function handleRun(args: string[]) {
       logError(`清理工作区失败: ${e.message}`);
     }
     process.exit(1);
-  } finally {
-    // 确保 process.env 在所有路径上恢复，防止环境泄露
-    if (proxyEnvApplied) {
-      process.env = originalEnv;
-    }
   }
 }
 

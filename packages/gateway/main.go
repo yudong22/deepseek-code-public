@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -64,6 +66,113 @@ type MemorySyncRequest struct {
 	ErrorLog   string `json:"error_log"`
 	HealCount  int    `json:"heal_count"`
 	ProjectID  string `json:"project_id"`
+}
+
+// LocalMemory is the flat-file fallback store when Qdrant is offline
+type LocalMemory struct {
+	Prompt    string `json:"prompt"`
+	GitDiff   string `json:"git_diff"`
+	ErrorLog  string `json:"error_log"`
+	HealCount int    `json:"heal_count"`
+	ProjectID string `json:"project_id"`
+}
+
+var (
+	memoryStore []LocalMemory
+	memoriesFile = "db/memories.json"
+)
+
+func loadMemories() {
+	data, err := os.ReadFile(memoriesFile)
+	if err != nil {
+		memoryStore = []LocalMemory{}
+		return
+	}
+	if err := json.Unmarshal(data, &memoryStore); err != nil {
+		log.Println("⚠️  Failed to parse memories.json, starting fresh:", err)
+		memoryStore = []LocalMemory{}
+	}
+}
+
+func saveMemories() {
+	data, err := json.MarshalIndent(memoryStore, "", "  ")
+	if err != nil {
+		log.Println("❌ Failed to marshal memory store:", err)
+		return
+	}
+	// Ensure the db directory exists
+	if dir := path.Dir(memoriesFile); dir != "." {
+		os.MkdirAll(dir, 0755)
+	}
+	if err := os.WriteFile(memoriesFile, data, 0644); err != nil {
+		log.Println("❌ Failed to write memories.json:", err)
+	}
+}
+
+func searchMemoriesLocal(prompt string) []map[string]interface{} {
+	loadMemories()
+	if len(memoryStore) == 0 {
+		return []map[string]interface{}{}
+	}
+
+	// Tokenize both query and memory prompts into word sets
+	queryTokens := tokenize(prompt)
+	results := make([]map[string]interface{}, 0)
+
+	for _, m := range memoryStore {
+		memTokens := tokenize(m.Prompt)
+		if len(memTokens) == 0 {
+			continue
+		}
+		// Jaccard similarity: intersection / union
+		intersection := 0
+		union := make(map[string]bool)
+		for _, t := range queryTokens {
+			union[t] = true
+		}
+		for _, t := range memTokens {
+			if union[t] {
+				intersection++
+			}
+			union[t] = true
+		}
+		if len(union) == 0 {
+			continue
+		}
+		score := float64(intersection) / float64(len(union))
+		if score >= 0.10 { // Lower threshold for keyword matching
+			results = append(results, map[string]interface{}{
+				"prompt":     m.Prompt,
+				"git_diff":   m.GitDiff,
+				"error_log":  m.ErrorLog,
+				"project_id": m.ProjectID,
+				"score":      score,
+			})
+		}
+	}
+
+	// Sort by score descending
+	sort.Slice(results, func(i, j int) bool {
+		return results[i]["score"].(float64) > results[j]["score"].(float64)
+	})
+
+	// Limit to top 3
+	if len(results) > 3 {
+		results = results[:3]
+	}
+	return results
+}
+
+func tokenize(s string) []string {
+	words := strings.Fields(strings.ToLower(s))
+	// Filter short/noise words
+	filtered := make([]string, 0, len(words))
+	for _, w := range words {
+		if len(w) > 1 {
+			filtered = append(filtered, w)
+		}
+	}
+	return filtered
 }
 
 func main() {
@@ -131,7 +240,7 @@ func handleLogin(c *gin.Context) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": "user-developer-1",
 		"role": "developer",
-		"exp":  time.Now().Add(5 * time.Minute).Unix(),
+		"exp":  time.Now().Add(24 * time.Hour).Unix(),
 	})
 
 	tokenString, err := token.SignedString(jwtSecret)
@@ -143,7 +252,7 @@ func handleLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"access_token": tokenString,
 		"token_type":   "Bearer",
-		"expires_in":   300,
+		"expires_in":   86400,
 	})
 }
 
@@ -272,9 +381,10 @@ func handleMemorySearch(c *gin.Context) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(qdrantReq)
 	if err != nil {
-		// Fallback if Qdrant is offline
-		log.Println("⚠️  Qdrant connection failed, returning empty memories")
-		c.JSON(http.StatusOK, gin.H{"memories": []interface{}{}})
+		// Fallback: search local JSON store when Qdrant is offline
+		log.Println("⚠️  Qdrant connection failed, falling back to local keyword search")
+		memories := searchMemoriesLocal(req.Prompt)
+		c.JSON(http.StatusOK, gin.H{"memories": memories})
 		return
 	}
 	defer resp.Body.Close()
@@ -371,14 +481,19 @@ func handleMemorySync(c *gin.Context) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(qdrantReq)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to connect to Qdrant: " + err.Error()})
+		// Fallback to local JSON storage when Qdrant is offline
+		log.Println("Qdrant connection failed, saving memory locally")
+		syncMemoryLocal(req)
+		c.JSON(http.StatusOK, gin.H{"status": "synced_locally", "total_entries": len(memoryStore)})
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Qdrant upsert error", "details": string(body)})
+		log.Printf("Qdrant error (%s), saving memory locally", string(body))
+		syncMemoryLocal(req)
+			c.JSON(http.StatusOK, gin.H{"status": "synced_locally", "total_entries": len(memoryStore)})
 		return
 	}
 
@@ -446,6 +561,19 @@ func generateEmbedding(ctx context.Context, text string) ([]float32, error) {
 	}
 
 	return result.Data[0].Embedding, nil
+}
+
+func syncMemoryLocal(req MemorySyncRequest) {
+	loadMemories()
+	memoryStore = append(memoryStore, LocalMemory{
+		Prompt:    req.Prompt,
+		GitDiff:   req.GitDiff,
+		ErrorLog:  req.ErrorLog,
+		HealCount: req.HealCount,
+		ProjectID: req.ProjectID,
+	})
+	saveMemories()
+	log.Printf("✅ Memory saved locally (total: %d entries)", len(memoryStore))
 }
 
 // Helper to auto-create Qdrant memory collection on startup
