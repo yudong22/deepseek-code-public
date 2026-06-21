@@ -155,6 +155,16 @@ The `openhands run <task>` command implements a full self-healing pipeline:
 - **`openhands plan`**: 新增子命令，AI 分析需求生成技术方案（`.plan.md`），满足"前期讨论"需求
 - **多供应商离线配置**: `~/.openhands/config.json` 支持 `providers` 字段配置多组 API key/Base URL/Model
 - **本地记忆库**: 离线模式下自动从 `~/.openhands/memories.json` 检索相关经验，成功后自动保存
+- **模型名自动归一化**: 去掉 `provider/` 前缀（`deepseek/deepseek-chat` → `deepseek-chat`），非标准模型名给出警告
+
+**v0.4.1 关键改进：**
+- **交互式 Q&A（CLI + 桌面端）**: agent 可以通过 question 工具提问，CLI 终端或桌面端 QuestionCard 卡片展示问题和选项，等待用户输入
+- **`session.respond()`**: opencode wrapper 新增方法，向运行中的 session 注入 steer 输入
+- **Sidecar 行协议**: stdin 改为行协议（首行 prompt，后续行为用户回复），`session.prompt()` 与回答读取器并发运行
+- **Rust `respond_to_agent`**: 新 Tauri 命令，保持 sidecar stdin 开启，写入用户输入
+- **QuestionCard 组件**: React 组件，日间/夜间模式，选中后冻结高亮显示，刷新后恢复状态
+- **空闲检测优化**: 30s 无事件自动警告，超时报错含最后事件类型和模型名
+- **CLI 单元测试**: 新增 19 个测试（本地记忆 CRUD、plan API mock、参数解析、多供应商配置）
 - **`--from-plan`**: `openhands run` 支持读取 `.plan.md` 作为额外 system context
 - **`--provider` / `--model`**: CLI 参数运行时覆盖默认供应商和模型
 - **Sidecar 超时延长**: 默认从 120s 改为 180s（`SIDECAR_TIMEOUT_MS`）

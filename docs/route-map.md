@@ -100,13 +100,16 @@ packages/
 │   │   │                    - plan（v0.4.0 新增）: AI 分析需求生成技术方案，保存到 .plan.md
 │   │   │                    - v0.3.3+: 离线模式（多供应商支持），自动 memory sync（本地 + 网关）
 │   │   │                    - v0.4.0: 弃 Hermes 依赖，统一使用 OpenCode sidecar；多供应商配置；本地记忆库
+│   │   │                    - v0.4.1: 模型名自动归一化，非标准模型警告；CLI 空闲检测 30s 警告
 │   │   ├── openhands-call.js # Agent 调度器（v0.4.0 仅含 OpenCode sidecar 分支）
 │   │   │                    - 纯 OpenCode: spawn bun run sidecar，v0.3.3+: 超时(SIDECAR_TIMEOUT_MS)
 │   │   │                    、JSON stdin 传递 AGENTS.md 作为 system message、env 隔离
 │   │   │                    - v0.4.0: mode='code'（开发）/ 'heal'（自愈）双模式
+│   │   │                    - v0.4.1: 交互式 Q&A——不关闭 stdin，检测 question 工具时读取终端输入
 │   │   ├── fast-validate.js  # 极速门禁验证（读取 config.yaml 匹配 glob → 执行命令）
 │   │   ├── yaml-parser.js    # 简易 YAML 解析器
-│   │   └── openhands.test.ts # CLI 单测 (10 tests)
+│   │   ├── openhands.test.ts # CLI 单测 (10 tests)
+│   │   └── cli.test.ts       # CLI 单测 - v0.4.1 新增 (19 tests)
 │   └── package.json
 │
 ├── sidecar/                  # opencode-sidecar 二进制源码
