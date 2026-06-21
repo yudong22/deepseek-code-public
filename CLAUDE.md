@@ -22,6 +22,7 @@ bun run build:desktop                # 构建前端 (sidecar + tsc + vite build)
 bun run build:mac                    # 构建 macOS .app，终止旧实例，复制到 /Applications
 bun run build:sidecar                # 单独编译 sidecar 二进制 (packages/sidecar/src/index.ts → Bun)
 bun run test                         # 全量检查：cargo check + bun test
+bun run scripts/bump-version.ts <ver> # 统一更新所有配置文件的版本号
 ```
 
 **Test specific targets:**
@@ -261,3 +262,48 @@ services:
 - **Sidecar tip**: To rebuild the sidecar binary during development, run `bun run build:sidecar` — otherwise `bun run dev:desktop` does it automatically on start
 - **Git LFS**: Binaries in `apps/desktop/src-tauri/binaries/` are tracked with Git LFS. Run `git lfs pull` after cloning to get the sidecar binary.
 - **Rust tools directory**: `src-tauri/src/` may have `tools/` (file_read, file_write, file_edit, grep, glob, bash) and `safety.rs` (path jail) — these are planned but not yet implemented in the current codebase. Check existence before referencing.
+
+## Release Checklist（版本发布检查清单）
+
+发布新版本时，AI 需要执行以下步骤。**首次发布必须依次执行，后续版本可跳过已完成的步骤。**
+
+### 1. 同步版本号
+`scripts/bump-version.ts` 会统一更新以下 5 个文件：
+```
+bun run scripts/bump-version.ts <version>   # 例如 0.5.0
+```
+
+| # | 文件 | 说明 |
+|---|------|------|
+| 1 | `update.json` | Tauri 自动更新清单（version + pub_date + 下载 URL） |
+| 2 | `apps/desktop/src-tauri/Cargo.toml` | Rust 桌面端版本（line 3: `version = "..."`） |
+| 3 | `apps/desktop/package.json` | 桌面端前端版本（`import.meta.env.VITE_APP_VERSION` 来源） |
+| 4 | `packages/client-cli/package.json` | CLI 工具版本 |
+| 5 | `packages/sidecar/package.json` | Sidecar 版本 |
+
+同步后检查：`git diff --stat` 确认 5 个文件均已更新。
+
+### 2. 更新文档
+- 更新 `CLAUDE.md` 中的版本号引用（如果有）
+- 更新 `docs/route-map.md` 中的新组件/命令/路由说明
+
+### 3. 构建 + 签名
+```
+bun run build:mac                         # 构建 macOS .app
+tauri sign --private-key ~/.tauri/tauri.key \
+  --file target/release/bundle/macos/...  # 签名 .tar.gz（需私钥）
+```
+将签名填入 `update.json` 中对应平台的 `signature` 字段。
+
+### 4. 提交 + 打标签 + 推送
+```
+git commit -m "release: v<version>"
+git tag v<version>
+git push origin main v<version>
+```
+
+### 5. 创建 GitHub Release
+在 https://github.com/yudong22/deepseek-code-public/releases/new
+- Tag: v<version>
+- 上传 .dmg / .app.tar.gz 构建产物
+- 写入更新日志
