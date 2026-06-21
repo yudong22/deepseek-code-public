@@ -203,7 +203,7 @@ function MainDashboard() {
   // --- 确保有活跃会话（无 session 时自动创建并导航）---
   async function ensureSession(cmdText?: string): Promise<string> {
     if (id) return id;
-    const newId = `session-${Date.now()}`;
+    const newId = crypto.randomUUID();
     const projName = savedWorkspacePath
       ? savedWorkspacePath.split(/[/\\]/).pop() || ""
       : "";
@@ -471,7 +471,7 @@ function MainDashboard() {
         currentProjName = parts[parts.length - 1] || "";
       }
 
-      currentSessionId = `session-${Date.now()}`;
+      currentSessionId = crypto.randomUUID();
       const newSession: Session = {
         id: currentSessionId,
         title: userText.length > 25 ? userText.substring(0, 25) + "..." : userText,
