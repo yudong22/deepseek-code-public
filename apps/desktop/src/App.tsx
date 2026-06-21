@@ -223,7 +223,7 @@ function MainDashboard() {
   // --- 确保有活跃会话（无 session 时自动创建并导航）---
   async function ensureSession(cmdText?: string): Promise<string> {
     if (id) return id;
-    const newId = crypto.randomUUID();
+    const newId = "ses_" + crypto.randomUUID();
     const projName = savedWorkspacePath
       ? savedWorkspacePath.split(/[/\\]/).pop() || ""
       : "";

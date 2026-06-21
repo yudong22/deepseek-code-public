@@ -217,3 +217,37 @@ describe("OpenHands - callAgent Utility", () => {
     })).rejects.toThrow(/必须指定 agent 参数为 hermes 或 opencode/);
   });
 });
+
+describe("yaml-parser.js - shared YAML utility", () => {
+  test("should parse simple key-value pairs", async () => {
+    const { parseYaml } = await import("./yaml-parser.js");
+    const result = parseYaml("key: value\nfoo: bar");
+    expect(result.key).toBe("value");
+    expect(result.foo).toBe("bar");
+  });
+
+  test("should parse nested objects", async () => {
+    const { parseYaml } = await import("./yaml-parser.js");
+    const yaml = "outer:\n  inner: deep\n  num: 42";
+    const result = parseYaml(yaml);
+    expect(result.outer.inner).toBe("deep");
+    expect(result.outer.num).toBe(42);
+  });
+
+  test("should skip comments and empty lines", async () => {
+    const { parseYaml } = await import("./yaml-parser.js");
+    const yaml = "# comment\nkey: val\n\nfoo: bar # inline comment";
+    const result = parseYaml(yaml);
+    expect(result.key).toBe("val");
+    expect(result.foo).toBe("bar");
+  });
+
+  test("should coerce boolean and numeric values", async () => {
+    const { parseYaml } = await import("./yaml-parser.js");
+    const yaml = "flag: true\ncount: 0\nname: str";
+    const result = parseYaml(yaml);
+    expect(result.flag).toBe(true);
+    expect(result.count).toBe(0);
+    expect(result.name).toBe("str");
+  });
+});
