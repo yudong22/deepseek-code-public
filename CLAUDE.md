@@ -6,11 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `deepseek-code` (also known as **OpenHands**) is a local AI programming assistant with a C/S (client-server) self-healing pipeline architecture. It combines:
 - **Tauri v2 + React 19 desktop client** with streaming agent events via Tauri Channels
+- **Rust-native agent loop** (`sidecar-agent` crate, v0.5.0) — LLM calls, tool execution, event streaming all in-process
 - **Go API gateway** with JWT auth, LLM proxy, and Qdrant vector memory
 - **CLI tool** (`openhands`) for git worktree-isolated agent pipelines with auto-validation and self-healing
-- **Sidecar agent process** (`opencode-sidecar`) that runs the actual opencode agent loop with 6 file/code tools
 
-The Rust backend spawns an external sidecar binary that runs the agent loop, streaming results to the React frontend via Tauri Channels.
+**v0.5.0**: 桌面端代理引擎从 75MB Bun 子进程重写为进程内 Rust library crate。CLI 保留 TypeScript sidecar。
 
 ## Development Commands
 
@@ -21,7 +21,7 @@ bun run preview                      # 桌面端开发模式 (Tauri + Rust + SQL
 bun run build:desktop                # 构建前端 (sidecar + tsc + vite build)，tauri build 会自动调用
 bun run build:mac                    # 构建 macOS .app，终止旧实例，复制到 /Applications
 bun run build:sidecar                # 单独编译 sidecar 二进制 (packages/sidecar/src/index.ts → Bun)
-bun run test                         # 全量检查：203 tests, 7 文件 (cargo check + bun test)
+bun run test                         # 全量检查：302 tests (99 Rust + 203 TS)
 bun run scripts/bump-version.ts <ver> # 统一更新所有配置文件的版本号
 ```
 
@@ -86,51 +86,52 @@ The frontend never calls Tauri APIs directly. All backend communication goes thr
 - **`mock.ts`** — Browser fallback: localStorage for persistence, simulated agent events, mock file returns
 - **`bridge.test.ts`** — Unit tests for mock bridge (Bun test runner, `describe`/`test`/`expect`)
 
-### Sidecar Agent Loop
+### Agent Loop (v0.5.0)
 
-The core agent loop runs outside the Tauri Rust backend, in an external sidecar process (`opencode-sidecar`):
+**桌面端**：代理循环在 Tauri 进程内运行，通过 `sidecar-agent` Rust library crate：
 
-1. **`apps/desktop/src-tauri/src/lib.rs:run_agent_loop`** — Tauri async command that:
-   - Receives API key, model name, message history, workspace root, and sessionId
-   - Locates and spawns the external sidecar binary (configured in `tauri.conf.json` as `externalBin`)
-   - Passes `DEEPSEEK_API_KEY`, `OPENCODE_MODEL`, `WORKSPACE_PATH`, `OPENCODE_SESSION_ID` as environment variables
-   - Writes the last user prompt to the sidecar's `stdin` and closes it
-   - Reads the sidecar's `stdout` stream line-by-line: parses JSON `AgentEvent`s and streams them to the frontend via `Channel<AgentEvent>`
-   - Checks the exit code of the sidecar process, and forwards error logs from `stderr` if execution failed
-   - Supports cancellation via `AgentCancelled` atomic flag (set by `cancel_agent` command)
-   - Also registers Tauri commands: `select_directory`, `cancel_agent`, `list_workspace_files`, `read_text_file`, `resolve_file_path`, `read_file_base64` (with path traversal protection)
+`apps/desktop/src-tauri/crates/sidecar-agent/src/`:
+- **`protocol.rs`** — 17 AgentEvent 类型（自定义 Serialize 确保 `"payload": null`），stdin 解析，工具结果增强
+- **`provider.rs`** — 4 供应商 SSE 流（OpenAI-compatible），`ChatCompletionRequest` 序列化，SSE chunk 解析
+- **`agent.rs`** — 主代理循环：LLM SSE 流 → ToolCall → 工具执行 → tool result → 下一轮（最多 25 步）
+- **`tools/`** — 7 工具：`bash`/`file_read`/`file_write`/`file_edit`/`grep`/`glob`/`question`
+- **`session.rs`** — SQLite 会话管理（`.opencode/opencode.db`）
 
-2. **`packages/sidecar/src/index.ts`** — The agent entry point, compiled into a standalone binary via `bun build --compile`:
-   - Imports `Session` from the external `opencode` package (at `../opencode/packages/core/`)
-   - Maps DeepSeek/OpenAI/Anthropic/Google provider IDs from the model string
-   - Calls `session.prompt(prompt, callback)` which drives the full agent loop
-   - Streams events as JSON lines to stdout: `Thinking`, `Text`, `ToolCall/ToolStarted/ToolSuccess/ToolFailed/ToolEnded`, `StepStarted/StepEnded`, `Usage`, `Error`, `Finished`
-   - Reads token usage from `opencode.db` SQLite after completion
+`apps/desktop/src-tauri/src/lib.rs`:
+- `AgentState` — 共享状态：`Arc<AtomicBool>` cancel_flag + `mpsc::UnboundedSender` answer channel + `watch::Sender` cancel notify
+- `run_agent_loop` — 创建 Agent，tokio::spawn，forward 事件到 Tauri Channel
+- `respond_to_agent` — 直接 `answer_tx.send()`（无需 Mutex）
+- `cancel_agent` — 设置 cancel_flag + `cancel_tx.send(true)`
+
+**CLI 工具 (`openhands run`)**：仍使用 `packages/sidecar/src/index.ts` + `@opencode-ai/core`（Bun 运行时）
+
+| 组件 | 代理引擎 | 说明 |
+|------|----------|------|
+| 桌面端 (Tauri) | Rust `sidecar-agent` crate | 进程内，无子进程 |
+| CLI (`openhands run`) | TS + `@opencode-ai/core` | `bun run` 执行 |
 
 ### Agent Event Lifecycle
 
-The sidecar bridges opencode's event system to deepseek-code via JSON lines on stdout. The `AgentEvent` enum in `src-tauri/src/lib.rs` defines all recognized event types using `#[serde(tag = "type", content = "payload")]`:
+17 种 AgentEvent 类型，Tauri 端和 sidecar-agent 端各有一份定义，通过 `From` trait 自动转换：
 
-| OpenCode Event | AgentEvent Type | Payload |
+| AgentEvent | Payload | 说明 |
 |---|---|---|
-| `reasoning.started` | `ThinkingStarted` | `null` |
-| `reasoning.delta` | `Thinking` | `String` |
-| `reasoning.ended` | `ThinkingEnded` | `null` |
-| `text.started` | `TextStarted` | `null` |
-| `text.delta` | `Text` | `String` |
-| `text.ended` | `TextEnded` | `null` |
-| `tool.called` | `ToolCall` | `{ name, args, callID }` |
-| `tool.started` | `ToolStarted` | `{ callID }` |
-| `tool.success` | `ToolSuccess` | `{ name, result, callID }` |
-| `tool.failed` | `ToolFailed` | `{ name, error, callID }` |
-| `tool.ended` | `ToolEnded` | `{ callID }` |
-| `step.started` | `StepStarted` | `null` |
-| `step.ended` | `StepEnded` | `null` |
-| — (end of session) | `Finished` | `null` |
-| `error` / sidecar crash | `Error` | `{ message }` |
-| — (token usage) | `Usage` | `{ tokens_input, tokens_output, tokens_reasoning }` |
-
-The mapping lives in `packages/sidecar/src/index.ts`. Each line of stdout is deserialized as `AgentEvent` by Rust's `serde_json::from_str` and forwarded through Tauri's `Channel<AgentEvent>` to the frontend's `onEvent` callback in `App.tsx`.
+| `ThinkingStarted` | `null` | 推理块开始 |
+| `Thinking` | `String` | 推理文本增量 |
+| `ThinkingEnded` | `null` | 推理块结束 |
+| `TextStarted` | `null` | 文本块开始 |
+| `Text` | `String` | 回复文本增量 |
+| `TextEnded` | `null` | 文本块结束 |
+| `ToolCall` | `{ name, args, call_id }` | 工具被调用 |
+| `ToolStarted` | `{ call_id }` | 工具开始执行 |
+| `ToolSuccess` | `{ name, result, call_id }` | 工具成功 |
+| `ToolFailed` | `{ name, error, call_id }` | 工具失败 |
+| `ToolEnded` | `{ call_id }` | 工具执行结束 |
+| `StepStarted` | `null` | Step 开始 |
+| `StepEnded` | `null` | Step 结束 |
+| `Finished` | `null` | Agent 完成 |
+| `Error` | `{ message }` | 错误 |
+| `Usage` | `{ tokens_input, tokens_output, tokens_reasoning? }` | Token 用量 |
 
 ### Go API Gateway (packages/gateway/)
 
@@ -231,30 +232,60 @@ verification_pipeline:
 
 Template rendering: `agent.md` files can use `{{project_id}}`, `{{components}}`, `{{tech_rules}}` placeholders that the CLI pipeline resolves before spawning agents.
 
-### Sidecar Build Chain
+### Sidecar 架构 (v0.5.0)
 
-The sidecar is compiled from TypeScript to a native binary:
+**桌面端 (Tauri)**：进程内 Rust library crate `sidecar-agent`：
+
 ```
-packages/sidecar/src/index.ts → bun build --compile → apps/desktop/src-tauri/binaries/opencode-sidecar-<target-triple>
+apps/desktop/src-tauri/
+├── Cargo.toml              # 依赖 sidecar-agent = { path = "crates/sidecar-agent" }
+├── src/lib.rs              # AgentState, run_agent_loop, respond_to_agent, cancel_agent
+└── crates/sidecar-agent/
+    ├── Cargo.toml          # reqwest, eventsource-stream, rusqlite, tokio
+    └── src/
+        ├── lib.rs          # pub mod protocol/provider/tools/agent/session
+        ├── protocol.rs     # AgentEvent, parse_stdin_input, build_tool_success_result (99 tests)
+        ├── provider.rs     # SSE stream, ChatCompletionRequest, SseChunk (18 tests)
+        ├── agent.rs        # 主代理循环：SSE 流 → ToolCall → 执行 → 下一轮
+        ├── session.rs      # SQLite: sessions/messages/events 表 (3 tests)
+        └── tools/
+            ├── mod.rs      # Tool trait + ToolRegistry
+            ├── bash.rs     # shell 命令执行
+            ├── file_read.rs # 文件读取（路径遍历保护）
+            ├── file_write.rs # 文件写入
+            ├── file_edit.rs # 搜索替换（生成 diff）
+            ├── grep.rs     # rg/grep 搜索
+            ├── glob.rs     # walkdir + glob 匹配
+            └── question.rs # 交互式 Q&A（agent 层处理阻塞）
 ```
-- The binary name must include the Rust target triple suffix (e.g., `opencode-sidecar-aarch64-apple-darwin`)
-- Requires `../opencode` project directory to exist (the `@opencode/core` package dependency at `../opencode/packages/core/`)
-- Binary is tracked via **Git LFS** (`.gitattributes` configured)
-- If `../opencode` is absent, `build:sidecar` gracefully skips the build
 
-### Rust Sidecar 重构测试合约
+**关键设计决策**：
+- `ChatMessage` 有两个独立结构体：`ToolCallFunctionDef`（`arguments: String` 用于 assistant 消息）和 `FunctionDef`（`parameters: Value` 用于 tools 数组）
+- `build_tool_success_result` 支持两种输入格式：opencode 嵌套 `{result: {}}` 和 Rust 工具扁平 `{stdout, stderr, exit_code}`
+- question 工具通过 `tokio::select!` 同时等待用户回答和取消信号，失败时也推送 tool 消息满足 API 契约
+- 错误处理：`run()` 包装 `run_inner()`，所有错误先发 `AgentEvent::Error` 再返回
 
-当前测试覆盖已为 v0.5.x Rust sidecar 重构建立了完整的协议合约：
+**CLI 工具 (`openhands run`)**：仍使用 `packages/sidecar/src/index.ts` + `@opencode-ai/core`（Bun 运行时）
 
-| 合约 | 测试文件 | 测试数 | 覆盖内容 |
-|------|----------|--------|----------|
-| stdin/stdout 协议 | `protocol.test.ts` | 29 | JSON 行格式、env 变量、退出码语义 |
-| 事件路由 | `sidecar/index.test.ts` | 49 | 17 种 AgentEvent 映射、模型供应商映射 |
-| AG-UI 映射 | `adapter.test.ts` | 24 | 15 种 AG-UI 事件转换、消息树累积 |
-| 交互式 Q&A | `openhands.test.ts` | 10 | question 工具参数解析、选项显示、容错 |
-| CLI 管线 | `cli.test.ts` | 34 | 配置解析、plan/memorySync、模型归一化 |
+### v0.5.0 关键改进
 
-**重构验收标准**：Rust sidecar 实现通过 `protocol.test.ts` + `sidecar/index.test.ts` + `adapter.test.ts`（共 102 tests）即证明行为与当前 TS 实现一致。
+| 改进 | 说明 |
+|------|------|
+| **Rust 代理引擎** | 75MB Bun 二进制 → 进程内 Rust crate，消除子进程开销 |
+| **二进制体积** | 桌面端不再需要 `externalBin`，`tauri.conf.json` 已移除 |
+| **启动延迟** | ~200ms (spawn) → ~0ms (函数调用) |
+| **API 协议修复** | tool 消息 `tool_call_id`、assistant 消息 `arguments` vs `parameters` 分离 |
+| **工具结果保留** | `build_tool_success_result` 兼容扁平格式 |
+| **Q&A 取消** | `tokio::select!` + watch channel，cancel 可中断等待 |
+| **工具调用闭环** | question 工具失败时也推送 tool 消息，满足 API 契约 |
+
+### 测试覆盖
+
+| 测试套件 | 测试数 | 说明 |
+|----------|--------|------|
+| `cargo test` (sidecar-agent) | 99 | Rust 代理核心（protocol/provider/tools/session）|
+| `bun run test` | 203 | TypeScript CLI/bridge/sidecar/adapter/markdown |
+| **总计** | **302** | |
 
 ### Docker Compose
 
@@ -271,17 +302,17 @@ services:
 
 ### Tauri Configuration
 
-- **`tauri.conf.json`**: Window set to 1280×600 with `titleBarStyle: "Overlay"` and `hiddenTitle: true` for custom titlebar. Sidecar binary registered under `bundle.externalBin`. Security CSP set to `null` (permissive).
+- **`tauri.conf.json`**: Window set to 1280×800 with `titleBarStyle: "Overlay"` and `hiddenTitle: true` for custom titlebar. v0.5.0 移除了 `externalBin`（agent 改为进程内）。Security CSP set to `null` (permissive).
 - **`capabilities/default.json`**: SQLite plugin permissions for `deepseek_code.db`, window drag, and opener plugin.
 
 ## Conventions
 
 - **Language**: All implementation plans, code comments, and in-app text must be in Chinese
-- After feature development: run `bun run test` (cargo check + bun test), update `docs/route-map.md` if new components/routes/commands were added
+- After feature development: run `bun run test` (302 tests: 99 Rust + 203 TS)，update `docs/route-map.md` if new components/routes/commands were added
 - Prefer `bun run dev:desktop` for UI work (fast iteration in browser without Rust compilation)
-- **Sidecar tip**: To rebuild the sidecar binary during development, run `bun run build:sidecar` — otherwise `bun run dev:desktop` does it automatically on start
-- **Git LFS**: Binaries in `apps/desktop/src-tauri/binaries/` are tracked with Git LFS. Run `git lfs pull` after cloning to get the sidecar binary.
-- **Rust tools directory**: `src-tauri/src/` may have `tools/` (file_read, file_write, file_edit, grep, glob, bash) and `safety.rs` (path jail) — these are planned but not yet implemented in the current codebase. Check existence before referencing.
+- **Rust agent**: 修改 `sidecar-agent` crate 后运行 `cargo test` (在 `apps/desktop/src-tauri/crates/sidecar-agent/` 目录)
+- **CLI sidecar**: `packages/sidecar/` 仅供 CLI 工具使用，桌面端不再依赖
+- **`build:sidecar`**: 仅编译 CLI 用的 sidecar 源码，桌面端不再需要
 
 ## Release Checklist（版本发布检查清单）
 

@@ -1,60 +1,93 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::Manager;
-use tokio::io::AsyncWriteExt;
-use tokio::sync::Mutex;
+use tokio::sync::mpsc;
 
-/// 全局取消标记，供 cancel_agent 和 run_agent_loop 共享
-struct AgentCancelled(AtomicBool);
+// ─── Agent State (v0.5.0: replaces subprocess with in-process agent) ───
 
-/// 交互式 Q&A 用的 sidecar stdin 句柄（保持开启以接收用户输入）
-struct AgentStdin(Mutex<Option<tokio::process::ChildStdin>>);
+/// Shared state between `run_agent_loop`, `cancel_agent`, and `respond_to_agent`.
+struct AgentState {
+    /// Cancellation flag checked by the agent loop
+    cancel_flag: Arc<AtomicBool>,
+    /// Channel sender for user answers to the question tool (never dropped)
+    answer_tx: mpsc::UnboundedSender<String>,
+    /// Watch sender for cancellation — sends to unblock question handler
+    cancel_tx: tokio::sync::watch::Sender<bool>,
+}
+
+// ─── AgentEvent Enum (Tauri-facing, unchanged from v0.4.x) ───
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum AgentEvent {
-    /// 推理块边界
     ThinkingStarted,
-    /// 推理文本增量
     Thinking(String),
-    /// 推理块结束
     ThinkingEnded,
-    /// 文本块边界
     TextStarted,
-    /// 回复文本增量
     Text(String),
-    /// 文本块结束
     TextEnded,
-    /// 工具被调用
     ToolCall { name: String, args: String, call_id: String },
-    /// 工具开始执行
     ToolStarted { call_id: String },
-    /// 工具执行结束
     ToolEnded { call_id: String },
-    /// 工具成功
     ToolSuccess { name: String, result: String, call_id: String },
-    /// 工具失败
     ToolFailed { name: String, error: String, call_id: String },
-    /// Token 用量
     Usage { tokens_input: i64, tokens_output: i64, tokens_reasoning: i64 },
-    /// Step 生命周期
     StepStarted,
     StepEnded,
-    /// Agent 完成
     Finished,
-    /// 错误（不一定是致命错误）
     Error { message: String },
 }
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+// ─── Conversion: sidecar-agent protocol -> Tauri AgentEvent ───
+
+impl From<sidecar_agent::protocol::AgentEvent> for AgentEvent {
+    fn from(evt: sidecar_agent::protocol::AgentEvent) -> Self {
+        match evt {
+            sidecar_agent::protocol::AgentEvent::ThinkingStarted => AgentEvent::ThinkingStarted,
+            sidecar_agent::protocol::AgentEvent::Thinking(s) => AgentEvent::Thinking(s),
+            sidecar_agent::protocol::AgentEvent::ThinkingEnded => AgentEvent::ThinkingEnded,
+            sidecar_agent::protocol::AgentEvent::TextStarted => AgentEvent::TextStarted,
+            sidecar_agent::protocol::AgentEvent::Text(s) => AgentEvent::Text(s),
+            sidecar_agent::protocol::AgentEvent::TextEnded => AgentEvent::TextEnded,
+            sidecar_agent::protocol::AgentEvent::ToolCall { name, args, call_id } => {
+                AgentEvent::ToolCall { name, args, call_id }
+            }
+            sidecar_agent::protocol::AgentEvent::ToolStarted { call_id } => {
+                AgentEvent::ToolStarted { call_id }
+            }
+            sidecar_agent::protocol::AgentEvent::ToolSuccess { name, result, call_id } => {
+                AgentEvent::ToolSuccess { name, result, call_id }
+            }
+            sidecar_agent::protocol::AgentEvent::ToolFailed { name, error, call_id } => {
+                AgentEvent::ToolFailed { name, error, call_id }
+            }
+            sidecar_agent::protocol::AgentEvent::ToolEnded { call_id } => {
+                AgentEvent::ToolEnded { call_id }
+            }
+            sidecar_agent::protocol::AgentEvent::StepStarted => AgentEvent::StepStarted,
+            sidecar_agent::protocol::AgentEvent::StepEnded => AgentEvent::StepEnded,
+            sidecar_agent::protocol::AgentEvent::Finished => AgentEvent::Finished,
+            sidecar_agent::protocol::AgentEvent::Error { message } => AgentEvent::Error { message },
+            sidecar_agent::protocol::AgentEvent::Usage { tokens_input, tokens_output, tokens_reasoning } => {
+                AgentEvent::Usage {
+                    tokens_input,
+                    tokens_output,
+                    tokens_reasoning: tokens_reasoning.unwrap_or(0),
+                }
+            }
+        }
+    }
+}
+
+// ─── Tauri Commands ──────────────────────────────
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-/// 归一化 session ID：opencode 的 ID 格式要求以 "ses" 开头。
-/// 旧版 DB 存储的是纯 UUID，需要补 "ses_" 前缀。
+/// Normalize session ID: opencode requires IDs to start with "ses".
 fn normalize_session_id(id: &str) -> String {
     if id.starts_with("ses") {
         id.to_string()
@@ -63,6 +96,7 @@ fn normalize_session_id(id: &str) -> String {
     }
 }
 
+/// Run the agent loop (v0.5.0: in-process Rust agent, no subprocess).
 #[tauri::command]
 async fn run_agent_loop(
     app: tauri::AppHandle,
@@ -74,150 +108,113 @@ async fn run_agent_loop(
     agent_mode: Option<String>,
     on_event: Channel<AgentEvent>,
 ) -> Result<(), String> {
-    // 1. 解析工作区路径为绝对路径
+    // 1. Resolve workspace path
     let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
-    // 确保目录存在（用户指定路径时 resolve_workspace_path 不自动创建）
     if !workspace_path.exists() {
         std::fs::create_dir_all(&workspace_path)
             .map_err(|e| format!("无法创建工作区目录: {}", e))?;
     }
 
-    // 2. 序列化完整消息 + agent_mode 为 JSON 传给 sidecar stdin
-    let input_payload = serde_json::json!({
-        "messages": messages,
-        "agentMode": agent_mode,
+    // 2. Extract prompt and system messages from frontend messages
+    let system_messages: Vec<sidecar_agent::protocol::StdinMessage> = messages
+        .iter()
+        .filter(|m| matches!(m.role, ds_api::raw::Role::System))
+        .map(|m| sidecar_agent::protocol::StdinMessage {
+            role: "system".to_string(),
+            content: m.content.clone(),
+        })
+        .collect();
+
+    let prompt = messages
+        .iter()
+        .rev()
+        .find(|m| matches!(m.role, ds_api::raw::Role::User))
+        .and_then(|m| m.content.clone())
+        .unwrap_or_default();
+
+    if prompt.is_empty() {
+        return Err("No user message found".to_string());
+    }
+
+    // 3. Create communication channels
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel::<sidecar_agent::protocol::AgentEvent>();
+    let (answer_tx, answer_rx) = mpsc::unbounded_channel::<String>();
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    let (cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+
+    // 4. Register shared state for cancel_agent / respond_to_agent
+    app.manage(AgentState {
+        cancel_flag: cancel_flag.clone(),
+        answer_tx,
+        cancel_tx,
     });
-    let input_str = serde_json::to_string(&input_payload)
-        .map_err(|e| format!("序列化 sidecar 输入失败: {}", e))?;
 
-    // 3. 确定并解析 sidecar 路径 (Tauri places sidecars in the same directory as the executable)
-    let app_dir = std::env::current_exe()
-        .map_err(|e| format!("无法获取当前可执行文件路径: {}", e))?
-        .parent()
-        .ok_or_else(|| "无法获取可执行文件父目录".to_string())?
-        .to_path_buf();
-
-    let sidecar_filename = if cfg!(target_os = "windows") {
-        "opencode-sidecar.exe"
+    // 5. Build agent configuration
+    let effective_session_id = if agent_mode.as_deref() == Some("plan") {
+        sidecar_agent::protocol::derive_plan_session_id(Some(&session_id))
+            .unwrap_or_else(|| normalize_session_id(&session_id))
     } else {
-        "opencode-sidecar"
+        normalize_session_id(&session_id)
     };
 
-    let sidecar_path = app_dir.join(sidecar_filename);
+    let config = sidecar_agent::agent::AgentConfig {
+        api_key,
+        model,
+        workspace_path,
+        session_id: effective_session_id,
+        agent_mode,
+        system_messages,
+    };
 
-    if !sidecar_path.exists() {
-        return Err(format!("未找到 sidecar 可执行文件: {}", sidecar_path.display()));
+    let tools = sidecar_agent::tools::default_registry();
+
+    // 6. Spawn agent in a tokio task
+    let agent_handle = tokio::spawn(async move {
+        let mut agent = sidecar_agent::agent::Agent::new(
+            config,
+            event_tx,
+            answer_rx,
+            cancel_flag,
+            cancel_rx,
+            tools,
+        );
+        agent.run(&prompt).await
+    });
+
+    // 7. Forward events to the frontend via Tauri Channel
+    while let Some(evt) = event_rx.recv().await {
+        let _ = on_event.send(evt.into());
     }
 
-    // 4. 启动 sidecar 进程
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    use tokio::process::Command;
-    use std::process::Stdio;
-
-    let mut cmd = Command::new(&sidecar_path);
-    cmd.stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env("DEEPSEEK_API_KEY", &api_key)
-        .env("OPENCODE_MODEL", &model)
-        .env("WORKSPACE_PATH", &workspace_path)
-        .env("OPENCODE_SESSION_ID", &normalize_session_id(&session_id));
-
-    if let Some(ref mode) = agent_mode {
-        cmd.env("OPENCODE_AGENT_MODE", mode);
+    // 8. Wait for agent to complete
+    match agent_handle.await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(format!("Agent 运行失败: {}", e)),
+        Err(e) => Err(format!("Agent task 异常: {}", e)),
     }
-
-    let mut child = cmd.spawn().map_err(|e| format!("无法启动 sidecar {}: {}", sidecar_path.display(), e))?;
-
-    // 注册取消标记，供 cancel_agent 使用
-    app.manage(AgentCancelled(AtomicBool::new(false)));
-
-    // 5. 将结构化 JSON 写入 sidecar stdin，保持开启以支持交互式 Q&A
-    let stdin_handle = child.stdin.take().ok_or("无法打开 sidecar stdin".to_string())?;
-    // 先写入 stdin 再存储句柄（保持开启，不 drop）
-    let mut write_guard = stdin_handle;
-    write_guard.write_all(input_str.as_bytes()).await
-        .map_err(|e| format!("写入 sidecar stdin 失败: {}", e))?;
-    write_guard.write_all(b"\n").await
-        .map_err(|e| format!("写入 stdin 换行符失败: {}", e))?;
-    // 存储 stdin 句柄到全局状态，保持开启
-    app.manage(AgentStdin(Mutex::new(Some(write_guard))));
-
-    // 6. 流式读取 stdout 并转发给前端（支持取消）
-    let stdout = child.stdout.take().ok_or("无法获取 sidecar stdout".to_string())?;
-    let mut reader = BufReader::new(stdout).lines();
-
-    loop {
-        // 检查取消标记
-        if app.state::<AgentCancelled>().0.load(Ordering::SeqCst) {
-            let _ = child.kill().await;
-            let _ = on_event.send(AgentEvent::Finished);
-            return Ok(());
-        }
-
-        match tokio::time::timeout(Duration::from_secs(1), reader.next_line()).await {
-            Ok(Ok(Some(line))) => {
-                if let Ok(event) = serde_json::from_str::<AgentEvent>(&line) {
-                    let _ = on_event.send(event);
-                } else if !line.trim().is_empty() {
-                    println!("[Sidecar Log] {}", line);
-                }
-            }
-            Ok(Ok(None)) => break, // EOF
-            Ok(Err(e)) => return Err(format!("读取 sidecar 输出失败: {}", e)),
-            Err(_) => continue, // 超时，重新检查取消标记
-        }
-    }
-
-    // 7. 等待进程退出并做状态校验
-    let status = child.wait().await.map_err(|e| format!("等待 sidecar 退出失败: {}", e))?;
-    if !status.success() {
-        let mut stderr_content = String::new();
-        if let Some(stderr) = child.stderr.take() {
-            let mut stderr_reader = BufReader::new(stderr).lines();
-            while let Some(line) = stderr_reader.next_line().await.unwrap_or(None) {
-                stderr_content.push_str(&line);
-                stderr_content.push('\n');
-            }
-        }
-        let err_msg = format!("Sidecar 运行失败并退出，退出码: {:?}\n错误日志:\n{}", status.code(), stderr_content);
-        let _ = on_event.send(AgentEvent::Error { message: err_msg.clone() });
-        return Err(err_msg);
-    }
-
-    // 7b. 清理 stdin 句柄
-    if let Some(agent_stdin) = app.try_state::<AgentStdin>() {
-        let mut guard = agent_stdin.0.lock().await;
-        drop(guard.take());
-    }
-
-    Ok(())
 }
 
-/// 向运行中的 sidecar 发送用户输入（回答 question 工具的问题）
+/// Send user input to the running agent (answer a question tool prompt).
 #[tauri::command]
 async fn respond_to_agent(app: tauri::AppHandle, answer: String) -> Result<(), String> {
-    let agent_stdin = app.state::<AgentStdin>();
-    let mut guard = agent_stdin.0.lock().await;
-    if let Some(stdin) = guard.as_mut() {
-        stdin.write_all(answer.as_bytes()).await
-            .map_err(|e| format!("写入用户输入到 sidecar 失败: {}", e))?;
-        stdin.write_all(b"\n").await
-            .map_err(|e| format!("写入换行到 sidecar 失败: {}", e))?;
-        Ok(())
-    } else {
-        Err("Agent 未在运行或 stdin 已关闭".to_string())
-    }
+    let state = app.state::<AgentState>();
+    state
+        .answer_tx
+        .send(answer)
+        .map_err(|e| format!("发送用户输入到 agent 失败: {}", e))
 }
 
+/// Cancel the running agent.
 #[tauri::command]
 async fn cancel_agent(app: tauri::AppHandle) -> Result<(), String> {
-    app.state::<AgentCancelled>().0.store(true, Ordering::SeqCst);
-    // 同时关闭 stdin
-    if let Some(agent_stdin) = app.try_state::<AgentStdin>() {
-        let mut guard = agent_stdin.0.lock().await;
-        drop(guard.take());
-    }
+    let state = app.state::<AgentState>();
+
+    // Set cancellation flag — agent loop checks this on each iteration
+    state.cancel_flag.store(true, Ordering::SeqCst);
+
+    // Signal cancellation to unblock any pending question handler
+    let _ = state.cancel_tx.send(true);
+
     Ok(())
 }
 
@@ -230,7 +227,8 @@ async fn select_directory() -> Result<Option<String>, String> {
     Ok(dir.map(|d| d.path().to_string_lossy().into_owned()))
 }
 
-/// 解析工作区根目录为绝对路径（与 run_agent_loop 逻辑一致）
+// ─── Workspace Helpers ───────────────────────────
+
 fn resolve_workspace_path(app: &tauri::AppHandle, workspace_root: &str) -> Result<std::path::PathBuf, String> {
     if workspace_root.is_empty() || workspace_root == "." {
         let base = app
@@ -256,7 +254,6 @@ fn resolve_workspace_path(app: &tauri::AppHandle, workspace_root: &str) -> Resul
     }
 }
 
-/// 列出工作区中的所有文件（递归，返回相对路径，遵从 .gitignore）
 #[tauri::command]
 async fn list_workspace_files(
     app: tauri::AppHandle,
@@ -268,7 +265,7 @@ async fn list_workspace_files(
 
     let mut results: Vec<String> = Vec::new();
     let walker = ignore::WalkBuilder::new(&workspace_path)
-        .standard_filters(true)  // 遵从 .gitignore + 排除隐藏文件/目录（含 .git）
+        .standard_filters(true)
         .follow_links(false)
         .build();
 
@@ -291,7 +288,53 @@ async fn list_workspace_files(
     Ok(results)
 }
 
-/// 读取工作区文件的 base64 编码（用于图片等二进制文件预览）
+#[tauri::command]
+async fn read_text_file(
+    app: tauri::AppHandle,
+    workspace_root: String,
+    relative_path: String,
+) -> Result<String, String> {
+    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
+    let file_path = workspace_path.join(&relative_path);
+
+    let canonical_workspace = workspace_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析工作区路径: {}", e))?;
+    let canonical_file = file_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析文件路径 '{}': {}", relative_path, e))?;
+
+    if !canonical_file.starts_with(&canonical_workspace) {
+        return Err("路径穿越检测：文件不在工作区范围内".to_string());
+    }
+
+    std::fs::read_to_string(&canonical_file)
+        .map_err(|e| format!("读取文件失败: {}", e))
+}
+
+#[tauri::command]
+async fn resolve_file_path(
+    app: tauri::AppHandle,
+    workspace_root: String,
+    relative_path: String,
+) -> Result<String, String> {
+    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
+    let file_path = workspace_path.join(&relative_path);
+
+    let canonical_workspace = workspace_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析工作区路径: {}", e))?;
+    let canonical_file = file_path
+        .canonicalize()
+        .map_err(|e| format!("无法解析文件路径 '{}': {}", relative_path, e))?;
+
+    if !canonical_file.starts_with(&canonical_workspace) {
+        return Err("路径穿越检测：文件不在工作区范围内".to_string());
+    }
+
+    Ok(canonical_file.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 async fn read_file_base64(
     app: tauri::AppHandle,
@@ -319,11 +362,9 @@ async fn read_file_base64(
     file.read_to_end(&mut buf)
         .map_err(|e| format!("读取文件失败: {}", e))?;
 
-    // 使用 base64 标准库编码（不需要额外依赖，直接用 data_encoding 或手动）
     Ok(base64_encode(&buf))
 }
 
-/// 简单的 base64 编码（避免引入额外 crate）
 fn base64_encode(data: &[u8]) -> String {
     const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut result = String::new();
@@ -348,56 +389,7 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
-/// 解析工作区中文件的绝对路径（用于 convertFileSrc）
-#[tauri::command]
-async fn resolve_file_path(
-    app: tauri::AppHandle,
-    workspace_root: String,
-    relative_path: String,
-) -> Result<String, String> {
-    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
-    let file_path = workspace_path.join(&relative_path);
-
-    let canonical_workspace = workspace_path
-        .canonicalize()
-        .map_err(|e| format!("无法解析工作区路径: {}", e))?;
-    let canonical_file = file_path
-        .canonicalize()
-        .map_err(|e| format!("无法解析文件路径 '{}': {}", relative_path, e))?;
-
-    if !canonical_file.starts_with(&canonical_workspace) {
-        return Err("路径穿越检测：文件不在工作区范围内".to_string());
-    }
-
-    Ok(canonical_file.to_string_lossy().to_string())
-}
-
-/// 读取工作区中指定文件的文本内容
-#[tauri::command]
-async fn read_text_file(
-    app: tauri::AppHandle,
-    workspace_root: String,
-    relative_path: String,
-) -> Result<String, String> {
-    let workspace_path = resolve_workspace_path(&app, &workspace_root)?;
-
-    let file_path = workspace_path.join(&relative_path);
-
-    // 路径穿越防护
-    let canonical_workspace = workspace_path
-        .canonicalize()
-        .map_err(|e| format!("无法解析工作区路径: {}", e))?;
-    let canonical_file = file_path
-        .canonicalize()
-        .map_err(|e| format!("无法解析文件路径 '{}': {}", relative_path, e))?;
-
-    if !canonical_file.starts_with(&canonical_workspace) {
-        return Err("路径穿越检测：文件不在工作区范围内".to_string());
-    }
-
-    std::fs::read_to_string(&canonical_file)
-        .map_err(|e| format!("读取文件失败: {}", e))
-}
+// ─── App Entry Point ─────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -420,4 +412,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

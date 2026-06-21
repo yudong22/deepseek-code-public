@@ -33,3 +33,6 @@ src-tauri/target/
 *.db-journal
 .opencode
 .claude/
+
+# Rust build output
+target/
