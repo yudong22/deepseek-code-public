@@ -2,15 +2,56 @@ import { Session } from "../../../../opencode/packages/core/src/session/wrapper"
 import path from "path"
 import fs from "fs"
 
-interface StdinMessage {
+// --- 可测试的工具函数 ---
+
+export interface StdinMessage {
   role: string
   content?: string | null
 }
 
-interface StdinInput {
+export interface StdinInput {
   messages?: StdinMessage[]
   agentMode?: string | null
 }
+
+/** 解析 stdin 输入：尝试 JSON 结构化格式，回退为纯文本 */
+export function parseStdinInput(rawInput: string): { prompt: string; systemMessages: StdinMessage[]; parsedInput: StdinInput } {
+  const result: { prompt: string; systemMessages: StdinMessage[]; parsedInput: StdinInput } = {
+    prompt: rawInput,
+    systemMessages: [],
+    parsedInput: {},
+  }
+
+  if (!rawInput.trim()) return result
+
+  try {
+    result.parsedInput = JSON.parse(rawInput)
+    if (Array.isArray(result.parsedInput.messages) && result.parsedInput.messages.length > 0) {
+      result.systemMessages = result.parsedInput.messages.filter(m => m.role === "system")
+      const lastUser = [...result.parsedInput.messages].reverse().find(m => m.role === "user")
+      result.prompt = lastUser?.content || ""
+    }
+  } catch {
+    // 非 JSON 即为纯文本格式，prompt 已初始化为 rawInput
+  }
+
+  return result
+}
+
+/** 归一化 session ID：opencode 要求以 ses 开头 */
+export function normalizeSessionId(sessionId?: string): string | undefined {
+  if (!sessionId) return undefined
+  return sessionId.startsWith("ses") ? sessionId : "ses_" + sessionId
+}
+
+/** 派生 plan session ID */
+export function derivePlanSessionId(sessionId?: string): string | undefined {
+  if (!sessionId) return undefined
+  const normalized = normalizeSessionId(sessionId)
+  return normalized ? normalized + "--plan" : undefined
+}
+
+// --- sidecar 主入口 ---
 
 async function main() {
   try {
@@ -21,23 +62,8 @@ async function main() {
       process.exit(1)
     }
 
-    // 2. Parse input: try JSON structured format, fall back to plain text
-    let prompt: string
-    let systemMessages: StdinMessage[] = []
-    let parsedInput: StdinInput = {}
-    try {
-      parsedInput = JSON.parse(rawInput)
-      if (Array.isArray(parsedInput.messages) && parsedInput.messages.length > 0) {
-        // New protocol: full message array
-        systemMessages = parsedInput.messages.filter(m => m.role === "system")
-        const lastUser = [...parsedInput.messages].reverse().find(m => m.role === "user")
-        prompt = lastUser?.content || ""
-      } else {
-        prompt = rawInput // Old protocol fallback
-      }
-    } catch {
-      prompt = rawInput // Old protocol: plain text
-    }
+    // 2. Parse input
+    const { prompt, systemMessages, parsedInput } = parseStdinInput(rawInput)
 
     // 3. Read configuration from environment variables
     const apiKey = process.env.DEEPSEEK_API_KEY || ""
@@ -77,11 +103,10 @@ async function main() {
       fs.writeFileSync(path.join(opencodeDir, "system.md"), systemContent)
     }
 
-    // 3c. For plan mode on existing sessions, use a derived session ID
-    //     so opencode creates a fresh session with the plan agent.
-    const effectiveSessionId = agentMode === "plan" && sessionId
-      ? sessionId + "--plan"
-      : sessionId
+    // 3c. Normalize session ID & derive plan session ID
+    const effectiveSessionId = agentMode === "plan"
+      ? derivePlanSessionId(sessionId)
+      : normalizeSessionId(sessionId)
 
     // 4. Initialize the Session
     const session = await Session.make({
@@ -241,4 +266,7 @@ function printEvent(evt: { type: string; payload: any }) {
   console.log(JSON.stringify(evt))
 }
 
-main()
+// 仅在被直接运行时执行 main，被测试导入时不执行
+if (import.meta.main) {
+  main()
+}
