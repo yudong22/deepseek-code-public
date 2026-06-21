@@ -95,16 +95,18 @@ src-tauri/
 packages/
 ├── client-cli/               # CLI 命令行工具 (@openhands/cli)
 │   ├── src/
-│   │   ├── cli.ts            # 主入口：login / doctor / run / memory sync
-│   │   │                    - run: 创建 git worktree → Hermes 开发 → fastValidate → OpenCode 自愈(×3) → commit
-│   │   │                    - v0.3.3+: 离线模式（无网关时直连 DeepSeek API），自动 memory sync 到网关
-│   │   ├── openhands-call.js # Agent 调度器：callAgent({agent, env}) 支持 env 参数避免全局污染
-│   │   │                    - hermes: spawn hermes chat -q ... --yolo
-│   │   │                    - opencode: spawn bun run sidecar，v0.3.3+: 超时(SIDECAR_TIMEOUT_MS)
-│   │   │                    、JSON stdin 传递 AGENTS.md 作为 system message
+│   │   ├── cli.ts            # 主入口：login / doctor / plan / run / memory sync
+│   │   │                    - run（v0.4.0）: 创建 git worktree → OpenCode 开发 → fastValidate → OpenCode 自愈(×3) → commit
+│   │   │                    - plan（v0.4.0 新增）: AI 分析需求生成技术方案，保存到 .plan.md
+│   │   │                    - v0.3.3+: 离线模式（多供应商支持），自动 memory sync（本地 + 网关）
+│   │   │                    - v0.4.0: 弃 Hermes 依赖，统一使用 OpenCode sidecar；多供应商配置；本地记忆库
+│   │   ├── openhands-call.js # Agent 调度器（v0.4.0 仅含 OpenCode sidecar 分支）
+│   │   │                    - 纯 OpenCode: spawn bun run sidecar，v0.3.3+: 超时(SIDECAR_TIMEOUT_MS)
+│   │   │                    、JSON stdin 传递 AGENTS.md 作为 system message、env 隔离
+│   │   │                    - v0.4.0: mode='code'（开发）/ 'heal'（自愈）双模式
 │   │   ├── fast-validate.js  # 极速门禁验证（读取 config.yaml 匹配 glob → 执行命令）
 │   │   ├── yaml-parser.js    # 简易 YAML 解析器
-│   │   └── openhands.test.ts # CLI 单测 (11 tests)
+│   │   └── openhands.test.ts # CLI 单测 (10 tests)
 │   └── package.json
 │
 ├── sidecar/                  # opencode-sidecar 二进制源码

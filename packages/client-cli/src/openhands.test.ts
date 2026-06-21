@@ -160,13 +160,13 @@ describe("OpenHands - callAgent Utility", () => {
     }
   });
 
-  test("should write AGENTS.md and spawn Hermes process", async () => {
+  test("should write AGENTS.md and spawn sidecar in code mode", async () => {
     await callAgent({
-      agent: "hermes",
       promptVal: "Add mock feature",
       rulesPath: path.join(testRoot, ".agents/agent.md"),
       sandboxDir: testRoot,
-      rootDir: testRoot
+      rootDir: testRoot,
+      mode: 'code'
     });
 
     // Check AGENTS.md file content
@@ -176,25 +176,25 @@ describe("OpenHands - callAgent Utility", () => {
     expect(agentsMdContent).toContain("- **TypeScript**：Use strong types always");
     expect(agentsMdContent).toContain("- **Tauri**：Keep business logic in front-end");
     expect(agentsMdContent).toContain("Add mock feature");
+    expect(agentsMdContent).toContain("当前任务指令");
 
     // Check spawned processes
     expect(spawnedProcesses.length).toBe(1);
-    expect(spawnedProcesses[0].cmd).toMatch(/hermes$/);
-    expect(spawnedProcesses[0].args).toContain("chat");
-    expect(spawnedProcesses[0].args).toContain("Add mock feature");
-    expect(spawnedProcesses[0].args).toContain("-m");
-    expect(spawnedProcesses[0].args).toContain("deepseek/mock-hermes-model");
+    expect(spawnedProcesses[0].cmd).toBe("bun");
+    expect(spawnedProcesses[0].args).toContain("run");
+    expect(spawnedProcesses[0].env.OPENCODE_MODEL).toBe("deepseek-chat");
+    expect(spawnedProcesses[0].env.WORKSPACE_PATH).toBe(testRoot);
   });
 
-  test("should write AGENTS.md and spawn OpenCode sidecar process", async () => {
+  test("should write AGENTS.md and spawn sidecar in heal mode", async () => {
     fs.writeFileSync(path.join(testRoot, "mock_error.log"), "Mock compile error");
 
     await callAgent({
-      agent: "opencode",
       rulesPath: path.join(testRoot, ".agents/agent.md"),
       fixTarget: path.join(testRoot, "mock_error.log"),
       sandboxDir: testRoot,
-      rootDir: testRoot
+      rootDir: testRoot,
+      mode: 'heal'
     });
 
     const agentsMdContent = fs.readFileSync(path.join(testRoot, "AGENTS.md"), "utf-8");
@@ -204,17 +204,7 @@ describe("OpenHands - callAgent Utility", () => {
     expect(spawnedProcesses.length).toBe(1);
     expect(spawnedProcesses[0].cmd).toBe("bun");
     expect(spawnedProcesses[0].args).toContain("run");
-    expect(spawnedProcesses[0].env.OPENCODE_MODEL).toBe("mock-opencode-model");
     expect(spawnedProcesses[0].env.WORKSPACE_PATH).toBe(testRoot);
-  });
-
-  test("should throw an error for invalid agent", async () => {
-    expect(callAgent({
-      agent: "invalid-agent",
-      promptVal: "Do something",
-      sandboxDir: testRoot,
-      rootDir: testRoot
-    })).rejects.toThrow(/必须指定 agent 参数为 hermes 或 opencode/);
   });
 });
 

@@ -9,11 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 1. 解析参数并且提供导出
-export async function callAgent({ agent, promptVal, rulesPath, fixTarget, sandboxDir, rootDir, env }) {
-  if (agent !== 'hermes' && agent !== 'opencode') {
-    throw new Error('必须指定 agent 参数为 hermes 或 opencode');
-  }
-
+export async function callAgent({ promptVal, rulesPath, fixTarget, sandboxDir, rootDir, env, mode = 'code' }) {
   const resolvedRootDir = rootDir || path.resolve(__dirname, '../../..');
   const resolvedSandboxDir = sandboxDir || process.cwd();
 
@@ -27,12 +23,10 @@ export async function callAgent({ agent, promptVal, rulesPath, fixTarget, sandbo
     console.error(`⚠️ [openhands-call] 读取/解析 config.yaml 失败: ${e.message}`);
   }
 
-  // 2. 确定配置和 model
-  let model = 'deepseek-chat';
-  if (agent === 'hermes' && config.agent_routing?.primary_developer?.model) {
-    model = config.agent_routing.primary_developer.model;
-  } else if (agent === 'opencode' && config.agent_routing?.ci_healer?.model) {
-    model = config.agent_routing.ci_healer.model;
+  // 2. 确定模型（从配置或环境）
+  let model = process.env.OPENCODE_MODEL || 'deepseek-chat';
+  if (config.agent_routing?.default?.model) {
+    model = config.agent_routing.default.model;
   }
 
   // 3. 生成 AGENTS.md
@@ -48,7 +42,7 @@ export async function callAgent({ agent, promptVal, rulesPath, fixTarget, sandbo
   // 渲染 template placeholders
   if (systemRules.includes('{{project_id}}') || systemRules.includes('{{components}}') || systemRules.includes('{{tech_rules}}')) {
     const projectId = config.project_id || path.basename(resolvedRootDir);
-    
+
     // 构建 components 描述
     let componentsStr = '';
     const pipeline = config.verification_pipeline || {};
@@ -86,17 +80,28 @@ export async function callAgent({ agent, promptVal, rulesPath, fixTarget, sandbo
       .replace(/\{\{tech_rules\}\}/g, techRulesStr.trim());
   }
 
-  if (agent === 'hermes') {
-    const hermesContent = `${systemRules}
+  // 根据 mode 构建 AGENTS.md 内容
+  if (mode === 'code') {
+    // 读取 --from-plan 提供的额外上下文
+    let planContext = '';
+    const planMdPath = path.join(resolvedSandboxDir, '.plan.md');
+    if (fs.existsSync(planMdPath)) {
+      planContext = fs.readFileSync(planMdPath, 'utf-8');
+    }
+
+    const codeContent = `${systemRules}
 
 ## 【当前任务指令】
 请根据以下需求进行开发：
 > ${promptVal}
 
+${planContext ? `## 【前期技术方案参考】\n以下方案已通过审批，请参考实施：\n\n${planContext}\n` : ''}
+
 请注意遵守上述技术栈约束和边界规范。修改完成后直接退出。
 `;
-    fs.writeFileSync(agentsMdPath, hermesContent);
-  } else if (agent === 'opencode') {
+    fs.writeFileSync(agentsMdPath, codeContent);
+  } else {
+    // heal 模式
     let errorLog = '';
     if (fixTarget && fs.existsSync(fixTarget)) {
       errorLog = fs.readFileSync(fixTarget, 'utf-8');
@@ -104,7 +109,7 @@ export async function callAgent({ agent, promptVal, rulesPath, fixTarget, sandbo
       errorLog = '未知验证错误，请检查项目状态。';
     }
 
-    const opencodeContent = `${systemRules}
+    const healContent = `${systemRules}
 
 ## 【CI 自愈专属指令】
 你当前已被唤醒作为 **OpenCode CI 自愈急救员**。
@@ -119,172 +124,169 @@ ${errorLog}
 2. **严禁擅自改动核心业务逻辑**。
 3. 修复完毕后直接退出。
 `;
-    fs.writeFileSync(agentsMdPath, opencodeContent);
+    fs.writeFileSync(agentsMdPath, healContent);
   }
 
-  // 4. 调用 Agent 进程
-  if (agent === 'hermes') {
-    // ─── 调用真实的 Nous Research hermes-agent CLI ─────────────────────
-    let hermesCmd = 'hermes';
-    const localHermes = path.join(os.homedir(), '.local/bin/hermes');
-    if (fs.existsSync(localHermes)) {
-      hermesCmd = localHermes;
-    }
-    
-    // 组装命令行参数：一键非交互模式，开启 --yolo 自动审批
-    const hermesArgs = ['chat', '-q', promptVal, '--yolo'];
-    
-    // 映射模型标识符
-    if (model) {
-      let finalModel = model;
-      if (!finalModel.includes('/')) {
-        if (finalModel === 'deepseek-chat') {
-          finalModel = 'deepseek/deepseek-chat-v3.1'; // 映射为用户配置的 openrouter 格式
-        } else {
-          finalModel = `deepseek/${finalModel}`;
-        }
-      }
-      hermesArgs.push('-m', finalModel);
-    }
-    
-    console.log(`🤖 [openhands-call] 正在唤醒真实 Hermes Agent (Model: ${model})...`);
-    
-    return new Promise((resolve, reject) => {
-      const child = spawn(hermesCmd, hermesArgs, {
-        stdio: 'inherit',
-        env: env || process.env,
-        cwd: resolvedSandboxDir
-      });
-      
-      child.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(`Hermes Agent 异常退出，退出码: ${code}`));
-        } else {
-          console.log(`✅ [openhands-call] Hermes Agent 执行完成。`);
-          resolve();
-        }
-      });
-    });
-    
+  // ─── 调用本地 opencode-sidecar ─────────────────────────────
+  const modeLabel = mode === 'code' ? '开发' : '自愈';
+  console.log(`🤖 [openhands-call] 正在唤醒 OpenCode 执行${modeLabel}任务 (Model: ${model})...`);
+
+  const sidecarTsPath = path.join(resolvedRootDir, 'packages/sidecar/src/index.ts');
+
+  // 构建 sidecar 侧车 prompt
+  let sidecarPrompt = '';
+  if (mode === 'code') {
+    sidecarPrompt = promptVal;
   } else {
-    // ─── 调用本地 opencode-sidecar 自愈消防员 ─────────────────────────────
-    console.log(`🤖 [openhands-call] 正在唤醒本地 OpenCode CI 自愈消防员 (Model: ${model})...`);
-    
-    const sidecarTsPath = path.join(resolvedRootDir, 'packages/sidecar/src/index.ts');
-    
     let errorLogContent = '';
     if (fixTarget && fs.existsSync(fixTarget)) {
       errorLogContent = fs.readFileSync(fixTarget, 'utf-8');
     }
-    const sidecarPrompt = `请在当前工作区中修复编译/语法报错。报错内容：${errorLogContent || '详见 AGENTS.md'}`;
-    
-    const spawnEnv = env || process.env;
-
-    return new Promise((resolve, reject) => {
-      const child = spawn('bun', ['run', sidecarTsPath], {
-        stdio: ['pipe', 'pipe', 'inherit'],
-        env: {
-          ...spawnEnv,
-          OPENCODE_MODEL: model,
-          WORKSPACE_PATH: resolvedSandboxDir,
-          OPENCODE_SESSION_ID: `session-${agent}-${Date.now()}`
-        },
-        cwd: resolvedSandboxDir
-      });
-
-      // Read AGENTS.md content and send as JSON with system message
-      const agentsMdContent = fs.existsSync(agentsMdPath)
-        ? fs.readFileSync(agentsMdPath, 'utf-8')
-        : '';
-      const stdinInput = JSON.stringify({
-        messages: [
-          { role: "system", content: agentsMdContent },
-          { role: "user", content: sidecarPrompt }
-        ]
-      });
-      child.stdin.write(stdinInput);
-      child.stdin.end();
-
-      // Sidecar timeout handling
-      const SIDECAR_TIMEOUT_MS = parseInt(process.env.SIDECAR_TIMEOUT_MS || "120000", 10);
-      const timeout = setTimeout(() => {
-        child.kill('SIGTERM');
-        reject(new Error(`OpenCode 侧车进程超时 (${SIDECAR_TIMEOUT_MS}ms)，已强制终止`));
-      }, SIDECAR_TIMEOUT_MS);
-
-      let buffer = '';
-      child.stdout.on('data', (data) => {
-        buffer += data.toString();
-        let lines = buffer.split('\n');
-        buffer = lines.pop();
-
-        for (let line of lines) {
-          line = line.trim();
-          if (!line) continue;
-
-          try {
-            const event = JSON.parse(line);
-            switch (event.type) {
-              case 'ThinkingStarted':
-                process.stdout.write(`🤔 [Thinking] `);
-                break;
-              case 'Thinking':
-                process.stdout.write(event.payload);
-                break;
-              case 'ThinkingEnded':
-                process.stdout.write(`\n`);
-                break;
-              case 'TextStarted':
-                process.stdout.write(`💬 [Response] `);
-                break;
-              case 'Text':
-                process.stdout.write(event.payload);
-                break;
-              case 'TextEnded':
-                process.stdout.write(`\n`);
-                break;
-              case 'ToolCall':
-                console.log(`🛠️  [工具调用] ${event.payload.name}(${event.payload.args})`);
-                break;
-              case 'ToolStarted':
-                break;
-              case 'ToolSuccess':
-                console.log(`✅ [工具成功] ${event.payload.name}`);
-                break;
-              case 'ToolFailed':
-                console.log(`❌ [工具失败] ${event.payload.name}: ${event.payload.error}`);
-                break;
-              case 'Finished':
-                console.log(`✨ [Agent] 任务完成`);
-                break;
-              case 'Error':
-                console.error(`🚨 [Agent 错误] ${event.payload.message}`);
-                break;
-              case 'Usage':
-                console.log(`📊 [Token 用量] 输入: ${event.payload.tokens_input}, 输出: ${event.payload.tokens_output}`);
-                break;
-              default:
-                console.log(line);
-            }
-          } catch (e) {
-            console.log(line);
-          }
-        }
-      });
-
-      child.on('close', (code) => {
-        clearTimeout(timeout);
-        if (code !== 0) {
-          reject(new Error(`Agent [${agent}] 异常退出，退出码: ${code}`));
-        } else {
-          console.log(`✅ [openhands-call] Agent [${agent}] 执行完成。`);
-          resolve();
-        }
-      });
-
-      child.on('error', () => clearTimeout(timeout));
-    });
+    sidecarPrompt = `请在当前工作区中修复编译/语法报错。报错内容：${errorLogContent || '详见 AGENTS.md'}`;
   }
+
+  const spawnEnv = env || process.env;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn('bun', ['run', sidecarTsPath], {
+      stdio: ['pipe', 'pipe', 'inherit'],
+      env: {
+        ...spawnEnv,
+        OPENCODE_MODEL: model,
+        WORKSPACE_PATH: resolvedSandboxDir,
+        OPENCODE_SESSION_ID: `session-opencode-${Date.now()}`
+      },
+      cwd: resolvedSandboxDir
+    });
+
+    // Read AGENTS.md content and send as JSON with system message
+    const agentsMdContent = fs.existsSync(agentsMdPath)
+      ? fs.readFileSync(agentsMdPath, 'utf-8')
+      : '';
+    const stdinInput = JSON.stringify({
+      messages: [
+        { role: "system", content: agentsMdContent },
+        { role: "user", content: sidecarPrompt }
+      ]
+    });
+    child.stdin.write(stdinInput);
+    child.stdin.end();
+
+    // Sidecar timeout handling
+    const SIDECAR_TIMEOUT_MS = parseInt(process.env.SIDECAR_TIMEOUT_MS || "180000", 10);
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`OpenCode 侧车进程超时 (${SIDECAR_TIMEOUT_MS}ms)，已强制终止`));
+    }, SIDECAR_TIMEOUT_MS);
+
+    let buffer = '';
+    child.stdout.on('data', (data) => {
+      buffer += data.toString();
+      let lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (let line of lines) {
+        line = line.trim();
+        if (!line) continue;
+
+        try {
+          const event = JSON.parse(line);
+          switch (event.type) {
+            case 'ThinkingStarted':
+              process.stdout.write(`🤔 [Thinking] `);
+              break;
+            case 'Thinking':
+              process.stdout.write(event.payload);
+              break;
+            case 'ThinkingEnded':
+              process.stdout.write(`\n`);
+              break;
+            case 'TextStarted':
+              process.stdout.write(`💬 [Response] `);
+              break;
+            case 'Text':
+              process.stdout.write(event.payload);
+              break;
+            case 'TextEnded':
+              process.stdout.write(`\n`);
+              break;
+            case 'ToolCall':
+              console.log(`🛠️  [工具调用] ${event.payload.name}(${event.payload.args})`);
+              break;
+            case 'ToolStarted':
+              break;
+            case 'ToolSuccess':
+              console.log(`✅ [工具成功] ${event.payload.name}`);
+              break;
+            case 'ToolFailed':
+              console.log(`❌ [工具失败] ${event.payload.name}: ${event.payload.error}`);
+              break;
+            case 'Finished':
+              console.log(`✨ [Agent] 任务完成`);
+              break;
+            case 'Error':
+              console.error(`🚨 [Agent 错误] ${event.payload.message}`);
+              break;
+            case 'Usage':
+              console.log(`📊 [Token 用量] 输入: ${event.payload.tokens_input}, 输出: ${event.payload.tokens_output}`);
+              break;
+            default:
+              console.log(line);
+          }
+        } catch (e) {
+          console.log(line);
+        }
+      }
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timeout);
+      if (code !== 0) {
+        reject(new Error(`OpenCode ${modeLabel}任务异常退出，退出码: ${code}`));
+      } else {
+        console.log(`✅ [openhands-call] OpenCode ${modeLabel}任务执行完成。`);
+        resolve();
+      }
+    });
+
+    child.on('error', () => clearTimeout(timeout));
+  });
+}
+
+// 独立运行模式（用于调试）
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const args = process.argv.slice(2);
+  let promptVal = '';
+  let rulesPath = '';
+  let fixTarget = '';
+  let mode = 'code';
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith('--prompt=')) {
+      promptVal = arg.split('=')[1];
+    } else if (arg.startsWith('--rules=')) {
+      rulesPath = arg.split('=')[1];
+    } else if (arg.startsWith('--fix-target=')) {
+      fixTarget = arg.split('=')[1];
+    } else if (arg === '--heal') {
+      mode = 'heal';
+    }
+  }
+
+  callAgent({
+    promptVal,
+    rulesPath,
+    fixTarget,
+    mode,
+    sandboxDir: process.cwd(),
+    rootDir: path.resolve(__dirname, '../../..')
+  }).then(() => {
+    process.exit(0);
+  }).catch((err) => {
+    console.error(`❌ [openhands-call] 执行失败: ${err.message}`);
+    process.exit(1);
+  });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

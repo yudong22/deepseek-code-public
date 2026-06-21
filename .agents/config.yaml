@@ -11,23 +11,15 @@ tech_rules:
   "Tauri (Rust)": "Rust 核心层仅用于原生系统级能力桥接与 Sidecar 进程生命周期管理，重度业务逻辑应在 React 前端或 Sidecar 层面"
   "Sidecar (Bun/TS)": "Agent 的核心逻辑应遵循 Effect-TS 及 Session 封装模式"
 
-# 核心多 Agent 路由规则
+# Agent 路由规则（v0.4.0 合并为单一 OpenCode Agent）
 agent_routing:
-  primary_developer: 
+  default:
     provider: "openai_compatible"        # 声明使用 OpenAI 兼容协议
-    # 2026年标准的 LiteLLM/OpenHands 路由格式：供应商/模型名
-    model: "deepseek/deepseek-v4-flash"   
-    api_base: "https://api.deepseek.com/v1" # 或者是你们内部中台的 API 转发网关
+    model: "deepseek/deepseek-v4-flash"
+    api_base: "https://api.deepseek.com/v1"
     api_key: "${DEEPSEEK_API_KEY}"       # 从系统环境变量中无感读取，严禁硬编码
     temperature: 0.2                     # 编程任务建议低采样随机性，确保代码严谨
     max_tokens: 8192
-    
-  ci_healer:
-    provider: "openai_compatible"
-    model: "deepseek/deepseek-v4-flash"
-    api_base: "https://api.deepseek.com/v1"
-    api_key: "${DEEPSEEK_API_KEY}"
-    temperature: 0.0                     # CI自愈属于机械性修复，直接设为 0 追求确定性
 # 降维极速验证门禁（秒级响应）
 
 verification_pipeline:

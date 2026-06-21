@@ -44,9 +44,11 @@ bun openhands doctor                               # Environment dependency audi
 bun openhands run "修复类型错误"                    # Self-healing pipeline (走网关)
 bun openhands memory sync --commit HEAD            # Sync experience to vector DB
 
-# 离线模式（v0.3.3+，无网关时直连 DeepSeek API）
-export DEEPSEEK_API_KEY=sk-xxx
+# 离线模式（v0.4.0，多供应商 + 本地配置）
+bun openhands plan "添加用户登录"                   # AI 需求分析，生成技术方案
+bun openhands run --from-plan .plan.md "添加用户登录" # 基于方案执行开发
 bun openhands run "输出 hello world"               # Self-healing pipeline (直连)
+bun openhands run --provider openai "修复 bug"      # 指定供应商覆盖默认配置
 ```
 
 ## Architecture
@@ -137,27 +139,29 @@ Auto-creates a Qdrant `memory` collection (1536-dim, Cosine distance) on startup
 
 ### Self-Healing Agent Pipeline (packages/client-cli/)
 
-The `openhands run <task>` command implements a full C/S self-healing pipeline:
+The `openhands run <task>` command implements a full self-healing pipeline:
 
 1. **Isolation**: Creates a git worktree sandbox at `/tmp/ai-workers/<taskId>` from branch `main`
-2. **Memory Retrieval** (仅在线模式): Fetches relevant past experiences from the Go gateway's Qdrant vector DB (或本地 JSON 降级)
-3. **Agent Execution**: Spawns the **Hermes** agent (external CLI) to write code, via `callAgent({agent:'hermes', env: spawnEnv})`
+2. **Memory Retrieval**: Fetches relevant past experiences from Go gateway (在线模式) 或本地 `~/.openhands/memories.json` (离线模式, 关键词 Jaccard 匹配)
+3. **Agent Execution (v0.4.0)**: 统一使用 **OpenCode sidecar** (`mode='code'`) 写代码，不再依赖外部 Hermes CLI
 4. **Fast Validation**: Runs `fastValidate()` — matches modified files against config-driven verification rules
-5. **Self-Heal Loop**: If validation fails (up to 3 attempts), calls **OpenCode sidecar** via `callAgent({agent:'opencode', env: process.env})` with AGENTS.md 作为 JSON system message 传递
-6. **Auto Memory Sync** (v0.3.3+): 成功 commit 后自动调用 `handleMemorySync(['--commit', 'HEAD'])` 同步经验到网关
-7. **Commit & Cleanup**: On success, commits locally and removes the worktree. On failure, performs safe rollback
+5. **Self-Heal Loop**: If validation fails (up to 3 attempts), runs OpenCode sidecar 在 `mode='heal'` 下修复报错
+6. **Local Memory Save**: 成功后自动保存经验到 `~/.openhands/memories.json`（本地永久记忆）
+7. **Auto Gateway Memory Sync** (v0.3.3+): 有网关时同步经验到网关
+8. **Commit & Cleanup**: On success, commits locally and removes the worktree. On failure, performs safe rollback
 
-**v0.3.3 关键改进：**
-- **离线模式**: 无网关时自动降级，直连 DeepSeek API，不再死限要求 `openhands login`
-- **Env 隔离**: `callAgent()` 接受 `env` 参数，不再全局 `Object.assign(process.env, ...)` 污染环境
-- **Sidecar 超时**: 环境变量 `SIDECAR_TIMEOUT_MS`（默认 120s），超时自动 `SIGTERM`
-- **AGENTS.md 传递**: sidecar stdin 改为 JSON `messages[]` 格式，包含 AGENTS.md 作为 system message（利用 opencode `.opencode/system.md`）
-- **自动 memory sync**: 流水线成功后自动 `handleMemorySync(['--commit', 'HEAD'])`
-- **本地记忆降级**: Go 网关在 Qdrant 离线时自动降级到 `packages/gateway/db/memories.json`（关键词 Jaccard 匹配）
+**v0.4.0 关键改进：**
+- **弃 Hermes**: 不再依赖外部 `hermes` CLI，管线简化为纯 OpenCode（Bun/TS）
+- **`openhands plan`**: 新增子命令，AI 分析需求生成技术方案（`.plan.md`），满足"前期讨论"需求
+- **多供应商离线配置**: `~/.openhands/config.json` 支持 `providers` 字段配置多组 API key/Base URL/Model
+- **本地记忆库**: 离线模式下自动从 `~/.openhands/memories.json` 检索相关经验，成功后自动保存
+- **`--from-plan`**: `openhands run` 支持读取 `.plan.md` 作为额外 system context
+- **`--provider` / `--model`**: CLI 参数运行时覆盖默认供应商和模型
+- **Sidecar 超时延长**: 默认从 120s 改为 180s（`SIDECAR_TIMEOUT_MS`）
 
 关键文件:
-- `packages/client-cli/src/cli.ts` — 主入口：login / doctor / run / memory sync，含离线模式检测
-- `packages/client-cli/src/openhands-call.js` — Agent 调度器：Hermes/OpenCode spawn，env 传递，超时，JSON stdin
+- `packages/client-cli/src/cli.ts` — 主入口：login / doctor / plan（v0.4.0 新增）/ run / memory sync，含离线模式检测、多供应商配置、本地记忆库
+- `packages/client-cli/src/openhands-call.js` — Agent 调度器（OpenCode-only）：mode='code'/'heal' 双模式，env 传递，超时，JSON stdin
 - `packages/sidecar/src/index.ts` — 侧车入口：JSON/纯文本 stdin → Session → 流式事件
 - `packages/gateway/main.go` — Go 网关：JWT 24h、LLM 代理、Qdrant + 本地 JSON 记忆
 
@@ -199,12 +203,9 @@ Controls multi-agent routing, tech rules, and verification pipeline:
 
 ```yaml
 agent_routing:
-  primary_developer:
+  default:                              # v0.4.0: 合并为单一 OpenCode Agent
     model: "deepseek/deepseek-v4-flash"
     temperature: 0.2
-  ci_healer:
-    model: "deepseek/deepseek-v4-flash"
-    temperature: 0.0
 verification_pipeline:
   project_tauri:
     match: "src-tauri/**/*"

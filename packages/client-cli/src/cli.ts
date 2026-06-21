@@ -60,6 +60,9 @@ async function main() {
       case 'doctor':
         await handleDoctor();
         break;
+      case 'plan':
+        await handlePlan(args.slice(1));
+        break;
       case 'run':
         await handleRun(args.slice(1));
         break;
@@ -82,19 +85,28 @@ async function main() {
 
 function printHelp() {
   console.log(`
-  \x1b[36mOpenHands C/S 自愈流水线客户端 CLI\x1b[0m
-  
+  \x1b[36mOpenHands C/S 自愈流水线客户端 CLI (v0.4.0)\x1b[0m
+
   \x1b[1m使用方式:\x1b[0m
     openhands <command> [options]
-    
+
   \x1b[1m核心命令:\x1b[0m
     \x1b[32mlogin\x1b[0m       --server <url> --id <id> --secret <secret>   连接 Go 网关进行 JWT 授权登录
-    \x1b[32mdoctor\x1b[0m      环境依赖健康度审计 (检查 Git/Bun/Hermes 以及项目编译器 SDK)
-    \x1b[32mrun\x1b[0m         [task-desc] [--task-id <id>]              启动本地影子沙箱自愈开发流水线
-    \x1b[32mmemory sync\x1b[0m --commit <commit_id>                      上报审核合并后的成功经验至向量记忆库
-    
-  \x1b[1m选项:\x1b[0m
-    -h, --help    显示帮助信息
+    \x1b[32mdoctor\x1b[0m      环境依赖健康度审计 (检查 Bun/Git/项目编译器 SD金)
+    \x1b[32mplan\x1b[0m         "<task-desc>"                               AI 分析需求并生成技术方案（前期讨论）
+    \x1b[32mrun\x1b[0m         [task-desc] [--task-id <id>]                启动本地影子沙箱自愈开发流水线
+    \x1b[32mrun\x1b[0m         --from-plan <path>                          基于 plan 生成的方案执行开发
+    \x1b[32mmemory sync\x1b[0m --commit <commit_id>                        上报审核合并后的成功经验至向量记忆库
+
+  \x1b[1mRun 选项:\x1b[0m
+    --provider <name>   指定供应商 (deepseek/openai/anthropic，仅在离线模式生效)
+    --model <name>      指定模型名（覆盖 config.yaml 中的默认模型）
+    --task-id <id>      指定任务 ID（默认自动生成）
+
+  \x1b[1m示例:\x1b[0m
+    openhands plan "添加用户登录页面"
+    openhands run --from-plan .plan.md "添加用户登录页面"
+    DEEPSEEK_API_KEY=sk-xxx openhands run "修复类型错误"
   `);
 }
 
@@ -151,19 +163,13 @@ async function handleDoctor() {
     healthy = false;
   }
 
-  // 2. Hermes CLI check
-  const localHermes = path.join(os.homedir(), '.local/bin/hermes');
-  const hermesInstalled = fs.existsSync(localHermes);
-  if (hermesInstalled) {
-    console.log("  - [Hermes Agent] \x1b[32m已安装\x1b[0m (路径: ~/.local/bin/hermes)");
+  // 2. OpenCode Agent check (bundled sidecar)
+  const sidecarPath = path.resolve(__dirname, '../../sidecar/src/index.ts');
+  if (fs.existsSync(sidecarPath)) {
+    console.log("  - [OpenCode Sidecar] \x1b[32m就绪\x1b[0m (内置, 路径: packages/sidecar/src/index.ts)");
   } else {
-    try {
-      execSync('which hermes');
-      console.log("  - [Hermes Agent] \x1b[32m已安装\x1b[0m (通过 PATH 查获)");
-    } catch (e) {
-      console.log("  - [Hermes Agent] \x1b[33m未检测到\x1b[0m (请配置 ~/.local/bin/hermes 或确保全局安装)");
-      healthy = false;
-    }
+    console.log("  - [OpenCode Sidecar] \x1b[31m未找到\x1b[0m (预期路径: packages/sidecar/src/index.ts)");
+    healthy = false;
   }
 
   // 3. Project Config Toolchain Check
@@ -212,23 +218,189 @@ async function handleDoctor() {
   }
 }
 
+// ─── 本地记忆管理 ─────────────────────────────────────
+const memoriesPath = path.join(os.homedir(), '.openhands', 'memories.json');
+
+function loadLocalMemories(): any[] {
+  try {
+    if (fs.existsSync(memoriesPath)) {
+      return JSON.parse(fs.readFileSync(memoriesPath, 'utf-8'));
+    }
+  } catch (e) {}
+  return [];
+}
+
+function saveLocalMemories(memories: any[]) {
+  try {
+    const dir = path.dirname(memoriesPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(memoriesPath, JSON.stringify(memories, null, 2));
+  } catch (e) {}
+}
+
+function searchLocalMemories(prompt: string, maxResults = 3): any[] {
+  const memories = loadLocalMemories();
+  const promptTokens = tokenize(prompt);
+  const scored = memories.map(m => {
+    const memTokens = tokenize(m.prompt);
+    const intersection = memTokens.filter(t => promptTokens.includes(t)).length;
+    const union = new Set([...memTokens, ...promptTokens]).size;
+    const score = union > 0 ? intersection / union : 0;
+    return { ...m, score };
+  });
+  return scored.filter(m => m.score >= 0.10).sort((a, b) => b.score - a.score).slice(0, maxResults);
+}
+
+function addLocalMemory(entry: any) {
+  const memories = loadLocalMemories();
+  memories.push({ ...entry, timestamp: Date.now() });
+  // 保留最近 100 条
+  const trimmed = memories.slice(-100);
+  saveLocalMemories(trimmed);
+}
+
+function tokenize(s: string): string[] {
+  return s.toLowerCase().split(/\W+/).filter(Boolean);
+}
+
+// ─── AI 需求分析：生成技术方案 ───────────────────────
+async function handlePlan(args: string[]) {
+  const taskDesc = args.filter(a => !a.startsWith('--')).join(' ') || '';
+  if (!taskDesc) {
+    throw new Error("请指定任务描述。例如: openhands plan \"添加用户登录页面\"");
+  }
+
+  log(`正在分析需求并生成技术方案...`);
+
+  const cfg = loadConfig();
+
+  // 解析计划模式使用的模型（默认用便宜模型）
+  let planModel = process.env.OPENCODE_PLAN_MODEL || 'deepseek-chat';
+  let apiKey = process.env.DEEPSEEK_API_KEY || '';
+  let baseUrl = 'https://api.deepseek.com/v1';
+
+  // 从配置中读取供应商信息
+  if (cfg?.providers?.deepseek?.apiKey) {
+    apiKey = cfg.providers.deepseek.apiKey;
+  }
+  if (cfg?.providers?.deepseek?.baseUrl) {
+    baseUrl = cfg.providers.deepseek.baseUrl;
+  }
+  if (cfg?.planModel) {
+    planModel = cfg.planModel;
+  }
+
+  if (!apiKey) {
+    throw new Error("需要设置 API key（通过环境变量 DEEPSEEK_API_KEY 或配置 ~/.openhands/config.json 中的 providers）");
+  }
+
+  // 检查本地记忆
+  const localMemories = searchLocalMemories(taskDesc);
+  let memoriesContext = '';
+  if (localMemories.length > 0) {
+    memoriesContext = '\n\n## 【相关历史经验】\n';
+    localMemories.forEach((m: any, i: number) => {
+      memoriesContext += `### 经验 ${i + 1} (相似度: ${(m.score * 100).toFixed(0)}%)\n`;
+      memoriesContext += `- **原任务**: ${m.prompt}\n`;
+      if (m.git_diff) {
+        memoriesContext += `- **修改**: \`\`\`diff\n${m.git_diff.slice(0, 500)}\n\`\`\`\n`;
+      }
+    });
+  }
+
+  const planPrompt = `你是一位资深架构师。请分析以下需求并输出详细的技术方案。
+
+需求描述：
+${taskDesc}
+${memoriesContext}
+
+请输出包含以下内容的 Markdown 方案：
+
+## 1. 需求分析
+- 核心功能点
+- 技术难点
+- 关键决策
+
+## 2. 技术方案
+- 架构设计
+- 组件/文件选择
+- API 接口设计（如适用）
+
+## 3. 修改清单
+- 需要创建的文件
+- 需要修改的文件
+- 每个文件的大致改动
+
+## 4. 实施步骤
+- 按顺序的关键步骤
+
+## 5. 潜在风险
+- 可能遇到的问题及应对
+
+请确保方案具体、可执行。`;
+
+  // 调用 LLM API
+  const resp = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: planModel,
+      messages: [{ role: 'user', content: planPrompt }],
+      temperature: 0.7,
+      max_tokens: 4096
+    })
+  });
+
+  if (!resp.ok) {
+    const errBody = await resp.text().catch(() => '');
+    throw new Error(`AI 方案生成失败 (${resp.status}): ${errBody}`);
+  }
+
+  const result = await resp.json();
+  const planContent = result.choices?.[0]?.message?.content || '';
+
+  // 保存到 .plan.md
+  const planPath = path.join(process.cwd(), '.plan.md');
+  fs.writeFileSync(planPath, planContent);
+
+  console.log('\n' + '='.repeat(60));
+  console.log('📋 生成的技术方案:');
+  console.log('='.repeat(60));
+  console.log(planContent);
+  console.log('='.repeat(60));
+  console.log(`\n✅ 方案已保存到: ${planPath}`);
+  console.log(`💡 确认后运行: openhands run --from-plan .plan.md "${taskDesc}"\n`);
+}
+
 async function handleRun(args: string[]) {
   const cfg = loadConfig();
   const hasGateway = cfg && cfg.jwt && Date.now() < cfg.expiresAt;
 
   if (!hasGateway) {
-    log("未检测到网关凭证，将以离线模式直连 DeepSeek API（需要 DEEPSEEK_API_KEY 环境变量）...");
-    if (!process.env.DEEPSEEK_API_KEY) {
-      throw new Error("离线模式需要设置环境变量 DEEPSEEK_API_KEY。请先 export DEEPSEEK_API_KEY=sk-...");
-    }
+    log("未检测到网关凭证，将以离线模式直连 API（需要设置 API key）...");
   }
 
   let taskId = `task-${Date.now()}`;
   let taskDesc = '';
+  let fromPlanPath = '';
+  let cliProvider = '';
+  let cliModel = '';
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--task-id') {
       taskId = args[i + 1];
+      i++;
+    } else if (args[i] === '--from-plan') {
+      fromPlanPath = args[i + 1];
+      i++;
+    } else if (args[i] === '--provider') {
+      cliProvider = args[i + 1];
+      i++;
+    } else if (args[i] === '--model') {
+      cliModel = args[i + 1];
       i++;
     } else if (!args[i].startsWith('--')) {
       taskDesc = args[i];
@@ -286,7 +458,18 @@ async function handleRun(args: string[]) {
   }
 
   try {
-    // 2. Fetch memory from Go gateway (only when gateway available)
+    // 2. Copy .plan.md into sandbox if --from-plan provided
+    if (fromPlanPath) {
+      const srcPlan = path.resolve(process.cwd(), fromPlanPath);
+      if (fs.existsSync(srcPlan)) {
+        fs.copyFileSync(srcPlan, path.join(sandboxDir, '.plan.md'));
+        log(`已加载前期技术方案: ${fromPlanPath}`);
+      } else {
+        log(`警告: --from-plan 文件不存在: ${fromPlanPath}`);
+      }
+    }
+
+    // 3. Fetch memory
     let memoriesStr = '';
     if (hasGateway) {
       log("正在向网关拉取相关长期相似经验...");
@@ -320,22 +503,64 @@ async function handleRun(args: string[]) {
         log(`连接网关记忆库失败: ${e.message}。将跳过检索。`);
       }
     } else {
-      log("离线模式：跳过网关记忆检索。");
+      // 离线模式：从本地记忆检索
+      log("离线模式：正在从本地记忆检索相关经验...");
+      const localMemories = searchLocalMemories(taskDesc);
+      if (localMemories.length > 0) {
+        memoriesStr += "\n## 💡 【本地历史经验参考】\n";
+        localMemories.forEach((m: any, idx: number) => {
+          memoriesStr += `### 推荐案例 ${idx + 1} (相似度: ${(m.score * 100).toFixed(1)}%)\n`;
+          memoriesStr += `- **任务描述**：${m.prompt}\n`;
+          if (m.git_diff) {
+            memoriesStr += `- **修改方案 (Git Diff)**：\n\`\`\`diff\n${m.git_diff}\n\`\`\`\n`;
+          }
+        });
+        log(`从本地记忆找到 ${localMemories.length} 条相关经验`);
+      } else {
+        log("本地无相关经验，启动全新探索模式。");
+      }
     }
 
-    // 3. Setup rules and AGENTS.md
-    // Build the env for agent spawn — no global process.env mutation
-    const spawnEnv = hasGateway
-      ? {
-          ...process.env,
-          OPENAI_BASE_URL: `${cfg.serverUrl}/v1`,
-          OPENAI_API_KEY: cfg.jwt,
-          DEEPSEEK_API_KEY: cfg.jwt,
-          WORKSPACE_PATH: sandboxDir
-        }
-      : { ...process.env, WORKSPACE_PATH: sandboxDir };
+    // 4. Setup rules and AGENTS.md
+    let spawnEnv: Record<string, string> = { ...process.env, WORKSPACE_PATH: sandboxDir };
 
-    // Temporarily write the injected memory context to rules md
+    if (hasGateway) {
+      // 网关模式
+      spawnEnv = {
+        ...spawnEnv,
+        OPENAI_BASE_URL: `${cfg.serverUrl}/v1`,
+        OPENAI_API_KEY: cfg.jwt,
+        DEEPSEEK_API_KEY: cfg.jwt,
+        OPENCODE_MODEL: cliModel || cfg?.model || ''
+      };
+    } else {
+      // 离线模式：多供应商支持
+      const provider = cliProvider || cfg?.defaultProvider || 'deepseek';
+      const provCfg = cfg?.providers?.[provider];
+      const apiKey = provCfg?.apiKey || process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || '';
+      const baseUrl = provCfg?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1';
+
+      if (!apiKey) {
+        throw new Error(
+          `离线模式需要设置 API key。\n` +
+          `  方式1: export DEEPSEEK_API_KEY=sk-xxx\n` +
+          `  方式2: 在 ~/.openhands/config.json 中配置 providers\n` +
+          `  方式3: openhands login 使用网关模式`
+        );
+      }
+
+      const model = cliModel || provCfg?.model || cfg?.model || process.env.OPENCODE_MODEL || 'deepseek-chat';
+
+      spawnEnv = {
+        ...spawnEnv,
+        OPENAI_BASE_URL: baseUrl,
+        DEEPSEEK_API_KEY: apiKey,
+        OPENAI_API_KEY: apiKey,
+        OPENCODE_MODEL: model
+      };
+    }
+
+    // Write the injected memory context to rules md
     const originalRulesPath = path.join(rootDir, '.agents/agent.md');
     let dynamicRulesPath = originalRulesPath;
     if (memoriesStr && fs.existsSync(originalRulesPath)) {
@@ -344,30 +569,32 @@ async function handleRun(args: string[]) {
       fs.writeFileSync(dynamicRulesPath, `${baseRules}\n${memoriesStr}`);
     }
 
-    // 4. Spawn Hermes
-    log("唤醒主力开发 Agent (Hermes) 开始写代码...");
+    // 5. OpenCode agent — write code
+    log("唤醒 OpenCode Agent 开始写代码...");
 
     await callAgent({
-      agent: 'hermes',
       promptVal: taskDesc,
       rulesPath: dynamicRulesPath,
       sandboxDir,
       rootDir,
-      env: spawnEnv
+      env: spawnEnv,
+      mode: 'code'
     });
 
-    // 5. Validation and OpenCode Heal loop
+    // 6. Validation and Heal loop
     let healCount = 0;
     const maxHeals = 3;
     let isPassed = false;
+    let lastErrorMsg = '';
 
     while (!isPassed && healCount < maxHeals) {
       try {
-        log("触发极速门禁验证验证...");
+        log("触发极速门禁验证...");
         await fastValidate({ rootDir, sandboxDir });
         isPassed = true;
       } catch (validationError: any) {
         healCount++;
+        lastErrorMsg = validationError.message;
         logError(`[验证失败] 第 ${healCount} 次唤醒 OpenCode CI 自愈...`);
 
         const errorLog = validationError.message;
@@ -376,12 +603,12 @@ async function handleRun(args: string[]) {
 
         try {
           await callAgent({
-            agent: 'opencode',
             rulesPath: dynamicRulesPath,
             fixTarget: lastErrorLogPath,
             sandboxDir,
             rootDir,
-            env: process.env  // 使用干净的环境变量（无网关代理）
+            env: spawnEnv,
+            mode: 'heal'
           });
         } catch (e: any) {
           logError(`OpenCode 运行期间抛出异常: ${e.message}`);
@@ -390,20 +617,37 @@ async function handleRun(args: string[]) {
     }
 
     if (!isPassed) {
-      throw new Error(`OpenCode 自愈达到最大上限次数 (${maxHeals})，代码仍有错误！`);
+      throw new Error(`自愈达到最大上限次数 (${maxHeals})，代码仍有错误！`);
     }
 
-    // 6. Final Commit
+    // 7. Final Commit
     log("验证全部通过！正在生成本地原子提交...");
     execSync(`git add . && git commit -m "ai(${taskId}): ${taskDesc} (自愈次数: ${healCount})"`, { cwd: sandboxDir });
 
-    // 6b. Auto-sync memory if gateway available
+    // 7b. Save local memory (always, regardless of gateway)
+    try {
+      let gitDiff = '';
+      try {
+        gitDiff = execSync(`git diff HEAD~1 HEAD`, { cwd: sandboxDir, encoding: 'utf-8' }).trim();
+      } catch (_e) {}
+      addLocalMemory({
+        prompt: taskDesc,
+        git_diff: gitDiff,
+        error_log: lastErrorMsg,
+        heal_count: healCount
+      });
+      log("经验已保存到本地记忆库。");
+    } catch (e: any) {
+      log(`本地记忆保存失败（非致命）: ${e.message}`);
+    }
+
+    // 7c. Auto-sync memory to gateway if available
     if (hasGateway) {
       log("正在同步经验到网关记忆库...");
       try {
         await handleMemorySync(['--commit', 'HEAD']);
       } catch (e: any) {
-        log(`记忆同步失败（非致命）: ${e.message}`);
+        log(`网关记忆同步失败（非致命）: ${e.message}`);
       }
     }
 
