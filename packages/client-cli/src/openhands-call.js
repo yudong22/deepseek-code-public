@@ -169,8 +169,8 @@ ${errorLog}
         { role: "user", content: sidecarPrompt }
       ]
     });
-    child.stdin.write(stdinInput);
-    child.stdin.end();
+    // 写入首行 JSON prompt + 换行，保持 stdin 开启以支持交互式 Q&A
+    child.stdin.write(stdinInput + '\n');
 
     // Sidecar timeout handling
     const SIDECAR_TIMEOUT_MS = parseInt(process.env.SIDECAR_TIMEOUT_MS || "300000", 10);
@@ -235,7 +235,12 @@ ${errorLog}
               process.stdout.write(`\n`);
               break;
             case 'ToolCall':
-              console.log(`🛠️  [工具调用] ${event.payload.name}(${event.payload.args})`);
+              if (event.payload.name === 'question') {
+                // 交互式提问：显示问题并等待用户输入
+                handleQuestion(event.payload.args, child.stdin);
+              } else {
+                console.log(`🛠️  [工具调用] ${event.payload.name}(${event.payload.args})`);
+              }
               break;
             case 'ToolStarted':
               break;
@@ -275,6 +280,41 @@ ${errorLog}
     });
 
     child.on('error', () => clearTimeout(timeout));
+  });
+}
+
+// ─── 交互式提问处理 ─────────────────────────────
+function handleQuestion(argsJson, stdin) {
+  let questionText = 'Agent 提出了一个问题';
+  let options = [];
+  try {
+    const args = JSON.parse(argsJson);
+    if (args.question) {
+      questionText = args.question;
+    } else if (args.questions?.[0]) {
+      const q = args.questions[0];
+      questionText = q.question || questionText;
+      options = q.options || [];
+    }
+  } catch {}
+
+  console.log(`\n❓ [Agent 提问] ${questionText}`);
+  if (options.length > 0) {
+    options.forEach((opt, i) => {
+      const rec = opt.label?.includes('Recommended') ? ' ✅' : '';
+      console.log(`   ${i + 1}. ${opt.label || opt}${rec}`);
+    });
+  }
+
+  // 从终端读取一行用户输入
+  process.stdout.write('> ');
+  const origMode = process.stdin.isRaw;
+  try { process.stdin.setRawMode && process.stdin.setRawMode(false); } catch {}
+  process.stdin.resume();
+  process.stdin.once('data', (data) => {
+    const answer = data.toString().trim();
+    process.stdin.pause();
+    stdin.write(answer + '\n');
   });
 }
 

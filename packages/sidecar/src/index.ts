@@ -1,6 +1,7 @@
 import { Session } from "../../../../opencode/packages/core/src/session/wrapper"
 import path from "path"
 import fs from "fs"
+import { createInterface } from "readline"
 
 // --- 可测试的工具函数 ---
 
@@ -55,14 +56,19 @@ export function derivePlanSessionId(sessionId?: string): string | undefined {
 
 async function main() {
   try {
-    // 1. Read stdin until EOF — may be JSON (structured) or plain text (legacy)
-    const rawInput = fs.readFileSync(0, "utf-8").trim()
-    if (!rawInput) {
+    // 1. Read first line from stdin (JSON with messages[] or plain text)
+    //    Uses readline for line-by-line protocol to support interactive Q&A
+    const rl = createInterface({ input: process.stdin, terminal: false })
+    const stdinLines = rl[Symbol.asyncIterator]()
+
+    const firstLine = await stdinLines.next()
+    if (firstLine.done || !firstLine.value?.trim()) {
       printEvent({ type: "Error", payload: { message: "Prompt is empty." } })
       process.exit(1)
     }
 
     // 2. Parse input
+    const rawInput = firstLine.value.trim()
     const { prompt, systemMessages, parsedInput } = parseStdinInput(rawInput)
 
     // 3. Read configuration from environment variables
@@ -120,9 +126,10 @@ async function main() {
     // 用 callID 映射工具名（opencode 的 success/failed 事件不包含 tool 字段）
     const toolNameByCallID = new Map<string, string>()
 
-    // 4. Run prompt and stream events
+    // 4. Run prompt and stream events (with concurrent answer reader for interactive Q&A)
     console.error(`[sidecar] Session ready, starting agent loop (prompt: "${prompt.slice(0, 80)}...")`)
-    await session.prompt(prompt, (raw) => {
+
+    const onEvent = (raw: any) => {
       const rawEvent = raw.event
       if (!rawEvent) return
 
@@ -212,7 +219,22 @@ async function main() {
       else if (type === "session.next.error") {
         printEvent({ type: "Error", payload: { message: data?.message ?? "Unknown error" } })
       }
-    })
+    }
+
+    // 4b. 运行 agent 循环（并发的回答读取器支持交互式 Q&A）
+    const promptPromise = session.prompt(prompt, onEvent).finally(() => rl.close())
+
+    // 从 stdin 读取后续行作为用户对 question 工具的回复
+    const answerReader = (async () => {
+      for await (const line of stdinLines) {
+        if (line.trim()) {
+          try { await session.respond(line.trim()) }
+          catch (_e) { /* respond 失败不影响主流程 */ }
+        }
+      }
+    })()
+
+    await Promise.all([promptPromise, answerReader])
 
     // 5. 读取 token 用量并通知完成
     let usage: { tokens_input?: number; tokens_output?: number; tokens_reasoning?: number } = {}
