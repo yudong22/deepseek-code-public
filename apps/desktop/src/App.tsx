@@ -11,7 +11,6 @@ import RightPanel from "@/components/RightPanel";
 import ChatFeed from "@/components/ChatFeed";
 import ChatInput from "@/components/ChatInput";
 import EmptyState from "@/components/EmptyState";
-import QuestionCard from "@/components/QuestionCard";
 
 import { useToast } from "@/hooks/useToast";
 import { useSettings } from "@/hooks/useSettings";
@@ -657,7 +656,7 @@ function MainDashboard() {
             const toolArgs = event.payload.args;
             const callId = event.payload.call_id || "";
 
-            // 交互式提问：显示 QuestionCard，不阻塞事件流
+            // 交互式提问：由 ChatFeed 中的 QuestionCard 渲染
             if (toolName === "question") {
               setPendingQuestion({ args: toolArgs, callId });
               // 仍添加至 sections 以便展示提问上下文
@@ -982,14 +981,8 @@ function MainDashboard() {
                 readFile={(path) => bridge.readFile(path)}
                 getFileUrl={(path) => bridge.getFileUrl(path)}
                 showToast={showToast}
+                onAnswerQuestion={() => setPendingQuestion(null)}
               />
-              {pendingQuestion && (
-                <QuestionCard
-                  args={pendingQuestion.args}
-                  callId={pendingQuestion.callId}
-                  onAnswered={() => setPendingQuestion(null)}
-                />
-              )}
               <ChatInput
                 inputText={inputText}
                 selectedModel={selectedModel}

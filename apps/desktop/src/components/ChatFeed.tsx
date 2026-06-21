@@ -3,6 +3,7 @@ import { Message } from "@/bridge";
 import { renderMarkdown } from "@/utils/markdown";
 import * as Icons from "@/components/Icons";
 import { ToolCallGroup } from "@/components/ToolCallCard";
+import QuestionCard from "@/components/QuestionCard";
 
 interface ChatFeedProps {
   messages: Message[];
@@ -13,6 +14,8 @@ interface ChatFeedProps {
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;
   showToast?: (message: string) => void;
+  /** question 工具回答后的回调 */
+  onAnswerQuestion?: () => void;
 }
 
 interface ThinkingBlockProps {
@@ -255,6 +258,19 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                             );
                           }
                           if (sec.type === "tools" && sec.toolCalls && sec.toolCalls.length > 0) {
+                            // 检测 question 工具调用→渲染交互式问答卡片
+                            const questionTc = sec.toolCalls.find(tc => tc.name === "question");
+                            if (questionTc) {
+                              return (
+                                <div key={si}>
+                                  <QuestionCard
+                                    args={questionTc.args || "{}"}
+                                    callId={questionTc.call_id || ""}
+                                    onAnswered={onAnswerQuestion}
+                                  />
+                                </div>
+                              );
+                            }
                             return (
                               <div key={si} className="message-tool-calls-list">
                                 <ToolCallGroup
