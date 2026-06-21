@@ -364,3 +364,100 @@ describe("Multi-provider Configuration", () => {
     expect(apiKey).toBe("");
   });
 });
+
+// ─── Model Name Normalization ──────────────────
+describe("normalizeModelName", () => {
+  test("should strip provider/ prefix", async () => {
+    const { normalizeModelName } = await import("./cli.ts");
+    expect(normalizeModelName("deepseek/deepseek-chat")).toBe("deepseek-chat");
+    expect(normalizeModelName("openai/gpt-4")).toBe("gpt-4");
+    expect(normalizeModelName("anthropic/claude-sonnet-4-20250514")).toBe("claude-sonnet-4-20250514");
+  });
+
+  test("should keep model names without prefix", async () => {
+    const { normalizeModelName } = await import("./cli.ts");
+    expect(normalizeModelName("deepseek-chat")).toBe("deepseek-chat");
+    expect(normalizeModelName("gpt-4")).toBe("gpt-4");
+    expect(normalizeModelName("claude-sonnet")).toBe("claude-sonnet");
+  });
+
+  test("should handle empty string", async () => {
+    const { normalizeModelName } = await import("./cli.ts");
+    expect(normalizeModelName("")).toBe("");
+  });
+});
+
+// ─── Provider Config Resolution ────────────────
+describe("resolveProviderConfig", () => {
+  test("should resolve provider from cliProvider", async () => {
+    const { resolveProviderConfig } = await import("./cli.ts");
+    const cfg = {
+      defaultProvider: "deepseek",
+      providers: {
+        anthropic: { apiKey: "sk-ant", baseUrl: "https://api.anthropic.com", model: "claude-sonnet" },
+      },
+    };
+    const result = resolveProviderConfig("anthropic", undefined, cfg);
+    expect(result.provider).toBe("anthropic");
+    expect(result.apiKey).toBe("sk-ant");
+    expect(result.baseUrl).toBe("https://api.anthropic.com");
+    expect(result.normalizedModel).toBe("claude-sonnet");
+  });
+
+  test("should fallback to defaultProvider when cliProvider not specified", async () => {
+    const { resolveProviderConfig } = await import("./cli.ts");
+    const cfg = {
+      defaultProvider: "deepseek",
+      providers: {
+        deepseek: { apiKey: "sk-ds", model: "deepseek-chat" },
+      },
+    };
+    const result = resolveProviderConfig(undefined, undefined, cfg);
+    expect(result.provider).toBe("deepseek");
+    expect(result.apiKey).toBe("sk-ds");
+  });
+
+  test("should use env DEEPSEEK_API_KEY when provCfg has no apiKey", async () => {
+    const { resolveProviderConfig } = await import("./cli.ts");
+    const origKey = process.env.DEEPSEEK_API_KEY;
+    process.env.DEEPSEEK_API_KEY = "sk-env-key";
+    const cfg = { providers: { deepseek: {} } };
+    const result = resolveProviderConfig("deepseek", undefined, cfg);
+    expect(result.apiKey).toBe("sk-env-key");
+    process.env.DEEPSEEK_API_KEY = origKey;
+  });
+
+  test("should use default baseUrl when none configured", async () => {
+    const { resolveProviderConfig } = await import("./cli.ts");
+    const cfg = { providers: { deepseek: { apiKey: "sk-xxx" } } };
+    const result = resolveProviderConfig("deepseek", undefined, cfg);
+    expect(result.baseUrl).toBe("https://api.deepseek.com/v1");
+  });
+
+  test("should resolve model with fallback chain", async () => {
+    const { resolveProviderConfig } = await import("./cli.ts");
+    const cfg = { providers: { deepseek: { apiKey: "sk", model: "deepseek-reasoner" } } };
+    // cliModel override
+    const r1 = resolveProviderConfig("deepseek", "gpt-4", cfg);
+    expect(r1.normalizedModel).toBe("gpt-4");
+    // provCfg model
+    const r2 = resolveProviderConfig("deepseek", undefined, cfg);
+    expect(r2.normalizedModel).toBe("deepseek-reasoner");
+  });
+
+  test("should generate modelWarning for non-standard DeepSeek models", async () => {
+    const { resolveProviderConfig } = await import("./cli.ts");
+    const cfg = { providers: { deepseek: { apiKey: "sk", model: "unknown-model" } } };
+    const result = resolveProviderConfig("deepseek", undefined, cfg);
+    expect(result.modelWarning).toBeDefined();
+    expect(result.modelWarning).toContain("unknown-model");
+  });
+
+  test("should NOT warn for standard DeepSeek models", async () => {
+    const { resolveProviderConfig } = await import("./cli.ts");
+    const cfg = { providers: { deepseek: { apiKey: "sk", model: "deepseek-chat" } } };
+    const result = resolveProviderConfig("deepseek", undefined, cfg);
+    expect(result.modelWarning).toBeUndefined();
+  });
+});
+

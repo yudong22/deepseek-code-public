@@ -303,7 +303,7 @@ ${errorLog}
 }
 
 // ─── 交互式提问处理 ─────────────────────────────
-function handleQuestion(argsJson, stdin) {
+export function handleQuestion(argsJson, stdin) {
   let questionText = 'Agent 提出了一个问题';
   let options = [];
   try {

@@ -43,6 +43,44 @@ function saveConfig(cfg: any) {
   fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
 }
 
+export interface ResolvedProviderConfig {
+  provider: string;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  normalizedModel: string;
+  modelWarning?: string;
+}
+
+/** 模型名归一化: 去掉 provider/ 前缀（如 deepseek/deepseek-chat → deepseek-chat） */
+export function normalizeModelName(rawModel: string): string {
+  return rawModel.includes('/') ? rawModel.split('/').pop()! : rawModel;
+}
+
+/** 解析多供应商配置，返回完整的 API key / baseUrl / model */
+export function resolveProviderConfig(
+  cliProvider?: string,
+  cliModel?: string,
+  cfg?: any,
+): ResolvedProviderConfig {
+  const provider = cliProvider || cfg?.defaultProvider || 'deepseek';
+  const provCfg = cfg?.providers?.[provider];
+  const apiKey = provCfg?.apiKey || process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || '';
+  const baseUrl = provCfg?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1';
+  const rawModel = cliModel || provCfg?.model || cfg?.model || process.env.OPENCODE_MODEL || 'deepseek-chat';
+  const normalizedModel = normalizeModelName(rawModel);
+
+  let modelWarning: string | undefined;
+  if (baseUrl.includes('deepseek.com')) {
+    const KNOWN_DEEPSEEK_MODELS = ['deepseek-chat', 'deepseek-reasoner'];
+    if (!KNOWN_DEEPSEEK_MODELS.includes(normalizedModel)) {
+      modelWarning = `模型名 "${normalizedModel}" 可能不被 DeepSeek API 识别（标准: ${KNOWN_DEEPSEEK_MODELS.join('/')}）`;
+    }
+  }
+
+  return { provider, apiKey, baseUrl, model: rawModel, normalizedModel, modelWarning };
+}
+
 // Main CLI router
 async function main() {
   const args = process.argv.slice(2);
@@ -600,12 +638,9 @@ async function handleRun(args: string[]) {
       };
     } else {
       // 离线模式：多供应商支持
-      const provider = cliProvider || cfg?.defaultProvider || 'deepseek';
-      const provCfg = cfg?.providers?.[provider];
-      const apiKey = provCfg?.apiKey || process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || '';
-      const baseUrl = provCfg?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.deepseek.com/v1';
+      const resolvedCfg = resolveProviderConfig(cliProvider, cliModel, cfg);
 
-      if (!apiKey) {
+      if (!resolvedCfg.apiKey) {
         throw new Error(
           `离线模式需要设置 API key。\n` +
           `  方式1: export DEEPSEEK_API_KEY=sk-xxx\n` +
@@ -614,26 +649,20 @@ async function handleRun(args: string[]) {
         );
       }
 
-      // 模型名规范化: opencode 需要 API 能识别的模型名
-      // 去掉 provider/ 前缀（如 deepseek/deepseek-chat → deepseek-chat）
-      let rawModel = cliModel || provCfg?.model || cfg?.model || process.env.OPENCODE_MODEL || 'deepseek-chat';
-      const model = rawModel.includes('/') ? rawModel.split('/').pop()! : rawModel;
-      if (model !== rawModel) {
-        log(`模型名归一化: ${rawModel} → ${model}`);
+      if (resolvedCfg.model !== resolvedCfg.normalizedModel) {
+        log(`模型名归一化: ${resolvedCfg.model} → ${resolvedCfg.normalizedModel}`);
       }
-      // DeepSeek 供应商标准模型名校验（仅做提示，不强制）
-      const KNOWN_DEEPSEEK_MODELS = ['deepseek-chat', 'deepseek-reasoner'];
-      if (baseUrl.includes('deepseek.com') && !KNOWN_DEEPSEEK_MODELS.includes(model)) {
-        log(`⚠️ 模型名 "${model}" 可能不被 DeepSeek API 识别（标准: ${KNOWN_DEEPSEEK_MODELS.join('/')}）`);
+      if (resolvedCfg.modelWarning) {
+        log(`⚠️ ${resolvedCfg.modelWarning}`);
         log(`   如果 Sidecar 长时间无响应，试试 --model deepseek-chat`);
       }
 
       spawnEnv = {
         ...spawnEnv,
-        OPENAI_BASE_URL: baseUrl,
-        DEEPSEEK_API_KEY: apiKey,
-        OPENAI_API_KEY: apiKey,
-        OPENCODE_MODEL: model
+        OPENAI_BASE_URL: resolvedCfg.baseUrl,
+        DEEPSEEK_API_KEY: resolvedCfg.apiKey,
+        OPENAI_API_KEY: resolvedCfg.apiKey,
+        OPENCODE_MODEL: resolvedCfg.normalizedModel
       };
     }
 

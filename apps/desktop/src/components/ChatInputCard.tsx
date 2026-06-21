@@ -8,6 +8,7 @@ interface ChatInputCardProps {
   selectedModel: string;
   isModelDropdownOpen: boolean;
   isGenerating?: boolean;
+  hasPendingQuestion?: boolean;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onCancel?: () => void;
@@ -26,6 +27,7 @@ export default function ChatInputCard({
   selectedModel,
   isModelDropdownOpen,
   isGenerating,
+  hasPendingQuestion,
   onInputChange,
   onSend,
   onCancel,
@@ -330,11 +332,11 @@ export default function ChatInputCard({
           <button className="chat-input-mic-btn" title="Voice Input">
             <Icons.Mic />
           </button>
-          {isGenerating ? (
+          {isGenerating && !hasPendingQuestion ? (
             <button className="chat-input-send-btn cancelling" onClick={onCancel} title="Stop">
               <Icons.Stop />
             </button>
-          ) : inputText.trim() ? (
+          ) : inputText.trim() || hasPendingQuestion ? (
             <button className="chat-input-send-btn" onClick={onSend} title="Send">
               <Icons.ArrowRight />
             </button>

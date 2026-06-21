@@ -17,6 +17,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useProjects } from "@/hooks/useProjects";
 import { useRightPanelTabs, Tab } from "@/hooks/useRightPanelTabs";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { AGUIEventAdapter } from "@/ag-ui";
 
 // --- 主面板组件，管理所有状态与业务逻辑 ---
 function MainDashboard() {
@@ -42,9 +43,24 @@ function MainDashboard() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const activeStreamingSessionRef = useRef<string | null>(null);
+  const aguiAdapterRef = useRef<AGUIEventAdapter | null>(null);
+  /** Debounced 保存 streaming assistant message 的 timer */
+  const saveDraftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Ref to hold latest streaming state vars (avoid stale closures in visibility handler) */
+  const streamStateRef = useRef<{
+    assistantMsgId: string; currentContent: string; currentThinking: string;
+    currentToolCalls: any[]; sections: any[]; sessionId: string;
+  } | null>(null);
 
   // 交互式问答：agent 提问时暂存的问题
   const [pendingQuestion, setPendingQuestion] = useState<{ args: string; callId: string } | null>(null);
+  /** 追踪最新的 assistant message（含 toolCalls 和 sections），用于切换标签页时持久化 */
+  const latestAssistantMsgRef = useRef<Message | null>(null);
+  useEffect(() => {
+    // 不管因为什么原因 messages 更新了，都把最新的 assistant msg 缓存到 ref
+    const assistant = [...messages].reverse().find(m => m.role === "assistant");
+    if (assistant) latestAssistantMsgRef.current = assistant;
+  }, [messages]);
 
   // --- 1. Toast Notification Hook ---
   const { toast, showToast } = useToast();
@@ -472,6 +488,7 @@ function MainDashboard() {
 
   // --- 取消 Agent 执行 ---
   const handleCancel = async () => {
+    if (activeStreamingSessionRef.current !== id) return; // 不是当前 session
     setIsGenerating(false);
     setPendingQuestion(null);
     activeStreamingSessionRef.current = null;
@@ -586,6 +603,9 @@ function MainDashboard() {
       let currentThinking = "";
       let currentStep = 0;
       let sessionStartTime = Date.now();
+      // ─── Session Guard：防止切换标签页后旧 session 的事件覆盖新 session ──
+      const guardSessionId = currentSessionId; // 闭包捕获当前 session ID
+      const isActiveSession = () => activeStreamingSessionRef.current === guardSessionId;
       let totalTokens: { input?: number; output?: number; reasoning?: number } = {};
       /** 按到达顺序记录事件段落 */
       let sections: Array<{
@@ -611,7 +631,46 @@ function MainDashboard() {
       let currentToolCalls: Array<{ name: string; args: string; call_id: string; result?: string; isError?: boolean; executing?: boolean; step?: number }> = [];
       let thinkingStart = 0;
 
+      // ─── 防抖保存草稿：防止切换标签页后消息丢失 ─────────────────
+      const saveDraft = () => {
+        if (saveDraftTimer.current) clearTimeout(saveDraftTimer.current);
+        saveDraftTimer.current = setTimeout(async () => {
+          const finishedSections: Message["sections"] = sections.length > 0 ? sections.map(s => {
+            if (s.type === "thinking") return { type: "thinking" as const, content: s.content || "", elapsed: s.elapsed };
+            if (s.type === "tools") return { type: "tools" as const, toolCalls: (s.toolCalls || []).map(({ executing: _ex, ...tc }) => tc) };
+            return { type: "text" as const, content: s.content || "" };
+          }) : undefined;
+          const draft: Message = {
+            id: assistantMsgId, sessionId: currentSessionId, role: "assistant",
+            content: currentContent, createdAt: initialAssistantMsg.createdAt,
+            reasoning_content: currentThinking || undefined,
+            toolCalls: currentToolCalls.length > 0 ? currentToolCalls.map(({ executing: _ex, ...tc }) => tc) : undefined,
+            sections: finishedSections,
+          };
+          streamStateRef.current = {
+            assistantMsgId, currentContent, currentThinking,
+            currentToolCalls, sections, sessionId: currentSessionId,
+          };
+          bridge.saveMessage(draft).catch(() => {});
+        }, 2000); // 2s debounce
+      };
+
+      // 切换标签页时立即保存
+      const onVisibilityChange = () => {
+        if (document.hidden && saveDraftTimer.current) {
+          clearTimeout(saveDraftTimer.current);
+          saveDraft();
+        }
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
+
       const currentAgentMode = planMode ? "plan" : undefined;
+      // 初始化 AG-UI 适配器
+      aguiAdapterRef.current = new AGUIEventAdapter();
+      console.log("[AG-UI] Adapter initialized:", {
+        threadId: aguiAdapterRef.current.getThreadId(),
+        runId: aguiAdapterRef.current.getRunId(),
+      });
       await bridge.runAgent(
         savedApiKey || "",
         selectedModel,
@@ -620,6 +679,12 @@ function MainDashboard() {
         currentSessionId!,
         currentAgentMode,
         async (event) => {
+          if (!isActiveSession()) return; // 旧 session 事件全部跳过
+          // AG-UI 适配器处理（并行记录，不影响现有 UI）
+          const aguiEvents = aguiAdapterRef.current?.process(event);
+          if (aguiEvents && aguiEvents.length > 0 && event.type !== "Thinking" && event.type !== "Text") {
+            console.log("[AG-UI] Events:", aguiEvents.map(e => e.type));
+          }
           // ─── 推理块 ─────────────────────────────────────────────────
           if (event.type === "ThinkingStarted") {
             thinkingStart = Date.now();
@@ -630,6 +695,7 @@ function MainDashboard() {
               currentThinking = sections.map(s => s.type === "thinking" ? (s.content || "") : "").filter(Boolean).join("\n");
             }
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
+            saveDraft();
           } else if (event.type === "ThinkingEnded") {
             if (thinkingStart > 0 && sections.length > 0 && sections[sections.length - 1].type === "thinking") {
               const elapsed = (Math.round(((Date.now() - thinkingStart) / 1000) * 2) / 2).toFixed(1);
@@ -648,6 +714,8 @@ function MainDashboard() {
               sections.push({ type: "text", content: event.payload });
             }
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
+            // Text 块每 2s 保存一次草稿
+            saveDraft();
           } else if (event.type === "TextEnded") {
           }
           // ─── 工具调用 ───────────────────────────────────────────────
@@ -672,6 +740,7 @@ function MainDashboard() {
               return tc.step === currentStep || currentToolCalls.filter(t => t.step === currentStep).length === 0;
             })];
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
+            saveDraft();
           } else if (event.type === "ToolStarted") {
             const callId = event.payload.call_id || "";
             const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId && tc.result === undefined);
@@ -793,6 +862,9 @@ function MainDashboard() {
           // 错误事件
           else if (event.type === "Error") {
             setIsGenerating(false);
+            if (saveDraftTimer.current) clearTimeout(saveDraftTimer.current);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+            streamStateRef.current = null;
             activeStreamingSessionRef.current = null;
             currentToolCalls = currentToolCalls.map(tc =>
               tc.result !== undefined ? tc : { ...tc, result: JSON.stringify({ error: "Agent error" }), isError: true }
@@ -838,6 +910,9 @@ function MainDashboard() {
           // 完成
           else if (event.type === "Finished") {
             setIsGenerating(false);
+            if (saveDraftTimer.current) clearTimeout(saveDraftTimer.current);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+            streamStateRef.current = null;
             activeStreamingSessionRef.current = null;
             const finalToolCalls = currentToolCalls.length > 0
               ? currentToolCalls.map(({ executing, ...tc }) => tc)
@@ -981,13 +1056,38 @@ function MainDashboard() {
                 readFile={(path) => bridge.readFile(path)}
                 getFileUrl={(path) => bridge.getFileUrl(path)}
                 showToast={showToast}
-                onAnswerQuestion={() => setPendingQuestion(null)}
+                onAnswerQuestion={async (answer) => {
+                  // 将用户的回答作为新消息追加到对话中
+                  const userMsg: Message = {
+                    id: `msg-user-${Date.now()}`,
+                    sessionId: currentSessionId!,
+                    role: "user",
+                    content: answer,
+                    createdAt: new Date().toISOString(),
+                  };
+                  setMessages((prev) => [...prev, userMsg]);
+                  // 同步到 ag-ui 适配器
+                  aguiAdapterRef.current?.addUserMessage(answer);
+                  // 同步写入 DB，防止 agent 结束后 loadMessages 丢失
+                  await bridge.saveMessage(userMsg);
+                  // 同时保存当前的 assistant message（含 question toolCall），
+                  // 防止切换标签页后丢失
+                  const assistant = latestAssistantMsgRef.current;
+                  if (assistant && assistant.elapsed === undefined) {
+                    await bridge.saveMessage({
+                      ...assistant,
+                      completedAt: new Date().toISOString(),
+                    });
+                  }
+                  setPendingQuestion(null);
+                }}
               />
               <ChatInput
                 inputText={inputText}
                 selectedModel={selectedModel}
                 isModelDropdownOpen={isModelDropdownOpen}
                 isGenerating={isGenerating}
+                hasPendingQuestion={!!pendingQuestion}
                 onInputChange={setInputText}
                 onSend={handleSend}
                 onCancel={handleCancel}

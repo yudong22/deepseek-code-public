@@ -18,7 +18,7 @@ interface QuestionData {
 interface QuestionCardProps {
   args: string;
   callId: string;
-  onAnswered?: () => void;
+  onAnswered?: (answer: string) => void;
   /** 已有回复内容（页面刷新后从 ToolSuccess result 恢复） */
   result?: string;
 }
@@ -72,7 +72,7 @@ function guessSelectedOption(args: string, answer: string): string | null {
     try {
       await bridge.respondToAgent(answer);
       setIsDone(true);
-      onAnswered?.();
+      onAnswered?.(answer);
     } catch (e) {
       console.error("Failed to respond:", e);
     } finally {
@@ -86,7 +86,7 @@ function guessSelectedOption(args: string, answer: string): string | null {
     try {
       await bridge.respondToAgent(customInput.trim());
       setIsDone(true);
-      onAnswered?.();
+      onAnswered?.(customInput.trim());
     } catch (e) {
       console.error("Failed to respond:", e);
     } finally {

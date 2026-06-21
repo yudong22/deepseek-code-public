@@ -179,8 +179,22 @@ if (isDryRun) {
 
 // ─── 提交 + 打标签 + 推送 ──────────────────────
 console.log(`\n🚀 提交并发布 v${newVersion} ...`);
-execSync(`git add -A`, { cwd: rootDir });
-execSync(`git commit -m "release: v${newVersion}"`, { cwd: rootDir });
+
+// 只 stage 已更新的版本文件 + changelog
+const stagedPaths = files.map(f => f.path).concat([".changelog.md"]);
+for (const p of stagedPaths) {
+  execSync(`git add "${p}"`, { cwd: rootDir });
+}
+// 生成带 changelog 摘要的提交信息
+const topChanges = changelogText.split("\n").filter(l => l.trim().startsWith("-")).slice(0, 8).map(l => `  ${l}`).join("\n");
+const commitMsg = topChanges
+  ? `release: v${newVersion}\n\n${topChanges}`
+  : `release: v${newVersion}`;
+const commitMsgPath = path.join(rootDir, ".commit-msg.tmp");
+fs.writeFileSync(commitMsgPath, commitMsg);
+execSync(`git commit -F "${commitMsgPath}"`, { cwd: rootDir });
+fs.unlinkSync(commitMsgPath);
+console.log(`📝 提交信息:\n${commitMsg}`);
 
 const tagExists = execSync("git tag --list", { encoding: "utf-8", cwd: rootDir })
   .split("\n").map(t => t.trim()).includes(`v${newVersion}`);

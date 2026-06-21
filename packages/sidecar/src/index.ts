@@ -52,6 +52,124 @@ export function derivePlanSessionId(sessionId?: string): string | undefined {
   return normalized ? normalized + "--plan" : undefined
 }
 
+/** 根据模型字符串推断供应商 ID */
+export function inferProviderId(modelStr: string): string {
+  if (modelStr.includes("gpt") || modelStr.includes("openai")) return "openai"
+  if (modelStr.includes("claude") || modelStr.includes("anthropic")) return "anthropic"
+  if (modelStr.includes("gemini") || modelStr.includes("google")) return "google"
+  return "deepseek"
+}
+
+export interface SidecarEvent {
+  type: string
+  payload: any
+}
+
+/** 构建工具成功结果（合并 result/structured/output/content/diff 字段） */
+export function buildToolSuccessResult(data: any): any {
+  const rawResult = data?.result ?? data?.structured ?? {}
+  let enriched: any = typeof rawResult === "object" && rawResult !== null ? { ...rawResult } : rawResult
+  if (data?.output !== undefined && typeof enriched === "object") {
+    enriched.output = data.output
+  }
+  if (data?.result?.content !== undefined && typeof enriched === "object") {
+    enriched.content = data.result.content
+  }
+  if (data?.result?.diff !== undefined && typeof enriched === "object") {
+    enriched.diff = data.result.diff
+  }
+  return enriched
+}
+
+/**
+ * 处理一个 opencode 原始事件，返回 sidecar 标准事件对象。
+ * @param rawEvent opencode 原始事件中的 .event 字段
+ * @param toolNameByCallID 工具名映射表（ToolCall 时写入，ToolSuccess/ToolFailed 时读取）
+ */
+export function processAgentEvent(
+  rawEvent: { type: string; data: any } | undefined,
+  toolNameByCallID: Map<string, string>,
+): SidecarEvent | null {
+  if (!rawEvent) return null
+
+  const type = rawEvent.type
+  const data = rawEvent.data
+
+  // --- Reasoning blocks ---
+  if (type === "session.next.reasoning.started") {
+    return { type: "ThinkingStarted", payload: null }
+  } else if (type === "session.next.reasoning.delta") {
+    return { type: "Thinking", payload: data?.delta ?? "" }
+  } else if (type === "session.next.reasoning.ended") {
+    return { type: "ThinkingEnded", payload: null }
+  }
+  // --- Text blocks ---
+  else if (type === "session.next.text.started") {
+    return { type: "TextStarted", payload: null }
+  } else if (type === "session.next.text.delta") {
+    return { type: "Text", payload: data?.delta ?? "" }
+  } else if (type === "session.next.text.ended") {
+    return { type: "TextEnded", payload: null }
+  }
+  // --- Tool lifecycle ---
+  else if (type === "session.next.tool.called") {
+    const callID = data?.callID ?? ""
+    const toolName = data?.tool ?? ""
+    if (callID) toolNameByCallID.set(callID, toolName)
+    return {
+      type: "ToolCall",
+      payload: {
+        name: toolName,
+        args: JSON.stringify(data?.input ?? {}),
+        call_id: callID,
+      },
+    }
+  } else if (type === "session.next.tool.started") {
+    return {
+      type: "ToolStarted",
+      payload: { call_id: data?.callID ?? "" },
+    }
+  } else if (type === "session.next.tool.success") {
+    const callID = data?.callID ?? ""
+    const enriched = buildToolSuccessResult(data)
+    return {
+      type: "ToolSuccess",
+      payload: {
+        name: toolNameByCallID.get(callID) ?? "",
+        result: JSON.stringify(enriched),
+        call_id: callID,
+      },
+    }
+  } else if (type === "session.next.tool.failed") {
+    const callID = data?.callID ?? ""
+    return {
+      type: "ToolFailed",
+      payload: {
+        name: toolNameByCallID.get(callID) ?? "",
+        error: data?.error?.message ?? "Execution failed",
+        call_id: callID,
+      },
+    }
+  } else if (type === "session.next.tool.ended") {
+    return {
+      type: "ToolEnded",
+      payload: { call_id: data?.callID ?? "" },
+    }
+  }
+  // --- Step lifecycle ---
+  else if (type === "session.next.step.started") {
+    return { type: "StepStarted", payload: null }
+  } else if (type === "session.next.step.ended") {
+    return { type: "StepEnded", payload: null }
+  }
+  // --- Error events ---
+  else if (type === "session.next.error") {
+    return { type: "Error", payload: { message: data?.message ?? "Unknown error" } }
+  }
+
+  return null
+}
+
 // --- sidecar 主入口 ---
 
 async function main() {
@@ -91,15 +209,8 @@ async function main() {
     }
 
     // Parse model string into providerID and id
-    let providerID = "deepseek"
+    let providerID = inferProviderId(modelStr)
     let id = modelStr
-    if (modelStr.includes("gpt") || modelStr.includes("openai")) {
-      providerID = "openai"
-    } else if (modelStr.includes("claude") || modelStr.includes("anthropic")) {
-      providerID = "anthropic"
-    } else if (modelStr.includes("gemini") || modelStr.includes("google")) {
-      providerID = "google"
-    }
 
     const model = { providerID, id }
 
@@ -132,95 +243,8 @@ async function main() {
     console.error(`[sidecar] Session ready, starting agent loop (prompt: "${prompt.slice(0, 80)}...")`)
 
     const onEvent = (raw: any) => {
-      const rawEvent = raw.event
-      if (!rawEvent) return
-
-      const type = rawEvent.type
-      const data = rawEvent.data
-
-      // --- Reasoning blocks ---
-      if (type === "session.next.reasoning.started") {
-        printEvent({ type: "ThinkingStarted", payload: null })
-      } else if (type === "session.next.reasoning.delta") {
-        printEvent({ type: "Thinking", payload: data?.delta ?? "" })
-      } else if (type === "session.next.reasoning.ended") {
-        printEvent({ type: "ThinkingEnded", payload: null })
-      }
-      // --- Text blocks ---
-      else if (type === "session.next.text.started") {
-        printEvent({ type: "TextStarted", payload: null })
-      } else if (type === "session.next.text.delta") {
-        printEvent({ type: "Text", payload: data?.delta ?? "" })
-      } else if (type === "session.next.text.ended") {
-        printEvent({ type: "TextEnded", payload: null })
-      }
-      // --- Tool lifecycle ---
-      else if (type === "session.next.tool.called") {
-        const callID = data?.callID ?? ""
-        const toolName = data?.tool ?? ""
-        if (callID) toolNameByCallID.set(callID, toolName)
-        printEvent({
-          type: "ToolCall",
-          payload: {
-            name: toolName,
-            args: JSON.stringify(data?.input ?? {}),
-            call_id: callID
-          }
-        })
-      } else if (type === "session.next.tool.started") {
-        printEvent({
-          type: "ToolStarted",
-          payload: { call_id: data?.callID ?? "" }
-        })
-      } else if (type === "session.next.tool.success") {
-        const callID = data?.callID ?? ""
-        // 尽量捕获完整的工具结果：result / structured / output / content
-        const rawResult = data?.result ?? data?.structured ?? {}
-        // 如果 result 是对象，展开合并可能存在的 output / content 字段
-        let enriched: any = typeof rawResult === "object" && rawResult !== null ? { ...rawResult } : rawResult
-        if (data?.output !== undefined && typeof enriched === "object") {
-          enriched.output = data.output
-        }
-        if (data?.result?.content !== undefined && typeof enriched === "object") {
-          enriched.content = data.result.content
-        }
-        if (data?.result?.diff !== undefined && typeof enriched === "object") {
-          enriched.diff = data.result.diff
-        }
-        printEvent({
-          type: "ToolSuccess",
-          payload: {
-            name: toolNameByCallID.get(callID) ?? "",
-            result: JSON.stringify(enriched),
-            call_id: callID
-          }
-        })
-      } else if (type === "session.next.tool.failed") {
-        const callID = data?.callID ?? ""
-        printEvent({
-          type: "ToolFailed",
-          payload: {
-            name: toolNameByCallID.get(callID) ?? "",
-            error: data?.error?.message ?? "Execution failed",
-            call_id: callID
-          }
-        })
-      } else if (type === "session.next.tool.ended") {
-        printEvent({
-          type: "ToolEnded",
-          payload: { call_id: data?.callID ?? "" }
-        })
-      }
-      // --- Step lifecycle ---
-      else if (type === "session.next.step.started") {
-        printEvent({ type: "StepStarted", payload: null })
-      } else if (type === "session.next.step.ended") {
-        printEvent({ type: "StepEnded", payload: null })
-      }
-      // --- Error events ---
-      else if (type === "session.next.error") {
-        printEvent({ type: "Error", payload: { message: data?.message ?? "Unknown error" } })
-      }
+      const evt = processAgentEvent(raw.event, toolNameByCallID)
+      if (evt) printEvent(evt)
     }
 
     // 4b. 运行 agent 循环（并发的回答读取器支持交互式 Q&A）

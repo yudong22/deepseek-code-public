@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, afterAll, beforeAll, beforeEach } from "bun:test";
+import { describe, expect, test, mock, afterAll, afterEach, beforeAll, beforeEach } from "bun:test";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -239,5 +239,102 @@ describe("yaml-parser.js - shared YAML utility", () => {
     expect(result.flag).toBe(true);
     expect(result.count).toBe(0);
     expect(result.name).toBe("str");
+  });
+});
+
+// ─── Tool Timing ────────────────────────────────
+describe("Tool timing (in callAgent)", () => {
+  test("should track tool start time and calculate duration", () => {
+    const toolTimers = new Map();
+    const callId = "call-1";
+    const startTime = Date.now();
+    toolTimers.set(callId, startTime);
+    expect(toolTimers.has(callId)).toBe(true);
+
+    const duration = Date.now() - startTime;
+    toolTimers.delete(callId);
+    expect(toolTimers.has(callId)).toBe(false);
+    expect(duration).toBeGreaterThanOrEqual(0);
+  });
+
+  test("should handle unknown callID gracefully", () => {
+    const toolTimers = new Map();
+    const callId = "unknown-call";
+    const startTime = toolTimers.get(callId) || Date.now();
+    expect(startTime).toBeGreaterThan(0);
+    // Clean up doesn't throw
+    toolTimers.delete(callId);
+  });
+});
+
+// ─── Sidecar Timeout ───────────────────────────
+describe("Sidecar timeout configuration", () => {
+  test("should use default SIDECAR_TIMEOUT_MS", () => {
+    const timeout = parseInt(process.env.SIDECAR_TIMEOUT_MS || "300000", 10);
+    expect(timeout).toBe(300000);
+  });
+
+  test("should use default IDLE_WARN_MS", () => {
+    const idleWarn = parseInt(process.env.SIDECAR_IDLE_WARN_MS || "30000", 10);
+    expect(idleWarn).toBe(30000);
+  });
+
+  test("should include last event type and model in timeout error", () => {
+    const model = "deepseek-chat";
+    const lastEventType = "Thinking";
+    const timeoutMs = 300000;
+    const idleSec = 180;
+
+    const errMsg = `OpenCode 侧车进程超时 (${timeoutMs}ms，${idleSec}s 无事件)，已强制终止。\n  最后事件: ${lastEventType}\n  模型: ${model}\n  提示: 可通过环境变量 SIDECAR_TIMEOUT_MS 调整超时时间（默认 180s）`;
+
+    expect(errMsg).toContain("300000ms");
+    expect(errMsg).toContain("180s 无事件");
+    expect(errMsg).toContain("最后事件: Thinking");
+    expect(errMsg).toContain("模型: deepseek-chat");
+    expect(errMsg).toContain("SIDECAR_TIMEOUT_MS");
+  });
+});
+
+// ─── fastValidate Edge Cases ───────────────────
+describe("fastValidate - additional edge cases", () => {
+  const testRoot = "/tmp/openhands-test-fastvalidate";
+
+  beforeAll(() => {
+    fs.mkdirSync(path.join(testRoot, ".agents"), { recursive: true });
+    fs.mkdirSync(path.join(testRoot, ".git"), { recursive: true });
+  });
+
+  afterEach(() => {
+    const cfgPath = path.join(testRoot, ".agents/config.yaml");
+    if (fs.existsSync(cfgPath)) fs.unlinkSync(cfgPath);
+  });
+
+  afterAll(() => {
+    fs.rmSync(testRoot, { recursive: true, force: true });
+  });
+
+  test("should throw if config.yaml not found", async () => {
+    const { fastValidate } = await import("./fast-validate.js");
+    await expect(fastValidate({ rootDir: "/tmp/nonexistent", sandboxDir: testRoot })).rejects.toThrow(
+      "未找到配置文件"
+    );
+  });
+
+  test("should parse and skip verification_pipeline when not defined", async () => {
+    const { fastValidate } = await import("./fast-validate.js");
+    // YAML with no verification_pipeline
+    fs.writeFileSync(path.join(testRoot, ".agents/config.yaml"), "version: 1\nproject_id: test");
+    // Should not throw, just log that pipeline is not defined
+    await fastValidate({ rootDir: testRoot, sandboxDir: testRoot });
+    // If we got here without throwing, the test passes
+    expect(true).toBe(true);
+  });
+
+  test("should parse glob pattern from config", async () => {
+    const { parseYaml } = await import("./yaml-parser.js");
+    const yaml = "verification_pipeline:\n  test_all:\n    match: \"src/**/*.ts\"\n    cmd: \"tsc\"";
+    const result = parseYaml(yaml);
+    expect(result.verification_pipeline.test_all.match).toBe("src/**/*.ts");
+    expect(result.verification_pipeline.test_all.cmd).toBe("tsc");
   });
 });

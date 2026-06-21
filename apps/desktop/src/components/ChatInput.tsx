@@ -6,6 +6,7 @@ interface ChatInputProps {
   selectedModel: string;
   isModelDropdownOpen: boolean;
   isGenerating?: boolean;
+  hasPendingQuestion?: boolean;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onCancel?: () => void;
@@ -19,10 +20,10 @@ interface ChatInputProps {
   onPreviewFile?: (relativePath: string) => void;
 }
 
-export default function ChatInput(props: ChatInputProps) {
+export default function ChatInput({ hasPendingQuestion, ...props }: ChatInputProps) {
   return (
     <div className="active-chat-input-container">
-      <ChatInputCard {...props} />
+      <ChatInputCard hasPendingQuestion={hasPendingQuestion} {...props} />
     </div>
   );
 }

@@ -3336,4 +3336,41 @@ body {
   color: #ffffff;
 }
 
+/* ─── Agent Loading 动画（融入 thinking-block 样式） ───────── */
+.agent-loading {
+  cursor: default !important;
+  opacity: 0.92;
+  animation: agent-loading-pulse 2s ease-in-out infinite;
+}
+
+@keyframes agent-loading-pulse {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 0.78; }
+}
+
+.agent-loading .agent-loading-text {
+  color: #8e8e93;
+}
+
+.agent-loading .agent-loading-sub {
+  opacity: 0.6;
+}
+
+.agent-loading-sub .agent-loading-hint {
+  font-size: 10.5px;
+  color: #aeaea3;
+}
+
+.agent-loading .thinking-cursor {
+  animation: thinking-blink 0.9s step-end infinite;
+}
+
+.night-mode .agent-loading .agent-loading-text {
+  color: #636366;
+}
+
+.night-mode .agent-loading-sub .agent-loading-hint {
+  color: #5c5c62;
+}
+
 

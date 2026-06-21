@@ -14,8 +14,8 @@ interface ChatFeedProps {
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;
   showToast?: (message: string) => void;
-  /** question 工具回答后的回调 */
-  onAnswerQuestion?: () => void;
+  /** question 工具回答后的回调，参数为用户输入的答案 */
+  onAnswerQuestion?: (answer: string) => void;
 }
 
 interface ThinkingBlockProps {
@@ -294,6 +294,23 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                     ) : (
                       <>
                         {/* 旧格式降级：thinking → tools → text */}
+                        {/* 等待 AI 首次响应时的 loading，融入思考样式 */}
+                        {isGenerating && isLastMessage &&
+                          (!msg.reasoning_content) &&
+                          (!msg.toolCalls || msg.toolCalls.length === 0) &&
+                          !msg.content && (
+                          <div className="thinking-block agent-loading">
+                            <div className="thinking-line">
+                              <span className="thinking-prefix">∴</span>
+                              <span className="thinking-text agent-loading-text">正在分析你的需求</span>
+                              <span className="thinking-cursor" />
+                            </div>
+                            <div className="thinking-line agent-loading-sub">
+                              <span className="thinking-prefix"> </span>
+                              <span className="thinking-text agent-loading-hint">模型响应需要一些时间，请稍候…</span>
+                            </div>
+                          </div>
+                        )}
                         {msg.reasoning_content !== undefined && (
                           <ThinkingBlock
                             content={msg.reasoning_content}
