@@ -207,7 +207,11 @@ jobs:
                 --title "v${VERSION}" \
                 --notes-file .release-notes.md
             }
-            gh release upload "$GITHUB_REF_NAME" "${ARTIFACTS[@]}" --clobber
+            gh release upload "$GITHUB_REF_NAME" "${ARTIFACTS[@]}" --clobber >/dev/null 2>&1 || true
+            # 用生成的 changelog 更新 release body
+            gh release edit "$GITHUB_REF_NAME" \
+              --title "v${VERSION}" \
+              --notes-file .release-notes.md
             echo "✅ Release v${VERSION} 已更新"
           else
             echo "⚠️ 未找到构建产物，跳过 Release 更新"
