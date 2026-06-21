@@ -90,7 +90,11 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
+          if [ -d "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle" ]; then
+            ARCHIVE_DIR="apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle"
+          else
+            ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
+          fi
           SIGNATURE=""
 
           # Tauri 构建时若设置了 TAURI_SIGNING_PRIVATE_KEY 会自动签名并输出签名
@@ -191,7 +195,11 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
+          if [ -d "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle" ]; then
+            ARCHIVE_DIR="apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle"
+          else
+            ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
+          fi
 
           # 收集构建产物
           ARTIFACTS=()

@@ -12,19 +12,21 @@
  *   bun run scripts/bump-version.ts 0.5.0 --dry-run
  *   bun run scripts/bump-version.ts --retag 0.4.2
  *
- * 升级 5 个配置文件:
+ * 升级 6 个配置文件:
  * 1. update.json      — Tauri 自动更新清单
  * 2. Cargo.toml       — Rust 桌面端版本
  * 3. desktop/package.json — 桌面端前端版本
  * 4. client-cli/package.json — CLI 工具版本
  * 5. sidecar/package.json  — Sidecar 版本
+ * 6. tauri.conf.json  — Tauri App 配置文件
  *
  * 推送后 GitHub Actions 自动构建、签名、发布 Release
  */
 
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
+import os from "os";
 
 const rootDir = path.resolve(__dirname, "..");
 const args = process.argv.slice(2);
@@ -57,13 +59,107 @@ if (isRetag) {
   process.exit(0);
 }
 
-// ─── 前置校验 ──────────────────────────────────
+// ─── 前置校验与自动提交 ──────────────────────────
+async function generateCommitMessage(apiKey: string, baseUrl: string, model: string, diff: string): Promise<string> {
+  const systemPrompt = `你是一个资深的程序员。请阅读以下的 git diff，并生成一条符合 Conventional Commits 规范的、精炼的单行 git commit 提交信息。
+要求：
+1. 语言必须为中文，符合项目规范（例如：feat: 修复xxx、fix: 调整xxx）。
+2. 只返回提交信息本身，不要有任何多余的解释、Markdown 标记、引号或前缀。
+3. 尽量精炼，不超过 50 个字符。`;
+
+  const userPrompt = `git diff 内容如下：\n\n${diff}`;
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 100,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`API 请求失败 (${response.status}): ${errText}`);
+  }
+
+  const data = await response.json() as any;
+  const msg = data.choices?.[0]?.message?.content?.trim();
+  if (!msg) {
+    throw new Error("API 未返回有效的 commit message。");
+  }
+  return msg;
+}
+
 const gitStatus = execSync("git status --porcelain", { encoding: "utf-8", cwd: rootDir }).trim();
 if (gitStatus) {
-  console.error("❌ 工作区有未提交的修改:");
-  console.error(gitStatus);
-  console.error("\n请先提交或 stash 后再发布");
-  process.exit(1);
+  console.log("📝 检测到工作区有未提交的修改，准备通过 AI 自动评估并 commit...");
+
+  // 解析 API Key 和配置
+  const homeDir = os.homedir();
+  const configPath = path.join(homeDir, ".openhands/config.json");
+  let apiKey = process.env.DEEPSEEK_API_KEY || "";
+  let baseUrl = "https://api.deepseek.com/v1";
+  let model = "deepseek-chat";
+
+  if (fs.existsSync(configPath)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      const provider = cfg.defaultProvider || "deepseek";
+      const provCfg = cfg.providers?.[provider];
+      if (provCfg) {
+        if (provCfg.apiKey) apiKey = provCfg.apiKey;
+        if (provCfg.baseUrl) baseUrl = provCfg.baseUrl;
+        if (provCfg.model) model = provCfg.model;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  if (model.includes("/")) {
+    model = model.split("/").pop() || model;
+  }
+
+  if (!apiKey) {
+    console.error("❌ 无法自动提交：未配置 API key（请设置环境变量 DEEPSEEK_API_KEY 或配置 ~/.openhands/config.json）");
+    console.error("工作区未提交修改如下:");
+    console.error(gitStatus);
+    process.exit(1);
+  }
+
+  // 暂存所有修改以获取完整的 diff（包括新增文件）
+  execFileSync("git", ["add", "-A"], { cwd: rootDir });
+  const diff = execSync("git diff --cached", { encoding: "utf-8", cwd: rootDir }).trim();
+
+  if (!diff) {
+    // 如果没有实际的 diff（例如只有空文件夹或被忽略的文件）
+    execFileSync("git", ["reset"], { cwd: rootDir });
+    console.error("❌ 未检测到可提交的差异。");
+    process.exit(1);
+  }
+
+  try {
+    console.log("🤖 正在调用 AI 评估改动并生成 commit message...");
+    const commitMsg = await generateCommitMessage(apiKey, baseUrl, model, diff);
+    console.log(`✨ AI 生成的 commit message: "${commitMsg}"`);
+
+    execFileSync("git", ["commit", "-m", commitMsg], { cwd: rootDir });
+    console.log("✅ 自动 commit 成功，继续执行发布流程。");
+  } catch (err: any) {
+    // 失败时回滚暂存状态
+    execFileSync("git", ["reset"], { cwd: rootDir });
+    console.error(`❌ AI 评估/提交失败: ${err.message}`);
+    process.exit(1);
+  }
 }
 
 let lastTag = "";
@@ -142,6 +238,14 @@ updateJson(path.join(rootDir, "apps/desktop/src-tauri/Cargo.toml"), () => {
   const p = path.join(rootDir, "apps/desktop/src-tauri/Cargo.toml");
   fs.writeFileSync(p, fs.readFileSync(p, "utf-8").replace(/^version\s*=\s*".*?"/m, `version = "${newVersion}"`));
   files.push({ path: "apps/desktop/src-tauri/Cargo.toml", label: "Rust 桌面端版本" });
+});
+
+updateJson(path.join(rootDir, "apps/desktop/src-tauri/tauri.conf.json"), () => {
+  const p = path.join(rootDir, "apps/desktop/src-tauri/tauri.conf.json");
+  const config = JSON.parse(fs.readFileSync(p, "utf-8"));
+  config.version = newVersion;
+  fs.writeFileSync(p, JSON.stringify(config, null, 2) + "\n");
+  files.push({ path: "apps/desktop/src-tauri/tauri.conf.json", label: "Tauri App 配置" });
 });
 
 updateJson(path.join(rootDir, "apps/desktop/package.json"), () => {
