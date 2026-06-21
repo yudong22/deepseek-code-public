@@ -1,0 +1,15 @@
+{
+  "version": "0.3.1",
+  "notes": "修复: 规划模式自动创建会话, session ID UUID 格式, 斜杠命令消息持久化, 静默更新机制",
+  "pub_date": "2026-06-21T10:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.3.1/deepseek-code_aarch64.app.tar.gz",
+      "signature": ""
+    },
+    "darwin-x86_64": {
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.3.1/deepseek-code_x86_64.app.tar.gz",
+      "signature": ""
+    }
+  }
+}

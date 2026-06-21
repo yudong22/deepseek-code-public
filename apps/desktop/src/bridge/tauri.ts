@@ -1,6 +1,8 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
-import { IBridge, UpdateResult, Session, Message, AgentEvent } from "./types";
+import { check, Update, type UpdateManifest } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { IBridge, UpdateResult, UpdateStatus, Session, Message, AgentEvent } from "./types";
 import { version as appVersion } from "../../package.json";
 
 let dbInstance: Database | null = null;
@@ -52,6 +54,39 @@ export const tauriBridge: IBridge = {
     return {
       hasUpdate: false,
     };
+  },
+
+  async installUpdate(onStatus?: (status: UpdateStatus) => void): Promise<void> {
+    try {
+      onStatus?.({ status: "checking" });
+      const update = await check();
+      if (!update) {
+        onStatus?.({ status: "error", error: "没有可用的更新" });
+        return;
+      }
+
+      onStatus?.({ status: "downloading", version: update.manifest?.version, progress: 0 });
+
+      let lastProgress = 0;
+      await update.download((event) => {
+        if (event.event === "finished") {
+          onStatus?.({ status: "downloaded", version: update.manifest?.version, progress: 100 });
+        } else if (event.event === "progress") {
+          const pct = Math.round((event.data.chunkLength / event.data.contentLength) * 100);
+          lastProgress = Math.min(pct, 99);
+          onStatus?.({ status: "downloading", version: update.manifest?.version, progress: lastProgress });
+        }
+      });
+
+      onStatus?.({ status: "downloaded", version: update.manifest?.version, progress: 100 });
+
+      // 安装并重启
+      await update.install();
+      await relaunch();
+    } catch (error: any) {
+      console.error("Tauri installUpdate failed:", error);
+      onStatus?.({ status: "error", error: error.message || String(error) });
+    }
   },
 
   async selectDirectory(): Promise<string | null> {

@@ -24,6 +24,17 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBNzU5MzI0NjEwRjFENEYKUldSUEhROWhKSk4xbWlFSUJObUlub0JJTjdGMEdIRHozQ1BMb2RkSEFYSHNQSTJYR3NLSWY3T2MK",
+      "endpoints": [
+        "https://raw.githubusercontent.com/yudong22/deepseek-code-public/main/update.json"
+      ],
+      "macOS": {
+        "minimumSystemVersion": "12.0"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

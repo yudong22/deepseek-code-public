@@ -144,11 +144,21 @@ function MainDashboard() {
         console.error("Database initialization failed:", err);
       }
 
-      // 静默检查更新
+      // 静默检查并自动更新
       try {
         const updateResult = await bridge.checkForUpdates();
         if (updateResult.hasUpdate) {
-          showToast(`📦 发现新版本 v${updateResult.version}，请在设置中查看详情`);
+          showToast(`📦 正在下载 v${updateResult.version}...`);
+          // 后台自动下载安装
+          bridge.installUpdate((status) => {
+            if (status.status === "downloading" && status.progress !== undefined) {
+              showToast(`📦 更新下载中 ${status.progress}%`);
+            } else if (status.status === "downloaded") {
+              // 安装后会自动 relaunch，无需操作
+            } else if (status.status === "error") {
+              console.warn("自动更新失败:", status.error);
+            }
+          }).catch(() => {});
         }
       } catch (_e) {
         // 静默失败，不影响正常启动

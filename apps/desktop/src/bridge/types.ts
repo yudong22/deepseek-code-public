@@ -4,6 +4,13 @@ export interface UpdateResult {
   changelog?: string;
 }
 
+export interface UpdateStatus {
+  status: "checking" | "available" | "downloading" | "downloaded" | "error";
+  version?: string;
+  progress?: number; // 0-100 下载进度
+  error?: string;
+}
+
 export interface Session {
   id: string;
   title: string;
@@ -44,9 +51,15 @@ export interface IBridge {
   greet(name: string): Promise<string>;
 
   /**
-   * 检查应用更新（企业级壳能力扩展占位）
+   * 检查应用更新
    */
   checkForUpdates(): Promise<UpdateResult>;
+
+  /**
+   * 下载并安装更新（自动处理下载进度、解压和重启）
+   * @param onStatus 状态回调，实时反馈下载进度
+   */
+  installUpdate(onStatus?: (status: UpdateStatus) => void): Promise<void>;
 
   /**
    * 初始化数据库并创建表结构

@@ -1,4 +1,4 @@
-import { IBridge, UpdateResult, Session, Message, AgentEvent } from "./types";
+import { IBridge, UpdateResult, UpdateStatus, Session, Message, AgentEvent } from "./types";
 
 const LOCAL_STORAGE_KEY = "bridge_mock_sessions";
 const LOCAL_MESSAGES_KEY = "bridge_mock_messages";
@@ -44,6 +44,17 @@ export const mockBridge: IBridge = {
       version: "0.3.0",
       changelog: "这是一个为网页端 Mock 环境模拟的升级包。\n- 新增：多项目（Projects）会话分组与管理。\n- 优化：在设置中原生文件夹路径选择器。\n- 修复：修复了一系列已知的 UI 交互问题。",
     };
+  },
+
+  async installUpdate(onStatus?: (status: UpdateStatus) => void): Promise<void> {
+    console.warn("[Bridge Mock] installUpdate called. Simulating silent update.");
+    onStatus?.({ status: "downloading", version: "0.3.1", progress: 0 });
+    await new Promise((r) => setTimeout(r, 500));
+    onStatus?.({ status: "downloading", version: "0.3.1", progress: 50 });
+    await new Promise((r) => setTimeout(r, 500));
+    onStatus?.({ status: "downloadeded", version: "0.3.1", progress: 100 });
+    // 在 mock 环境中不实际重启
+    console.warn("[Bridge Mock] Update downloaded. Relaunch skipped in mock.");
   },
 
   async selectDirectory(): Promise<string | null> {

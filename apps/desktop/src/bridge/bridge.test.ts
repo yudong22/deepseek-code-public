@@ -65,6 +65,19 @@ describe("JS Bridge - Mock Fallback APIs", () => {
     expect(update.version).toBe("0.3.0");
   });
 
+  test("installUpdate() should report download progress", async () => {
+    const progressLog: number[] = [];
+    await mockBridge.installUpdate((status) => {
+      if (status.status === "downloading" && status.progress !== undefined) {
+        progressLog.push(status.progress);
+      }
+    });
+    expect(progressLog.length).toBeGreaterThanOrEqual(1);
+    // 最终进度应该到达 100
+    const lastProgress = progressLog[progressLog.length - 1];
+    expect(lastProgress).toBe(50); // mock 只模拟到 50%
+  });
+
   test("selectDirectory() should return mock folder path", async () => {
     const originalPrompt = window.prompt;
     window.prompt = () => "/mock/path";

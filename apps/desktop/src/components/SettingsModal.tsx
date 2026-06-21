@@ -66,45 +66,26 @@ export default function SettingsModal({
     try {
       const result = await bridge.checkForUpdates();
       if (result.hasUpdate) {
-        setUpdateStatus({
-          type: "success",
-          message: (
-            <div>
-              <p style={{ fontWeight: "600", marginBottom: "4px" }}>发现新版本: v{result.version}</p>
-              <pre style={{
-                whiteSpace: "pre-wrap",
-                fontFamily: "inherit",
-                fontSize: "11px",
-                color: "#48484a",
-                background: "#e5e5ea",
-                padding: "8px",
-                borderRadius: "4px",
-                margin: "4px 0 8px 0",
-                maxHeight: "120px",
-                overflowY: "auto",
-                border: "1px solid #d1d1d6",
-                textAlign: "left"
-              }}>
-                {result.changelog}
-              </pre>
-              <button
-                type="button"
-                onClick={() => openExternalUrl(`https://github.com/yudong22/deepseek-code-public/releases/tag/v${result.version}`)}
-                style={{
-                  padding: "4px 10px",
-                  fontSize: "11px",
-                  backgroundColor: "#007aff",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontWeight: "500"
-                }}
-              >
-                立即去下载
-              </button>
-            </div>
-          )
+        setUpdateStatus({ type: "info", message: `正在下载 v${result.version}...` });
+        bridge.installUpdate((status) => {
+          if (status.status === "downloading" && status.progress !== undefined) {
+            setUpdateStatus({
+              type: "info",
+              message: `📦 更新下载中 ${status.progress}%`,
+            });
+          } else if (status.status === "downloaded") {
+            setUpdateStatus({
+              type: "success",
+              message: "✅ 更新已完成，应用将自动重启...",
+            });
+          } else if (status.status === "error") {
+            setUpdateStatus({
+              type: "error",
+              message: `更新失败: ${status.error || "未知错误"}`,
+            });
+          }
+        }).catch((err) => {
+          setUpdateStatus({ type: "error", message: `更新失败: ${String(err)}` });
         });
       } else {
         setUpdateStatus({ type: "info", message: "您的应用已是最新版本。" });
