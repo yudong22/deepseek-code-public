@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 
+.tauri/updater.key
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
