@@ -36,12 +36,17 @@ cd packages/gateway && go run main.go              # Start the Go gateway server
 docker compose up                                  # Start Gateway + Qdrant via Docker
 ```
 
-**CLI tool (requires Go gateway running):**
+**CLI tool (离线模式无需网关):**
 ```bash
+# 在线模式（需要 Go 网关运行中）
 bun openhands login --server http://localhost:8080 --id openhands --secret secret123
 bun openhands doctor                               # Environment dependency audit
-bun openhands run "修复类型错误"                    # Self-healing pipeline
+bun openhands run "修复类型错误"                    # Self-healing pipeline (走网关)
 bun openhands memory sync --commit HEAD            # Sync experience to vector DB
+
+# 离线模式（v0.3.3+，无网关时直连 DeepSeek API）
+export DEEPSEEK_API_KEY=sk-xxx
+bun openhands run "输出 hello world"               # Self-healing pipeline (直连)
 ```
 
 ## Architecture
@@ -135,11 +140,26 @@ Auto-creates a Qdrant `memory` collection (1536-dim, Cosine distance) on startup
 The `openhands run <task>` command implements a full C/S self-healing pipeline:
 
 1. **Isolation**: Creates a git worktree sandbox at `/tmp/ai-workers/<taskId>` from branch `main`
-2. **Memory Retrieval**: Fetches relevant past experiences from the Go gateway's Qdrant vector DB
-3. **Agent Execution**: Spawns the **Hermes** agent (external CLI) to write code, with `.agents/config.yaml` routing rules applied
-4. **Fast Validation**: Runs `fastValidate()` — matches modified files against config-driven verification rules (e.g., `cargo check` for Rust, `bun test` for TS, `go fmt` for Go)
-5. **Self-Heal Loop**: If validation fails (up to 3 attempts), calls **OpenCode sidecar** as a CI healer to fix errors, then re-validates
-6. **Commit & Cleanup**: On success, commits locally and removes the worktree. On failure, performs safe rollback (force-removes worktree and branch)
+2. **Memory Retrieval** (仅在线模式): Fetches relevant past experiences from the Go gateway's Qdrant vector DB (或本地 JSON 降级)
+3. **Agent Execution**: Spawns the **Hermes** agent (external CLI) to write code, via `callAgent({agent:'hermes', env: spawnEnv})`
+4. **Fast Validation**: Runs `fastValidate()` — matches modified files against config-driven verification rules
+5. **Self-Heal Loop**: If validation fails (up to 3 attempts), calls **OpenCode sidecar** via `callAgent({agent:'opencode', env: process.env})` with AGENTS.md 作为 JSON system message 传递
+6. **Auto Memory Sync** (v0.3.3+): 成功 commit 后自动调用 `handleMemorySync(['--commit', 'HEAD'])` 同步经验到网关
+7. **Commit & Cleanup**: On success, commits locally and removes the worktree. On failure, performs safe rollback
+
+**v0.3.3 关键改进：**
+- **离线模式**: 无网关时自动降级，直连 DeepSeek API，不再死限要求 `openhands login`
+- **Env 隔离**: `callAgent()` 接受 `env` 参数，不再全局 `Object.assign(process.env, ...)` 污染环境
+- **Sidecar 超时**: 环境变量 `SIDECAR_TIMEOUT_MS`（默认 120s），超时自动 `SIGTERM`
+- **AGENTS.md 传递**: sidecar stdin 改为 JSON `messages[]` 格式，包含 AGENTS.md 作为 system message（利用 opencode `.opencode/system.md`）
+- **自动 memory sync**: 流水线成功后自动 `handleMemorySync(['--commit', 'HEAD'])`
+- **本地记忆降级**: Go 网关在 Qdrant 离线时自动降级到 `packages/gateway/db/memories.json`（关键词 Jaccard 匹配）
+
+关键文件:
+- `packages/client-cli/src/cli.ts` — 主入口：login / doctor / run / memory sync，含离线模式检测
+- `packages/client-cli/src/openhands-call.js` — Agent 调度器：Hermes/OpenCode spawn，env 传递，超时，JSON stdin
+- `packages/sidecar/src/index.ts` — 侧车入口：JSON/纯文本 stdin → Session → 流式事件
+- `packages/gateway/main.go` — Go 网关：JWT 24h、LLM 代理、Qdrant + 本地 JSON 记忆
 
 The `fastValidate` utility (`packages/client-cli/src/fast-validate.js`) reads `.agents/config.yaml` to match modified files against pipeline rules:
 

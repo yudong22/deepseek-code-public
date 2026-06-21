@@ -28,8 +28,8 @@ deepseek-code-monorepo/
 ├── apps/
 │   └── desktop/             # 原 Tauri 桌面端项目 (Tauri v2 + React 19)
 └── packages/
-    ├── gateway/             # Go Server 端网关服务 (Docker + pgvector/Qdrant + JWT)
-    ├── client-cli/          # 客户端命令行工具 (@openhands/cli)
+    ├── gateway/             # Go Server 端网关服务 (JWT 鉴权、LLM 代理、Qdrant 向量记忆 + 本地 JSON 降级 db/memories.json)
+    ├── client-cli/          # 客户端命令行工具 (@openhands/cli)：run（离线/在线模式）、login、doctor、memory sync（自动/手动）
     └── sidecar/             # 原 src-sidecar (编译为 opencode-sidecar 二进制)
 ```
 
@@ -86,6 +86,40 @@ src-tauri/
 │       ├── glob.rs          # 文件模式搜索工具（遵循 .gitignore）
 │       └── bash.rs          # 异步 Bash 命令运行工具，内置 30 秒超时熔断保护机制
 └── icons/                   # 应用程序图标（支持多平台格式）
+```
+
+---
+
+### Packages 目录 (`packages/`)
+```bash
+packages/
+├── client-cli/               # CLI 命令行工具 (@openhands/cli)
+│   ├── src/
+│   │   ├── cli.ts            # 主入口：login / doctor / run / memory sync
+│   │   │                    - run: 创建 git worktree → Hermes 开发 → fastValidate → OpenCode 自愈(×3) → commit
+│   │   │                    - v0.3.3+: 离线模式（无网关时直连 DeepSeek API），自动 memory sync 到网关
+│   │   ├── openhands-call.js # Agent 调度器：callAgent({agent, env}) 支持 env 参数避免全局污染
+│   │   │                    - hermes: spawn hermes chat -q ... --yolo
+│   │   │                    - opencode: spawn bun run sidecar，v0.3.3+: 超时(SIDECAR_TIMEOUT_MS)
+│   │   │                    、JSON stdin 传递 AGENTS.md 作为 system message
+│   │   ├── fast-validate.js  # 极速门禁验证（读取 config.yaml 匹配 glob → 执行命令）
+│   │   ├── yaml-parser.js    # 简易 YAML 解析器
+│   │   └── openhands.test.ts # CLI 单测 (11 tests)
+│   └── package.json
+│
+├── sidecar/                  # opencode-sidecar 二进制源码
+│   ├── src/
+│   │   ├── index.ts          # 入口：读 stdin → parseStdinInput（JSON/纯文本）→ Session.make → session.prompt → 流式 JSON 事件到 stdout
+│   │   └── index.test.ts     # 单测 (12 tests)
+│   └── package.json
+│
+└── gateway/                  # Go API 网关服务 (port 8080)
+    ├── main.go               # POST /login（JWT 24h）、POST /v1/chat/completions（LLM 代理）
+    │                          POST /api/memory/search（Qdrant→本地降级）、POST /api/memory/sync（Qdrant→本地降级）
+    ├── go.mod / go.sum       # gin, jwt/v5, uuid
+    ├── Dockerfile            # 多阶段构建
+    └── db/                   # [v0.3.3+] 本地记忆存储目录
+        └── memories.json     # Qdrant 离线时的本地存储文件（关键词检索降级）
 ```
 
 ---
