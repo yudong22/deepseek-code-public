@@ -19,13 +19,41 @@ interface QuestionCardProps {
   args: string;
   callId: string;
   onAnswered?: () => void;
+  /** 已有回复内容（页面刷新后从 ToolSuccess result 恢复） */
+  result?: string;
 }
 
-export default function QuestionCard({ args, callId, onAnswered }: QuestionCardProps) {
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [customInput, setCustomInput] = useState("");
+/** 从工具调用的 result 字段提取用户回答文本 */
+function parseAnswerFromResult(result?: string): string | null {
+  if (!result) return null;
+  try {
+    const parsed = JSON.parse(result);
+    return parsed.answer || parsed.text || parsed.content || result;
+  } catch {
+    return result;
+  }
+}
+
+export default function QuestionCard({ args, callId, onAnswered, result }: QuestionCardProps) {
+  const savedAnswer = parseAnswerFromResult(result);
+  const [selectedOption, setSelectedOption] = useState<string | null>(
+    savedAnswer && args ? guessSelectedOption(args, savedAnswer) : null
+  );
+  const [customInput, setCustomInput] = useState(savedAnswer && !guessSelectedOption(args || "", savedAnswer) ? savedAnswer : "");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDone, setIsDone] = useState(false);
+  const [isDone, setIsDone] = useState(!!savedAnswer);
+
+/** 从 args 和 answer 匹配选中的选项 label */
+function guessSelectedOption(args: string, answer: string): string | null {
+  try {
+    const data = JSON.parse(args);
+    const options = data.questions?.[0]?.options || [];
+    for (const opt of options) {
+      if (opt.label === answer) return opt.label;
+    }
+  } catch {}
+  return null;
+}
 
   let questionData: QuestionData = {};
   try {

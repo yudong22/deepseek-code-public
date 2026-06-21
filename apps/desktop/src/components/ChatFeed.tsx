@@ -266,6 +266,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                                   <QuestionCard
                                     args={questionTc.args || "{}"}
                                     callId={questionTc.call_id || ""}
+                                    result={questionTc.result}
                                     onAnswered={onAnswerQuestion}
                                   />
                                 </div>
