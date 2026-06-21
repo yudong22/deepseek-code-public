@@ -1,20 +1,20 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 export function useToast() {
-  const [toast, setToast] = useState<{ visible: boolean; message: string }>({
+  const [toast, setToast] = useState<{ visible: boolean; message: string; onClick?: () => void }>({
     visible: false,
     message: "",
   });
   const toastTimeoutRef = useRef<number | null>(null);
 
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((message: string, onClick?: () => void) => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
     }
-    setToast({ visible: true, message });
+    setToast({ visible: true, message, onClick });
     toastTimeoutRef.current = window.setTimeout(() => {
-      setToast({ visible: false, message: "" });
-    }, 1800);
+      setToast({ visible: false, message: "", onClick: undefined });
+    }, 3000);
   }, []);
 
   useEffect(() => {

@@ -143,6 +143,16 @@ function MainDashboard() {
       } catch (err) {
         console.error("Database initialization failed:", err);
       }
+
+      // 静默检查更新
+      try {
+        const updateResult = await bridge.checkForUpdates();
+        if (updateResult.hasUpdate) {
+          showToast(`📦 发现新版本 v${updateResult.version}，请在设置中查看详情`);
+        }
+      } catch (_e) {
+        // 静默失败，不影响正常启动
+      }
     }
     init();
   }, [setApiKey, setSavedApiKey, setWorkspacePath, setSavedWorkspacePath, setProjects]);

@@ -39,7 +39,6 @@ async function main() {
     const session = await Session.make({
       directory,
       model,
-      id: sessionId || undefined,
       agent: agentMode || undefined
     })
 
