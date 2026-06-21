@@ -50,17 +50,27 @@ jobs:
           if [ -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" ]; then
             echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]; then
+          if [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]]; then
             echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> $GITHUB_ENV
           fi
           if [ -n "${{ secrets.APPLE_ID }}" ]; then
             echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.APPLE_PASSWORD }}" ]; then
+          if [ -n "${{ secrets.APPLE_PASSWORD }}" ]]; then
             echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.APPLE_TEAM_ID }}" ]; then
+          if [ -n "${{ secrets.APPLE_TEAM_ID }}" ]]; then
             echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+          fi
+
+      - name: Export Updater Signing Env (for auto-update)
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
+          fi
+          if [ -n "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" ]]; then
+            echo "TAURI_SIGNING_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" >> $GITHUB_ENV
           fi
 
       - name: Build and Release
@@ -75,3 +85,22 @@ jobs:
           projectPath: apps/desktop
           tauriScript: bun run tauri
           args: --target aarch64-apple-darwin
+
+      - name: Generate updater signature for release
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DMG_PATH="apps/desktop/src-tauri/target/release/bundle/dmg/deepseek-code_${VERSION}_aarch64.dmg"
+
+          if [ -f "$DMG_PATH" ]; then
+            # 生成签名
+            npx @tauri-apps/cli@latest signer sign \
+              -k <(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}") \
+              -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
+              "$DMG_PATH" \
+              2>/dev/null || echo "Warning: signing failed"
+
+            echo "✅ Update signing completed"
+          else
+            echo "⚠️  DMG not found at $DMG_PATH, skipping updater signing"
+          fi
