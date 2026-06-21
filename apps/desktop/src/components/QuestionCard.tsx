@@ -66,20 +66,13 @@ export default function QuestionCard({ args, callId, onAnswered }: QuestionCardP
     }
   };
 
-  // 已回复状态
-  if (isDone) {
-    return (
-      <div className="question-card done">
-        <span className="question-card-done-icon">✅</span>
-        <span className="question-card-done-text">已回复: {selectedOption || customInput}</span>
-      </div>
-    );
-  }
+  const doneAnswer = selectedOption || customInput;
 
   return (
-    <div className="question-card">
+    <div className={`question-card ${isDone ? "done" : ""}`}>
       <div className="question-card-header">
-        {header || "Agent 提问"}
+        <span>{header || "Agent 提问"}</span>
+        {isDone && <span className="question-card-done-badge">已回复</span>}
       </div>
       <div className="question-card-text">
         {questionText}
@@ -87,24 +80,27 @@ export default function QuestionCard({ args, callId, onAnswered }: QuestionCardP
 
       {options.length > 0 && (
         <div className="question-card-options">
-          {options.map((opt, i) => (
-            <button
-              key={i}
-              className={`question-card-option ${selectedOption === opt.label ? "selected" : ""}`}
-              onClick={() => handleSelect(opt.label)}
-              disabled={isSubmitting}
-            >
-              <span className="question-card-radio">
-                {selectedOption === opt.label ? "✓" : i + 1}
-              </span>
-              <span className="question-card-option-label">
-                {opt.label}
-                {opt.description && (
-                  <span className="question-card-option-desc">{opt.description}</span>
-                )}
-              </span>
-            </button>
-          ))}
+          {options.map((opt, i) => {
+            const isSelected = selectedOption === opt.label;
+            return (
+              <button
+                key={i}
+                className={`question-card-option ${isSelected ? "selected" : ""} ${isDone ? "frozen" : ""}`}
+                onClick={() => !isDone && handleSelect(opt.label)}
+                disabled={isDone || isSubmitting}
+              >
+                <span className="question-card-radio">
+                  {isSelected ? "✓" : i + 1}
+                </span>
+                <span className="question-card-option-label">
+                  {opt.label}
+                  {opt.description && (
+                    <span className="question-card-option-desc">{opt.description}</span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -112,18 +108,19 @@ export default function QuestionCard({ args, callId, onAnswered }: QuestionCardP
         <input
           type="text"
           className="question-card-input"
-          value={customInput}
-          onChange={(e) => setCustomInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleCustomSubmit()}
+          value={isDone ? doneAnswer : customInput}
+          onChange={(e) => !isDone && setCustomInput(e.target.value)}
+          onKeyDown={(e) => !isDone && e.key === "Enter" && handleCustomSubmit()}
           placeholder={options.length > 0 ? "或者输入自定义回复..." : "输入你的回复..."}
-          disabled={isSubmitting}
+          disabled={isDone || isSubmitting}
+          readOnly={isDone}
         />
         <button
           className="question-card-send-btn"
           onClick={handleCustomSubmit}
-          disabled={!customInput.trim() || isSubmitting}
+          disabled={isDone || !customInput.trim() || isSubmitting}
         >
-          发送
+          {isDone ? "已发送" : "发送"}
         </button>
       </div>
     </div>
