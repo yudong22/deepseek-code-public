@@ -335,10 +335,27 @@ function MainDashboard() {
       };
       setMessages((prev) => [...prev, msg]);
     } else if (normalized === "/plan") {
+      // 无活跃会话时自动创建并导航
+      let sessionId = id;
+      if (!sessionId) {
+        sessionId = `session-${Date.now()}`;
+        const projName = savedWorkspacePath
+          ? savedWorkspacePath.split(/[/\\]/).pop() || ""
+          : "";
+        await bridge.saveSession({
+          id: sessionId,
+          title: "规划模式",
+          lastMessage: "/plan",
+          updatedAt: new Date().toISOString(),
+          projectName: projName || undefined,
+        });
+        await loadSessions();
+        navigate(`/chat/s/${sessionId}`);
+      }
       setPlanMode(true);
       const msg: Message = {
         id: `local-plan-${Date.now()}`,
-        sessionId: id || "temp",
+        sessionId,
         role: "assistant",
         content: [
           "### 📋 规划模式已激活",
