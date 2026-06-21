@@ -355,6 +355,14 @@ export const tauriBridge: IBridge = {
     }
   },
 
+  async respondToAgent(answer: string): Promise<void> {
+    try {
+      await invoke("respond_to_agent", { answer });
+    } catch (error) {
+      console.error("Tauri respondToAgent failed:", error);
+    }
+  },
+
   async listWorkspaceFiles(maxResults = 200): Promise<string[]> {
     try {
       const db = await getDb();

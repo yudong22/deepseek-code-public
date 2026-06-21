@@ -163,13 +163,26 @@ export const mockBridge: IBridge = {
     onEvent({ type: "ToolEnded", payload: { callID: "call_1" } });
     onEvent({ type: "StepEnded", payload: null });
 
+    // 模拟 question 工具调用（测试交互式问答卡片）
+    onEvent({ type: "ThinkingEnded", payload: null });
+    onEvent({ type: "ToolCall", payload: {
+      name: "question",
+      args: JSON.stringify({ questions: [{ question: "你希望我做什么类型的任务？", header: "任务类型", options: [{ label: "代码开发", description: "写新功能" }, { label: "代码审查", description: "Review 代码" }] }] }),
+      call_id: "q_call_1"
+    }});
+    onEvent({ type: "ToolStarted", payload: { call_id: "q_call_1" } });
+    // 模拟用户回答后继续
+    await new Promise((r) => setTimeout(r, 100));
+    onEvent({ type: "ToolSuccess", payload: { name: "question", result: JSON.stringify({ answer: "代码开发" }), call_id: "q_call_1" } });
+    onEvent({ type: "ToolEnded", payload: { call_id: "q_call_1" } });
+
     onEvent({ type: "ThinkingStarted", payload: null });
-    onEvent({ type: "Thinking", payload: "Thinking: 已经找到 App.tsx，准备提供答复。" });
+    onEvent({ type: "Thinking", payload: "Thinking: 用户选择了代码开发，开始准备方案。" });
     await new Promise((r) => setTimeout(r, 400));
     onEvent({ type: "ThinkingEnded", payload: null });
 
     onEvent({ type: "TextStarted", payload: null });
-    onEvent({ type: "Text", payload: "你好！这是来自浏览器 Mock 环境的模拟回复。\n\n" });
+    onEvent({ type: "Text", payload: "你好！已开始代码开发任务。\n\n" });
     onEvent({ type: "Text", payload: "在原生桌面端运行此应用时，我将加载真实的 6 大核心工具（FileRead, FileWrite, FileEdit, Grep, Glob, Bash）并代表您执行真实的任务。" });
     await new Promise((r) => setTimeout(r, 400));
     onEvent({ type: "TextEnded", payload: null });
@@ -179,6 +192,10 @@ export const mockBridge: IBridge = {
 
   async cancelAgent(): Promise<void> {
     console.warn("[Bridge Mock] cancelAgent called. No-op in mock environment.");
+  },
+
+  async respondToAgent(answer: string): Promise<void> {
+    console.warn(`[Bridge Mock] respondToAgent called with answer: "${answer}". Simulating response delivery.`);
   },
 
   async listWorkspaceFiles(_maxResults = 200): Promise<string[]> {

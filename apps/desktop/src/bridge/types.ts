@@ -144,6 +144,11 @@ export interface IBridge {
    * 取消当前正在执行的 agent
    */
   cancelAgent(): Promise<void>;
+
+  /**
+   * 向正在运行的 agent 发送用户输入（回答 question 工具的问题）
+   */
+  respondToAgent(answer: string): Promise<void>;
 }
 
 export interface AgentEvent {

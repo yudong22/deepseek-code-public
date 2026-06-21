@@ -11,6 +11,7 @@ import RightPanel from "@/components/RightPanel";
 import ChatFeed from "@/components/ChatFeed";
 import ChatInput from "@/components/ChatInput";
 import EmptyState from "@/components/EmptyState";
+import QuestionCard from "@/components/QuestionCard";
 
 import { useToast } from "@/hooks/useToast";
 import { useSettings } from "@/hooks/useSettings";
@@ -42,6 +43,9 @@ function MainDashboard() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const activeStreamingSessionRef = useRef<string | null>(null);
+
+  // 交互式问答：agent 提问时暂存的问题
+  const [pendingQuestion, setPendingQuestion] = useState<{ args: string; callId: string } | null>(null);
 
   // --- 1. Toast Notification Hook ---
   const { toast, showToast } = useToast();
@@ -651,7 +655,15 @@ function MainDashboard() {
             const toolName = event.payload.name;
             const toolArgs = event.payload.args;
             const callId = event.payload.call_id || "";
-            currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs, call_id: callId, step: currentStep }];
+
+            // 交互式提问：显示 QuestionCard，不阻塞事件流
+            if (toolName === "question") {
+              setPendingQuestion({ args: toolArgs, callId });
+              // 仍添加至 sections 以便展示提问上下文
+              currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs, call_id: callId, step: currentStep }];
+            } else {
+              currentToolCalls = [...currentToolCalls, { name: toolName, args: toolArgs, call_id: callId, step: currentStep }];
+            }
             if (sections.length === 0 || sections[sections.length - 1].type !== "tools") {
               sections.push({ type: "tools", toolCalls: [] });
             }
@@ -700,6 +712,10 @@ function MainDashboard() {
           // 工具结果：按 call_id 精确匹配
           else if (event.type === "ToolSuccess") {
             const callId = event.payload.call_id || "";
+            // 清除已完成的提问卡片
+            if (event.payload.name === "question") {
+              setPendingQuestion(null);
+            }
             const tcIdx = currentToolCalls.findIndex(tc => tc.call_id === callId);
             if (tcIdx > -1) {
               currentToolCalls = currentToolCalls.map((tc, i) =>
@@ -970,6 +986,15 @@ function MainDashboard() {
                 getFileUrl={(path) => bridge.getFileUrl(path)}
                 showToast={showToast}
               />
+              {pendingQuestion && (
+                <div style={{ padding: "0 16px" }}>
+                  <QuestionCard
+                    args={pendingQuestion.args}
+                    callId={pendingQuestion.callId}
+                    onAnswered={() => setPendingQuestion(null)}
+                  />
+                </div>
+              )}
               <ChatInput
                 inputText={inputText}
                 selectedModel={selectedModel}

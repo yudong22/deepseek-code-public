@@ -2,9 +2,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::ipc::Channel;
 use tauri::Manager;
+use tokio::sync::Mutex;
 
 /// 全局取消标记，供 cancel_agent 和 run_agent_loop 共享
 struct AgentCancelled(AtomicBool);
+
+/// 交互式 Q&A 用的 sidecar stdin 句柄（保持开启以接收用户输入）
+struct AgentStdin(Mutex<Option<tokio::process::ChildStdin>>);
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", content = "payload")]
@@ -127,11 +131,15 @@ async fn run_agent_loop(
     // 注册取消标记，供 cancel_agent 使用
     app.manage(AgentCancelled(AtomicBool::new(false)));
 
-    // 5. 将结构化 JSON 写入 sidecar stdin，并关闭 stdin
-    let mut stdin = child.stdin.take().ok_or("无法打开 sidecar stdin".to_string())?;
-    stdin.write_all(input_str.as_bytes()).await
+    // 5. 将结构化 JSON 写入 sidecar stdin，保持开启以支持交互式 Q&A
+    let stdin_handle = child.stdin.take().ok_or("无法打开 sidecar stdin".to_string())?;
+    // 先写入 stdin 再存储句柄
+    use tokio::io::AsyncWriteExt;
+    let mut write_guard = stdin_handle;
+    write_guard.write_all(input_str.as_bytes()).await
         .map_err(|e| format!("写入 sidecar stdin 失败: {}", e))?;
-    drop(stdin); // 关闭 stdin，sidecar 会读取到 EOF 并开始处理
+    // 存储 stdin 句柄到全局状态，保持开启
+    app.manage(AgentStdin(Mutex::new(Some(write_guard))));
 
     // 6. 流式读取 stdout 并转发给前端（支持取消）
     let stdout = child.stdout.take().ok_or("无法获取 sidecar stdout".to_string())?;
@@ -175,12 +183,40 @@ async fn run_agent_loop(
         return Err(err_msg);
     }
 
+    // 7b. 清理 stdin 句柄
+    if let Some(agent_stdin) = app.try_state::<AgentStdin>() {
+        let mut guard = agent_stdin.0.lock().await;
+        drop(guard.take());
+    }
+
     Ok(())
+}
+
+/// 向运行中的 sidecar 发送用户输入（回答 question 工具的问题）
+#[tauri::command]
+async fn respond_to_agent(app: tauri::AppHandle, answer: String) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt;
+    let agent_stdin = app.state::<AgentStdin>();
+    let mut guard = agent_stdin.0.lock().await;
+    if let Some(stdin) = guard.as_mut() {
+        stdin.write_all(answer.as_bytes()).await
+            .map_err(|e| format!("写入用户输入到 sidecar 失败: {}", e))?;
+        stdin.write_all(b"\n").await
+            .map_err(|e| format!("写入换行到 sidecar 失败: {}", e))?;
+        Ok(())
+    } else {
+        Err("Agent 未在运行或 stdin 已关闭".to_string())
+    }
 }
 
 #[tauri::command]
 async fn cancel_agent(app: tauri::AppHandle) -> Result<(), String> {
     app.state::<AgentCancelled>().0.store(true, Ordering::SeqCst);
+    // 同时关闭 stdin
+    if let Some(agent_stdin) = app.try_state::<AgentStdin>() {
+        let mut guard = agent_stdin.0.lock().await;
+        drop(guard.take());
+    }
     Ok(())
 }
 
@@ -374,6 +410,7 @@ pub fn run() {
             run_agent_loop,
             select_directory,
             cancel_agent,
+            respond_to_agent,
             list_workspace_files,
             read_text_file,
             resolve_file_path,
