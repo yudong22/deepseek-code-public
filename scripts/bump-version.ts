@@ -196,15 +196,53 @@ execSync(`git commit -F "${commitMsgPath}"`, { cwd: rootDir });
 fs.unlinkSync(commitMsgPath);
 console.log(`📝 提交信息:\n${commitMsg}`);
 
+console.log(""); // blank line for visual separation
+
+// ── 标签管理 ──
+console.log(`🏷️  检查远程标签 v${newVersion} ...`);
 const tagExists = execSync("git tag --list", { encoding: "utf-8", cwd: rootDir })
   .split("\n").map(t => t.trim()).includes(`v${newVersion}`);
 if (tagExists) {
+  process.stdout.write(`  删除旧标签... `);
   execSync(`git tag -d v${newVersion}`, { cwd: rootDir });
   execSync(`git push origin --delete v${newVersion} 2>/dev/null; true`, { cwd: rootDir });
+  console.log(`✅`);
 }
 
+process.stdout.write(`🏷️  创建标签 v${newVersion} ... `);
 execSync(`git tag v${newVersion}`, { cwd: rootDir });
-execSync(`git push origin main v${newVersion}`, { cwd: rootDir });
+console.log(`✅`);
 
-console.log(`\n✅ v${newVersion} 已发布！GitHub Actions 正在自动构建`);
-console.log(`   进度: https://github.com/yudong22/deepseek-code-public/actions`);
+// ── Push ──
+console.log(`📤 推送到 origin (main + tag v${newVersion}) ...`);
+try {
+  execSync(`git push origin main v${newVersion}`, {
+    cwd: rootDir,
+    stdio: "inherit",  // 让 git push 的输出直接显示在终端
+    timeout: 180000,
+  });
+  console.log(`\n✅ v${newVersion} 已发布！GitHub Actions 正在自动构建`);
+  console.log(`   进度: https://github.com/yudong22/deepseek-code-public/actions`);
+} catch (pushErr: any) {
+  const stderr = (pushErr.stderr || "").toString();
+  // Git LFS 锁 API 不支持 → 自动修复后重试
+  if (stderr.includes("lfs.locksverify")) {
+    console.log("⚠️  Git LFS locking API 不支持，自动修复...");
+    execSync(
+      "git config lfs.https://github.com/yudong22/deepseek-code-public.git/info/lfs.locksverify false",
+      { cwd: rootDir },
+    );
+    console.log("🔄 重试推送...");
+    execSync(`git push origin main v${newVersion}`, {
+      cwd: rootDir,
+      stdio: "inherit",
+      timeout: 180000,
+    });
+    console.log(`\n✅ v${newVersion} 已发布！GitHub Actions 正在自动构建`);
+    console.log(`   进度: https://github.com/yudong22/deepseek-code-public/actions`);
+  } else {
+    console.error(`\n❌ Push 失败: ${pushErr.message}`);
+    if (stderr) console.error(stderr);
+    process.exit(1);
+  }
+}
