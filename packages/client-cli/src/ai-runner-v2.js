@@ -2,6 +2,8 @@ import { execSync, spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { callAgent } from './openhands-call.js';
+import { fastValidate } from './fast-validate.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const taskId = process.argv[2] || `task-${Date.now()}`;
 const taskDesc = process.argv[3] || "修改常规类型错误";
 
-const rootDir = path.resolve(__dirname, '..');
+const rootDir = path.resolve(__dirname, '../../..');
 const sandboxRoot = "/tmp/ai-workers";
 const sandboxDir = path.join(sandboxRoot, taskId);
 
@@ -42,37 +44,6 @@ function sendFeishuNotificationMock(taskId, taskDesc, success, message = '', hea
   console.log('└──────────────────────────────────────────────────────────────────┘\n');
 }
 
-// 运行 validation 门禁，流式打印并捕获输出
-function runValidation(rootDir, sandboxDir) {
-  return new Promise((resolve, reject) => {
-    let output = '';
-    const child = spawn('node', [path.join(rootDir, 'scripts/fast-validate.js')], {
-      cwd: sandboxDir,
-      env: process.env
-    });
-    
-    child.stdout.on('data', (data) => {
-      process.stdout.write(data);
-      output += data.toString();
-    });
-    
-    child.stderr.on('data', (data) => {
-      process.stderr.write(data);
-      output += data.toString();
-    });
-    
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve(output);
-      } else {
-        const err = new Error(`极速门禁验证失败，退出码: ${code}`);
-        err.output = output;
-        reject(err);
-      }
-    });
-  });
-}
-
 async function main() {
   try {
     log(`正在初始化影子沙箱工作区隔离...`);
@@ -98,8 +69,12 @@ async function main() {
     // 2. 唤醒 Hermes 进行功能开发
     log(`唤醒主力 Agent (Hermes) 开始写代码...`);
     try {
-      execSync(`bun run ${rootDir}/scripts/openhands-call.js --agent=hermes --prompt="${taskDesc}" --rules=${rootDir}/.agents/agent.md`, {
-        stdio: 'inherit'
+      await callAgent({
+        agent: 'hermes',
+        promptVal: taskDesc,
+        rulesPath: path.join(rootDir, '.agents/agent.md'),
+        sandboxDir,
+        rootDir
       });
     } catch (e) {
       throw new Error(`Hermes 运行期间发生错误: ${e.message}`);
@@ -113,21 +88,25 @@ async function main() {
     while (!isPassed && healCount < maxHeals) {
       try {
         log(`触发本地极速验证门禁检查...`);
-        await runValidation(rootDir, sandboxDir);
+        await fastValidate({ rootDir, sandboxDir });
         isPassed = true;
       } catch (validationError) {
         healCount++;
         logError(`[验证失败] 检测到语法或编译报错！第 ${healCount} 次唤醒 OpenCode CI 自愈...`);
         
         // 捕获报错日志并写入沙箱
-        const errorLog = validationError.output || validationError.message;
+        const errorLog = validationError.message;
         const lastErrorLogPath = path.join(sandboxAgentsDir, 'last_error.log');
         fs.writeFileSync(lastErrorLogPath, errorLog);
         
         // 调用 OpenCode 进行自愈快修
         try {
-          execSync(`bun run ${rootDir}/scripts/openhands-call.js --agent=opencode --rules=${rootDir}/.agents/agent.md --fix-target="${lastErrorLogPath}"`, {
-            stdio: 'inherit'
+          await callAgent({
+            agent: 'opencode',
+            rulesPath: path.join(rootDir, '.agents/agent.md'),
+            fixTarget: lastErrorLogPath,
+            sandboxDir,
+            rootDir
           });
         } catch (e) {
           logError(`OpenCode 运行期间抛出致命异常: ${e.message}`);

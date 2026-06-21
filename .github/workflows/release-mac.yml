@@ -36,7 +36,7 @@ jobs:
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: './apps/desktop/src-tauri -> target'
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
@@ -72,4 +72,6 @@ jobs:
           releaseName: 'deepseek-code ${{ github.event.inputs.tag_name || github.ref_name }}'
           releaseBody: 'Automatic pre-release build for macOS Apple Silicon.'
           prerelease: true
+          projectPath: apps/desktop
+          tauriScript: bun run tauri
           args: --target aarch64-apple-darwin

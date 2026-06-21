@@ -1,4 +1,4 @@
-import { Session } from "../../opencode/packages/core/src/session/wrapper"
+import { Session } from "../../../../opencode/packages/core/src/session/wrapper"
 import fs from "fs"
 
 async function main() {

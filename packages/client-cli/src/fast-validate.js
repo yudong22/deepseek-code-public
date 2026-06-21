@@ -60,35 +60,35 @@ function globToRegex(glob) {
   return new RegExp(regexStr);
 }
 
-function main() {
+export async function fastValidate({ rootDir, sandboxDir } = {}) {
+  const resolvedRootDir = rootDir || path.resolve(__dirname, '../../..');
+  const resolvedSandboxDir = sandboxDir || process.cwd();
+
   console.log('⚡ [fast-validate] 正在收集工作区变更并触发对应门禁校验...');
   
-  const rootDir = path.resolve(__dirname, '..');
-  const configYamlPath = path.join(rootDir, '.agents/config.yaml');
+  const configYamlPath = path.join(resolvedRootDir, '.agents/config.yaml');
   
   if (!fs.existsSync(configYamlPath)) {
-    console.error('❌ [fast-validate] 未找到配置文件 .agents/config.yaml');
-    process.exit(1);
+    throw new Error(`未找到配置文件 ${configYamlPath}`);
   }
   
   let config = {};
   try {
     config = parseYaml(fs.readFileSync(configYamlPath, 'utf-8'));
   } catch (e) {
-    console.error(`❌ [fast-validate] 配置文件解析失败: ${e.message}`);
-    process.exit(1);
+    throw new Error(`配置文件解析失败: ${e.message}`);
   }
   
   const pipeline = config.verification_pipeline;
   if (!pipeline || Object.keys(pipeline).length === 0) {
     console.log('ℹ️ [fast-validate] 未在 config.yaml 中定义 validation pipeline，直接跳过。');
-    process.exit(0);
+    return;
   }
   
   // 1. 获取 Git 状态以找出修改过的文件
   let modifiedFiles = [];
   try {
-    const gitStatus = execSync('git status --porcelain', { encoding: 'utf-8' });
+    const gitStatus = execSync('git status --porcelain', { encoding: 'utf-8', cwd: resolvedSandboxDir });
     const lines = gitStatus.split('\n');
     for (let line of lines) {
       if (!line.trim()) continue;
@@ -98,13 +98,12 @@ function main() {
       modifiedFiles.push(filePath);
     }
   } catch (e) {
-    console.error(`❌ [fast-validate] 无法运行 git status: ${e.message}`);
-    process.exit(1);
+    throw new Error(`无法运行 git status: ${e.message}`);
   }
   
   if (modifiedFiles.length === 0) {
     console.log('✅ [fast-validate] 无修改的文件，验证自动通过。');
-    process.exit(0);
+    return;
   }
   
   console.log(`🔍 [fast-validate] 检测到被修改的文件: \n  - ${modifiedFiles.join('\n  - ')}`);
@@ -126,7 +125,7 @@ function main() {
   
   if (commandsToRun.size === 0) {
     console.log('ℹ️ [fast-validate] 修改的文件没有匹配到任何极速检验门禁，跳过验证。');
-    process.exit(0);
+    return;
   }
   
   // 3. 执行验证命令
@@ -139,23 +138,38 @@ function main() {
   for (let cmd of commandsToRun) {
     console.log(`\n🏃 [fast-validate] 正在执行: ${cmd}`);
     try {
-      execSync(cmd, { stdio: 'inherit' });
+      const output = execSync(cmd, { cwd: resolvedSandboxDir });
+      if (output) {
+        process.stdout.write(output.toString());
+      }
       console.log(`✅ [fast-validate] 命令执行成功: ${cmd}`);
     } catch (e) {
+      const outStr = e.stdout ? e.stdout.toString() : '';
+      const errStr = e.stderr ? e.stderr.toString() : '';
+      if (outStr) process.stdout.write(outStr);
+      if (errStr) process.stderr.write(errStr);
       console.error(`❌ [fast-validate] 命令执行失败: ${cmd}`);
       failed = true;
-      errors.push(`命令 [${cmd}] 失败。退出码: ${e.status || 1}`);
+      errors.push(`命令 [${cmd}] 失败。退出码: ${e.status || 1}\n报错信息:\n${outStr}\n${errStr}`);
     }
   }
   
   if (failed) {
     console.error(`\n🚨 [fast-validate] 极速检验门禁未能全部通过！`);
     errors.forEach(err => console.error(`  - ${err}`));
-    process.exit(1);
+    throw new Error(`极速门禁验证失败:\n${errors.join('\n')}`);
   }
   
   console.log(`\n🎉 [fast-validate] 所有门禁校验全部通过！`);
-  process.exit(0);
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  fastValidate()
+    .then(() => {
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error(`❌ [fast-validate] 执行失败: ${err.message}`);
+      process.exit(1);
+    });
+}

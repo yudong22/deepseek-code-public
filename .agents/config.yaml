@@ -6,10 +6,12 @@ runtime:
   sandbox_root: "/tmp/ai-workers"  # 沙箱物理根路径
   safe_mode: true                  # 拦截危险系统指令
 
-# 核心多 Agent 路由规则
-version: "2026.1"
-project_id: "cross-platform-mid-platform"
+tech_rules:
+  "React/TS": "统一使用 TypeScript 强类型定义，状态变更需合理，禁止在不明确的地方使用 any"
+  "Tauri (Rust)": "Rust 核心层仅用于原生系统级能力桥接与 Sidecar 进程生命周期管理，重度业务逻辑应在 React 前端或 Sidecar 层面"
+  "Sidecar (Bun/TS)": "Agent 的核心逻辑应遵循 Effect-TS 及 Session 封装模式"
 
+# 核心多 Agent 路由规则
 agent_routing:
   primary_developer: 
     provider: "openai_compatible"        # 声明使用 OpenAI 兼容协议

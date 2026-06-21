@@ -293,28 +293,43 @@ export default function ChatFeed({ messages, onOpenTab, isGenerating, onCancelAg
                   </div>
 
                   <div className="message-footer">
-                    <span>{new Date(msg.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</span>
-                    <button 
-                      className={`message-action-icon${messageLiked ? " liked" : ""}`}
-                      onClick={handleLike}
-                      title="点赞"
-                    >
-                      <Icons.Like />
-                    </button>
-                    <button 
-                      className={`message-action-icon${messageDisliked ? " disliked" : ""}`}
-                      onClick={handleDislike}
-                      title="点踩"
-                    >
-                      <Icons.Dislike />
-                    </button>
-                    <button 
-                      className="message-action-icon"
-                      onClick={handleCopy}
-                      title="复制消息"
-                    >
-                      <Icons.Copy />
-                    </button>
+                    {msg.role === "assistant" && msg.elapsed && (
+                      <span className="message-elapsed" style={{ marginRight: "12px", opacity: 0.75, fontSize: "11px" }}>
+                        运行时间: {msg.elapsed}s
+                      </span>
+                    )}
+                    {(msg.role === "user" || !(isLastMessage && isGenerating)) && (
+                      <span className="message-time" style={{ marginRight: "auto", fontSize: "11px" }}>
+                        {new Date(msg.completedAt || msg.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    )}
+                    
+                    {/* Copy, Like, Dislike buttons (only show if completed) */}
+                    {(msg.role === "user" || !(isLastMessage && isGenerating)) && (
+                      <>
+                        <button 
+                          className="message-action-icon"
+                          onClick={handleCopy}
+                          title="复制消息"
+                        >
+                          <Icons.Copy />
+                        </button>
+                        <button 
+                          className={`message-action-icon${messageLiked ? " liked" : ""}`}
+                          onClick={handleLike}
+                          title="点赞"
+                        >
+                          <Icons.Like />
+                        </button>
+                        <button 
+                          className={`message-action-icon${messageDisliked ? " disliked" : ""}`}
+                          onClick={handleDislike}
+                          title="点踩"
+                        >
+                          <Icons.Dislike />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               )}

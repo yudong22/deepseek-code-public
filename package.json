@@ -1,32 +1,15 @@
 {
-  "name": "deepseek-code",
+  "name": "deepseek-code-monorepo",
   "private": true,
-  "version": "0.2.5",
-  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "build:sidecar": "if [ -d ../opencode ]; then mkdir -p src-tauri/binaries && cd ../opencode && bun build --compile --minify ../deepseek-code-public/src-sidecar/index.ts --outfile ../deepseek-code-public/src-tauri/binaries/opencode-sidecar-$(rustc -Vv | grep host | cut -d ' ' -f 2); fi",
-    "build": "bun run build:sidecar && vite build",
-    "dev": "bun run build:sidecar && vite",
-    "preview": "bun run build:sidecar && tauri dev",
-    "build:mac": "bun run build:sidecar && tauri build && (killall deepseek-code || true) && cp -rf src-tauri/target/release/bundle/macos/deepseek-code.app /Applications/",
-    "tauri": "tauri",
-    "test": "cargo check --manifest-path src-tauri/Cargo.toml && bun test"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
-    "@tauri-apps/plugin-sql": "^2.4.0",
-    "mermaid": "^11.15.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-router-dom": "^7.17.0"
-  },
-  "devDependencies": {
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^4.6.0",
-    "typescript": "~5.8.3",
-    "vite": "^7.0.4",
-    "@tauri-apps/cli": "^2"
+    "dev:desktop": "bun --filter @deepseek-code/desktop dev",
+    "preview": "bun --filter @deepseek-code/desktop preview",
+    "build:desktop": "bun --filter @deepseek-code/desktop build",
+    "build:sidecar": "bun --filter @deepseek-code/sidecar build",
+    "test": "bun test packages/client-cli/src/openhands.test.ts && bun test apps/desktop/src/bridge/bridge.test.ts"
   }
 }

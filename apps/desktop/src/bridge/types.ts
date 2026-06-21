@@ -19,6 +19,8 @@ export interface Message {
   role: "user" | "assistant" | "tool"; // 支持 tool 角色
   content: string;
   createdAt: string;
+  completedAt?: string; // 对话完成的时间
+  elapsed?: string; // 对话中的执行时间 (s)
   reasoning_content?: string; // 推理思维链字段
   // 壳状态模拟字段
   filesChanged?: Array<{ name: string; path: string }>;

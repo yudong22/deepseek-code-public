@@ -6,8 +6,9 @@
 
 ## 1. 整体架构 (Overall Architecture)
 本项目采用 **Tauri v2 + React + Vite + TypeScript** 架构：
-- **前端 (Frontend)**：位于根目录的 `src` 文件夹中，使用 React (TSX) 构建用户界面，通过 Vite 进行开发构建。
-- **后端 (Backend / Desktop Shell)**：位于 `src-tauri` 文件夹中，使用 Rust 编写，负责原生系统交互、API 桥接和桌面窗口管理。
+- **前端 (Frontend)**：位于 `apps/desktop/src` 文件夹中，使用 React (TSX) 构建用户界面，通过 Vite 进行开发构建。
+- **后端 (Backend / Desktop Shell)**：位于 `apps/desktop/src-tauri` 文件夹中，使用 Rust 编写，负责原生系统交互、API 桥接和桌面窗口管理。
+- **Monorepo 管理**：通过 `packages/` 维护共享逻辑、Sidecar 执行引擎、CLI 工具以及 Gateway 网关服务。
 
 ---
 
@@ -15,29 +16,28 @@
 
 ### 根目录 (Root Directory)
 ```bash
-deepseek-code/
+deepseek-code-monorepo/
 ├── bun.lock                 # Bun 依赖锁文件
-├── package.json             # 前端依赖及脚本配置文件
-├── tsconfig.json            # TypeScript 配置
-├── vite.config.ts           # Vite 构建与开发服务配置
-├── index.html               # 单页应用入口 HTML
-├── public/                  # 静态公共资源目录
+├── package.json             # Monorepo 工作区根声明文件
+├── docker-compose.yml       # C/S 容器编排 (Go Gateway + Qdrant DB)
 ├── docs/                    # 项目设计与维护文档目录
 │   ├── preview.md           # AI 原生研发流水线实施文档
 │   └── route-map.md         # [当前文件] 代码结构与路径说明文档
-├── src/                     # 前端 React 源码目录
-├── src-tauri/               # 后端 Rust 源码与 Tauri 配置目录
-├── backend/                 # 沙箱运行环境与临时目录
-│   └── sandbox_workspace/   # 默认沙箱生成和解析临时文件的保存位置
 ├── .agents/                 # AI 流水线配置目录 (config.yaml, agent.md)
-└── scripts/                 # 流水线自动化验证与运行脚本目录 (ai-runner-v2.js, fast-validate.js, openhands-call)
+├── backend/                 # 沙箱运行环境与临时目录
+├── apps/
+│   └── desktop/             # 原 Tauri 桌面端项目 (Tauri v2 + React 19)
+└── packages/
+    ├── gateway/             # Go Server 端网关服务 (Docker + pgvector/Qdrant + JWT)
+    ├── client-cli/          # 客户端命令行工具 (@openhands/cli)
+    └── sidecar/             # 原 src-sidecar (编译为 opencode-sidecar 二进制)
 ```
 
 ---
 
-### 前端目录 (Frontend: `src/`)
+### 前端与桌面端目录 (Apps: `apps/desktop/src/`)
 ```bash
-src/
+apps/desktop/src/
 ├── main.tsx                 # 前端入口文件，挂载 React 根节点
 ├── App.tsx                  # 根组件与主面板：路由定义、全局状态管理、Agent 流式对话业务逻辑
 ├── App.css                  # 全局样式（标题栏、侧边栏、聊天气泡、工具调用卡片、Toast 等）
@@ -59,19 +59,12 @@ src/
 ├── bridge/                  # 统一的 JS Bridge 门面层（封装底层壳交互，支持多端适配）
 │   ├── index.ts             # 桥接层入口（环境检测与分发）
 │   ├── types.ts             # 桥接层 TypeScript 接口与类型定义（包含 selectDirectory、checkForUpdates 声明）
-│   ├── tauri.ts             # 原生 Tauri 壳能力实现（对接 SQLite，实现具备列数据解析容错、实际检查 GitHub Release 更新、以及调用原生文件夹选择器的功能）
+│   ├── tauri.ts             # 原生 Tauri 壳能力实现
 │   └── mock.ts              # 浏览器环境 Mock/降级实现（模拟 Agent 事件流、工作区目录录入及更新返回）
 └── vite-env.d.ts            # Vite 环境变量类型声明
 ```
 
 #### 关键路径与通信：
-- **通信桥梁**：前端组件统一导入并调用 `@/bridge`（例如 `bridge.greet(name)` 或数据库接口 `bridge.initDb()`）进行交互，不再直接依赖 `@tauri-apps/api`。内部会自动识别执行环境，若在 Tauri 内则调用 Rust 后端 Command 或使用 `tauri-plugin-sql` 访问本地 SQLite 数据库（`deepseek_code.db`）；若在标准浏览器内则自动使用 `localStorage` 作为模拟数据库进行数据存取，避免出现运行时未定义报错。针对 SQLite 列名序列化在部分环境下因大小写不一致的问题，在加载逻辑中提供了属性名智能容错回退解析；在请求发送阶段，前端通过 `expandHistoryMessages` 提取并重构了符合 API 规范的 `tool_calls` 及对应的 `tool` 回复上下文，实现完整的 Agent 执行记忆继承。
-- **Agent 事件生命周期**：Agent 执行时，事件数据流经 `opencode Session.prompt()` → `src-sidecar/index.ts`（JSON lines on stdout）→ `lib.rs`（serde_json 反序列化 `AgentEvent` 枚举）→ `Channel<AgentEvent>` → `App.tsx:onEvent` 回调。支持的事件类型包括 `Thinking/Text/ToolCall/ToolSuccess/ToolFailed/StepStarted/StepEnded/Finished/Error` 及对应的 `Started/Ended` 边界事件。完整映射见 `src-tauri/src/lib.rs` 的 `AgentEvent` 枚举。
-- **动态 System Prompt 工作区感知**：由于 Agent 核心执行迁移至外部 sidecar 进程，工作区感知与 Prompt 拼装也解耦转移至 sidecar 中处理。Tauri 后端主要负责从消息历史中提取最新 prompt 并输送给 sidecar，简化了后端的感知负担。
-- **无抖动置顶用户消息栏**：在 `ChatFeed` 消息流中，置顶消息条设计在独立的 `.chat-feed-container` 内部绝对悬浮（`position: absolute`）渲染，脱离了消息列表本身的滚动高度文档流，从根本上解决了频繁展示/隐藏置顶栏时的页面弹动抖动问题。
-- **右侧 Overview 动态 Markdown 与 Mermaid 渲染**：`RightPanel` 组件在右侧折叠面板展开时，会动态提取当前会话历史中最新的助手 Markdown 文档，并通过 `mermaid` 模块自动在页面上将 ` ```mermaid ` 代码块编译渲染为交互式 SVG 架构流程图。
-
----
 
 ### 后端目录 (Backend: `src-tauri/`)
 ```bash

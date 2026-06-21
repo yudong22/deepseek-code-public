@@ -680,7 +680,41 @@ function MainDashboard() {
             );
             const errMsg = typeof event.payload === "string" ? event.payload : (event.payload?.message || "未知错误");
             currentContent += `\n\n❌ **运行出错：** \`${errMsg}\`\n`;
-            setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
+
+            const elapsed = (Math.round(((Date.now() - sessionStartTime) / 1000) * 2) / 2).toFixed(1);
+            const finishedSections: Message["sections"] = sections.length > 0 ? sections.map(s => {
+              if (s.type === "thinking") return { type: "thinking" as const, content: s.content || "", elapsed: s.elapsed };
+              if (s.type === "tools") return { type: "tools" as const, toolCalls: (s.toolCalls || []).map(({ executing, ...tc }) => tc) };
+              return { type: "text" as const, content: s.content || "" };
+            }) : undefined;
+
+            const finalMsg: Message = {
+              id: assistantMsgId,
+              sessionId: currentSessionId!,
+              role: "assistant",
+              content: currentContent,
+              createdAt: initialAssistantMsg.createdAt,
+              completedAt: new Date().toISOString(),
+              elapsed: elapsed,
+              toolCalls: currentToolCalls.length > 0 ? currentToolCalls.map(({ executing, ...tc }) => tc) : undefined,
+              sections: finishedSections,
+            };
+            const allThinking = sections.filter(s => s.type === "thinking").map(s => {
+              const c = s.content || "";
+              return s.elapsed ? c + `\n⏱ ${s.elapsed}s` : c;
+            }).join("\n");
+            if (allThinking) finalMsg.reasoning_content = allThinking;
+
+            await bridge.saveMessage(finalMsg);
+
+            if (currentSession) {
+              currentSession.lastMessage = currentContent.substring(0, 30) + (currentContent.length > 30 ? "..." : "");
+              currentSession.updatedAt = new Date().toISOString();
+              await bridge.saveSession(currentSession);
+            }
+
+            await loadMessages(currentSessionId!);
+            await loadSessions();
           }
           // 完成
           else if (event.type === "Finished") {
@@ -691,7 +725,7 @@ function MainDashboard() {
               : undefined;
 
             const elapsed = (Math.round(((Date.now() - sessionStartTime) / 1000) * 2) / 2).toFixed(1);
-            const statsParts: string[] = ["\u23f1\ufe0f " + elapsed + "s"];
+            const statsParts: string[] = [];
             if (totalTokens.input) statsParts.push("\ud83d\udce5 " + totalTokens.input);
             if (totalTokens.output) statsParts.push("\ud83d\udce4 " + totalTokens.output);
             if (totalTokens.reasoning) statsParts.push("\ud83e\udd14 " + totalTokens.reasoning);
@@ -722,7 +756,9 @@ function MainDashboard() {
               sessionId: currentSessionId!,
               role: "assistant",
               content: currentContent,
-              createdAt: new Date().toISOString(),
+              createdAt: initialAssistantMsg.createdAt,
+              completedAt: new Date().toISOString(),
+              elapsed: elapsed,
               toolCalls: finalToolCalls,
               sections: finishedSections,
             };

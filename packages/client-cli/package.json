@@ -1,0 +1,12 @@
+{
+  "name": "@openhands/cli",
+  "private": true,
+  "version": "0.3.0",
+  "type": "module",
+  "bin": {
+    "openhands": "./src/cli.ts"
+  },
+  "scripts": {
+    "test": "bun test src/openhands.test.ts"
+  }
+}
