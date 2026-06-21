@@ -200,6 +200,25 @@ function MainDashboard() {
     }
   }
 
+  // --- 确保有活跃会话（无 session 时自动创建并导航）---
+  async function ensureSession(cmdText?: string): Promise<string> {
+    if (id) return id;
+    const newId = `session-${Date.now()}`;
+    const projName = savedWorkspacePath
+      ? savedWorkspacePath.split(/[/\\]/).pop() || ""
+      : "";
+    await bridge.saveSession({
+      id: newId,
+      title: cmdText || "New Conversation",
+      lastMessage: new Date().toLocaleTimeString("zh-CN"),
+      updatedAt: new Date().toISOString(),
+      projectName: projName || undefined,
+    });
+    await loadSessions();
+    navigate(`/chat/s/${newId}`);
+    return newId;
+  }
+
   // --- 本地命令处理 ---
   async function handleLocalSlashCommand(cmdText: string) {
     const parts = cmdText.split(/\s+/);
@@ -220,10 +239,10 @@ function MainDashboard() {
     const normalized = aliasMap[command] || command;
 
     if (normalized === "/help") {
+      const sessionId = await ensureSession("help");
       const helpMsg: Message = {
         id: `local-help-${Date.now()}`,
-        sessionId: id || "temp",
-        role: "assistant",
+        sessionId,
         content: [
           "### 💡 可用命令 (Slash Commands)",
           "",
@@ -256,13 +275,14 @@ function MainDashboard() {
     } else if (normalized === "/settings") {
       setIsSettingsOpen(true);
     } else if (normalized === "/models") {
+      const sessionId = await ensureSession("/models");
       const targetModel = args[0]?.toLowerCase();
       if (targetModel === "pro" || targetModel === "reasoner") {
         setSelectedModel("deepseek-v4-pro");
         showToast("已切换到模型：deepseek-v4-pro");
         const modelMsg: Message = {
           id: `local-model-${Date.now()}`,
-          sessionId: id || "temp",
+          sessionId,
           role: "assistant",
           content: "🔄 **系统提示**：已切换模型为 `deepseek-v4-pro`（逻辑推理增强引擎）。",
           createdAt: new Date().toISOString(),
@@ -273,7 +293,7 @@ function MainDashboard() {
         showToast("已切换到模型：deepseek-v4-flash");
         const modelMsg: Message = {
           id: `local-model-${Date.now()}`,
-          sessionId: id || "temp",
+          sessionId,
           role: "assistant",
           content: "🔄 **系统提示**：已切换模型为 `deepseek-v4-flash`（低延迟极速引擎）。",
           createdAt: new Date().toISOString(),
@@ -282,7 +302,7 @@ function MainDashboard() {
       } else {
         const errorMsg: Message = {
           id: `local-model-err-${Date.now()}`,
-          sessionId: id || "temp",
+          sessionId,
           role: "assistant",
           content: "❌ **错误**：未知的模型。用法：`/models flash` 或 `/models pro`。",
           createdAt: new Date().toISOString(),
@@ -290,6 +310,7 @@ function MainDashboard() {
         setMessages((prev) => [...prev, errorMsg]);
       }
     } else if (normalized === "/sessions") {
+      const sessionId = await ensureSession("/sessions");
       // 展示最近会话列表
       const sessionList = sessions.slice(0, 10);
       if (sessionList.length === 0) {
@@ -301,16 +322,17 @@ function MainDashboard() {
       );
       const msg: Message = {
         id: `local-sessions-${Date.now()}`,
-        sessionId: id || "temp",
+        sessionId,
         role: "assistant",
         content: ["### 📋 最近会话", "", ...lines].join("\n"),
         createdAt: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, msg]);
     } else if (normalized === "/init") {
+      const sessionId = await ensureSession("/init");
       const msg: Message = {
         id: `local-init-${Date.now()}`,
-        sessionId: id || "temp",
+        sessionId,
         role: "assistant",
         content: [
           "### 🚀 项目初始化",
@@ -335,23 +357,7 @@ function MainDashboard() {
       };
       setMessages((prev) => [...prev, msg]);
     } else if (normalized === "/plan") {
-      // 无活跃会话时自动创建并导航
-      let sessionId = id;
-      if (!sessionId) {
-        sessionId = `session-${Date.now()}`;
-        const projName = savedWorkspacePath
-          ? savedWorkspacePath.split(/[/\\]/).pop() || ""
-          : "";
-        await bridge.saveSession({
-          id: sessionId,
-          title: "规划模式",
-          lastMessage: "/plan",
-          updatedAt: new Date().toISOString(),
-          projectName: projName || undefined,
-        });
-        await loadSessions();
-        navigate(`/chat/s/${sessionId}`);
-      }
+      const sessionId = await ensureSession("/plan");
       setPlanMode(true);
       const msg: Message = {
         id: `local-plan-${Date.now()}`,
@@ -373,10 +379,11 @@ function MainDashboard() {
       setMessages((prev) => [...prev, msg]);
       showToast("📋 已进入规划模式（只读分析）");
     } else if (normalized === "/plan:exit") {
+      const sessionId = await ensureSession("/plan:exit");
       setPlanMode(false);
       const msg: Message = {
         id: `local-plan-exit-${Date.now()}`,
-        sessionId: id || "temp",
+        sessionId,
         role: "assistant",
         content: "✏️ **规划模式已退出**。Agent 现在可以正常读/写文件。",
         createdAt: new Date().toISOString(),
@@ -423,9 +430,10 @@ function MainDashboard() {
     } else if (normalized === "/diff") {
       showToast("diff 查看器（开发中）");
     } else {
+      const sessionId = await ensureSession(cmdText);
       const unknownMsg: Message = {
         id: `local-unknown-${Date.now()}`,
-        sessionId: id || "temp",
+        sessionId,
         role: "assistant",
         content: `❌ **未知命令**：\`${command}\`。输入 \`/help\` 查看所有可用命令。`,
         createdAt: new Date().toISOString(),
