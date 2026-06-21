@@ -80,8 +80,8 @@ jobs:
         with:
           tagName: ${{ github.event.inputs.tag_name || github.ref_name }}
           releaseName: 'deepseek-code ${{ github.event.inputs.tag_name || github.ref_name }}'
-          releaseBody: 'Automatic pre-release build for macOS Apple Silicon.'
-          prerelease: true
+          releaseBody: '等待生成完整 changelog...'
+          prerelease: false
           projectPath: apps/desktop
           tauriScript: bun run tauri
           args: --target aarch64-apple-darwin
@@ -150,4 +150,65 @@ jobs:
             git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
             git push
             echo "✅ update.json signature committed"
+          fi
+
+      - name: Generate changelog and update release
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          # 生成分类 changelog
+          CHANGELOG=$(
+            echo "## v${VERSION} Release Notes"
+            echo ""
+            for type in "feat:🚀 新功能" "fix:🐛 Bug 修复" "docs:📝 文档" "refactor:♻️ 重构" "style:🎨 样式" "test:✅ 测试" "chore:🔧 工程化"; do
+              label="${type#*:}"
+              prefix="${type%:*}"
+              LOGS=$(git log --oneline --no-decorate ${PREV_TAG:+"${PREV_TAG}..HEAD"} --grep="^${prefix}" 2>/dev/null | sed 's/^[a-f0-9]* //' | sed 's/^/- /')
+              if [ -n "$LOGS" ]; then
+                echo "### ${label}"
+                echo "$LOGS"
+                echo ""
+              fi
+            done
+            # 未分类的
+            REST=$(git log --oneline --no-decorate ${PREV_TAG:+"${PREV_TAG}..HEAD"} 2>/dev/null | grep -vE '^[a-f0-9]+ (feat|fix|docs|refactor|style|test|chore)[:(]' | sed 's/^[a-f0-9]* //' | sed 's/^/- /')
+            if [ -n "$REST" ]; then
+              echo "### 📦 其他"
+              echo "$REST"
+              echo ""
+            fi
+          )
+
+          echo "$CHANGELOG" > .release-notes.md
+          echo "📋 Changelog:"
+          echo "$CHANGELOG"
+
+      - name: Upload release artifacts and publish release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
+
+          # 收集构建产物
+          ARTIFACTS=()
+          while IFS= read -r f; do
+            ARTIFACTS+=("$f")
+          done < <(find "$ARCHIVE_DIR" \( -name "*.dmg" -o -name "*.tar.gz" \) -print 2>/dev/null || true)
+
+          if [ ${#ARTIFACTS[@]} -gt 0 ] && [ -f ".release-notes.md" ]; then
+            echo "🚀 更新 Release 并上传构建产物..."
+            gh release view "$GITHUB_REF_NAME" --json id >/dev/null 2>&1 || {
+              echo "创建新 Release..."
+              gh release create "$GITHUB_REF_NAME" \
+                --title "v${VERSION}" \
+                --notes-file .release-notes.md
+            }
+            gh release upload "$GITHUB_REF_NAME" "${ARTIFACTS[@]}" --clobber
+            echo "✅ Release v${VERSION} 已更新"
+          else
+            echo "⚠️ 未找到构建产物，跳过 Release 更新"
           fi
