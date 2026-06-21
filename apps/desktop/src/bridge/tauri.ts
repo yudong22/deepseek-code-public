@@ -59,7 +59,15 @@ export const tauriBridge: IBridge = {
   async installUpdate(onStatus?: (status: UpdateStatus) => void): Promise<void> {
     try {
       onStatus?.({ status: "checking" });
-      const update = await check();
+      let update: Update | null;
+      try {
+        update = await check();
+      } catch (e: any) {
+        // 签名无效（如 update.json 的 signature 为空）时 check() 会抛编码异常
+        // 指引用户前往 GitHub 手动下载
+        onStatus?.({ status: "error", error: `自动更新元数据验证失败 (${e.message || '签名无效'})，请前往 GitHub Releases 手动下载: https://github.com/yudong22/deepseek-code-public/releases` });
+        return;
+      }
       if (!update) {
         onStatus?.({ status: "error", error: "没有可用的更新，请前往 GitHub Releases 手动下载: https://github.com/yudong22/deepseek-code-public/releases" });
         return;
