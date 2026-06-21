@@ -1,14 +1,14 @@
 {
-  "version": "0.4.2",
-  "notes": "无显著变更。",
-  "pub_date": "2026-06-21T11:13:37Z",
+  "version": "0.4.3",
+  "notes": "### 🚀 新功能；- feat: AG-UI 协议适配 + 测试覆盖完善 + 交互体验修复",
+  "pub_date": "2026-06-21T13:47:57Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.2/deepseek-code_aarch64.app.tar.gz",
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.3/deepseek-code_aarch64.app.tar.gz",
       "signature": ""
     },
     "darwin-x86_64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.2/deepseek-code_x86_64.app.tar.gz",
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.4.3/deepseek-code_x86_64.app.tar.gz",
       "signature": ""
     }
   }
