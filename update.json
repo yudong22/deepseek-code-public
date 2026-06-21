@@ -1,6 +1,6 @@
 {
   "version": "0.3.1",
-  "notes": "修复: 规划模式自动创建会话, session ID UUID 格式, 斜杠命令消息持久化, 静默更新机制",
+  "notes": "feat: /plan 规划模式, Tauri updater 静默自动更新, 斜杠命令持久化, session UUID 格式, CLAUDE.md 全面更新",
   "pub_date": "2026-06-21T10:00:00Z",
   "platforms": {
     "darwin-aarch64": {
