@@ -174,13 +174,36 @@ ${errorLog}
 
     // Sidecar timeout handling
     const SIDECAR_TIMEOUT_MS = parseInt(process.env.SIDECAR_TIMEOUT_MS || "180000", 10);
+    const IDLE_WARN_MS = parseInt(process.env.SIDECAR_IDLE_WARN_MS || "60000", 10);
+    let lastEventTime = Date.now();
+    let lastEventType = 'none';
+    let idleWarnShown = false;
+
+    // 空闲警告：长时间无事件时提示用户
+    const idleWatcher = setInterval(() => {
+      const elapsed = Date.now() - lastEventTime;
+      if (elapsed > IDLE_WARN_MS && !idleWarnShown) {
+        idleWarnShown = true;
+        const elapsedSec = Math.round(elapsed / 1000);
+        console.error(`\n⏳ [openhands-call] ${elapsedSec}s 未收到 Agent 事件 (最后事件: ${lastEventType})，仍在等待 API 响应...\n`);
+      }
+    }, 10000);
+
     const timeout = setTimeout(() => {
+      clearInterval(idleWatcher);
       child.kill('SIGTERM');
-      reject(new Error(`OpenCode 侧车进程超时 (${SIDECAR_TIMEOUT_MS}ms)，已强制终止`));
+      const elapsed = Math.round((Date.now() - lastEventTime) / 1000);
+      reject(new Error(
+        `OpenCode 侧车进程超时 (${SIDECAR_TIMEOUT_MS}ms，${elapsed}s 无事件)，已强制终止。` +
+        `\n  最后事件: ${lastEventType}` +
+        `\n  模型: ${model}` +
+        `\n  提示: 可通过环境变量 SIDECAR_TIMEOUT_MS 调整超时时间（默认 180s）`
+      ));
     }, SIDECAR_TIMEOUT_MS);
 
     let buffer = '';
     child.stdout.on('data', (data) => {
+      lastEventTime = Date.now();
       buffer += data.toString();
       let lines = buffer.split('\n');
       buffer = lines.pop();
@@ -191,6 +214,7 @@ ${errorLog}
 
         try {
           const event = JSON.parse(line);
+          lastEventType = event.type || 'unknown';
           switch (event.type) {
             case 'ThinkingStarted':
               process.stdout.write(`🤔 [Thinking] `);
@@ -241,6 +265,7 @@ ${errorLog}
 
     child.on('close', (code) => {
       clearTimeout(timeout);
+      clearInterval(idleWatcher);
       if (code !== 0) {
         reject(new Error(`OpenCode ${modeLabel}任务异常退出，退出码: ${code}`));
       } else {

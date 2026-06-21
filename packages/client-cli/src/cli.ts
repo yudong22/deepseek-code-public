@@ -23,7 +23,7 @@ function logError(msg: string) {
 }
 
 // Load CLI Config
-function loadConfig() {
+export function loadConfig() {
   if (!fs.existsSync(configPath)) {
     return null;
   }
@@ -219,27 +219,31 @@ async function handleDoctor() {
 }
 
 // ─── 本地记忆管理 ─────────────────────────────────────
-const memoriesPath = path.join(os.homedir(), '.openhands', 'memories.json');
+export function getMemoriesPath(): string {
+  return process.env.OPENHANDS_MEMORIES_PATH || path.join(os.homedir(), '.openhands', 'memories.json');
+}
 
-function loadLocalMemories(): any[] {
+export function loadLocalMemories(memoriesFile?: string): any[] {
+  const file = memoriesFile || getMemoriesPath();
   try {
-    if (fs.existsSync(memoriesPath)) {
-      return JSON.parse(fs.readFileSync(memoriesPath, 'utf-8'));
+    if (fs.existsSync(file)) {
+      return JSON.parse(fs.readFileSync(file, 'utf-8'));
     }
   } catch (e) {}
   return [];
 }
 
-function saveLocalMemories(memories: any[]) {
+export function saveLocalMemories(memories: any[], memoriesFile?: string) {
+  const file = memoriesFile || getMemoriesPath();
   try {
-    const dir = path.dirname(memoriesPath);
+    const dir = path.dirname(file);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(memoriesPath, JSON.stringify(memories, null, 2));
+    fs.writeFileSync(file, JSON.stringify(memories, null, 2));
   } catch (e) {}
 }
 
-function searchLocalMemories(prompt: string, maxResults = 3): any[] {
-  const memories = loadLocalMemories();
+export function searchLocalMemories(prompt: string, maxResults = 3, memoriesFile?: string): any[] {
+  const memories = loadLocalMemories(memoriesFile);
   const promptTokens = tokenize(prompt);
   const scored = memories.map(m => {
     const memTokens = tokenize(m.prompt);
@@ -251,20 +255,20 @@ function searchLocalMemories(prompt: string, maxResults = 3): any[] {
   return scored.filter(m => m.score >= 0.10).sort((a, b) => b.score - a.score).slice(0, maxResults);
 }
 
-function addLocalMemory(entry: any) {
-  const memories = loadLocalMemories();
+export function addLocalMemory(entry: any, memoriesFile?: string) {
+  const memories = loadLocalMemories(memoriesFile);
   memories.push({ ...entry, timestamp: Date.now() });
   // 保留最近 100 条
   const trimmed = memories.slice(-100);
-  saveLocalMemories(trimmed);
+  saveLocalMemories(trimmed, memoriesFile);
 }
 
-function tokenize(s: string): string[] {
+export function tokenize(s: string): string[] {
   return s.toLowerCase().split(/\W+/).filter(Boolean);
 }
 
 // ─── AI 需求分析：生成技术方案 ───────────────────────
-async function handlePlan(args: string[]) {
+export async function handlePlan(args: string[]) {
   const taskDesc = args.filter(a => !a.startsWith('--')).join(' ') || '';
   if (!taskDesc) {
     throw new Error("请指定任务描述。例如: openhands plan \"添加用户登录页面\"");
@@ -749,4 +753,6 @@ async function handleMemorySync(args: string[]) {
   log("\x1b[32m记忆成功同步并导入远端向量数据库！\x1b[0m");
 }
 
-main();
+if (import.meta.main) {
+  main();
+}

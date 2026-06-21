@@ -10,6 +10,6 @@
     "preview": "bun --filter @deepseek-code/desktop preview",
     "build:desktop": "bun --filter @deepseek-code/desktop build",
     "build:sidecar": "bun --filter @deepseek-code/sidecar build",
-    "test": "bun test packages/client-cli/src/openhands.test.ts && bun test apps/desktop/src/bridge/bridge.test.ts"
+    "test": "bun test packages/client-cli/src/openhands.test.ts packages/client-cli/src/cli.test.ts && bun test apps/desktop/src/bridge/bridge.test.ts"
   }
 }
