@@ -987,13 +987,11 @@ function MainDashboard() {
                 showToast={showToast}
               />
               {pendingQuestion && (
-                <div style={{ padding: "0 16px" }}>
-                  <QuestionCard
-                    args={pendingQuestion.args}
-                    callId={pendingQuestion.callId}
-                    onAnswered={() => setPendingQuestion(null)}
-                  />
-                </div>
+                <QuestionCard
+                  args={pendingQuestion.args}
+                  callId={pendingQuestion.callId}
+                  onAnswered={() => setPendingQuestion(null)}
+                />
               )}
               <ChatInput
                 inputText={inputText}
