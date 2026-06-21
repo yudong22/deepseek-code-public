@@ -109,6 +109,7 @@ async function main() {
       : normalizeSessionId(sessionId)
 
     // 4. Initialize the Session
+    console.error(`[sidecar] Initializing session with model: ${JSON.stringify(model)}`)
     const session = await Session.make({
       directory,
       model,
@@ -120,6 +121,7 @@ async function main() {
     const toolNameByCallID = new Map<string, string>()
 
     // 4. Run prompt and stream events
+    console.error(`[sidecar] Session ready, starting agent loop (prompt: "${prompt.slice(0, 80)}...")`)
     await session.prompt(prompt, (raw) => {
       const rawEvent = raw.event
       if (!rawEvent) return

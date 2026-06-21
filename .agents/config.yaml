@@ -15,7 +15,7 @@ tech_rules:
 agent_routing:
   default:
     provider: "openai_compatible"        # 声明使用 OpenAI 兼容协议
-    model: "deepseek/deepseek-v4-flash"
+    model: "deepseek-chat"
     api_base: "https://api.deepseek.com/v1"
     api_key: "${DEEPSEEK_API_KEY}"       # 从系统环境变量中无感读取，严禁硬编码
     temperature: 0.2                     # 编程任务建议低采样随机性，确保代码严谨

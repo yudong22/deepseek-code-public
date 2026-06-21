@@ -553,7 +553,19 @@ async function handleRun(args: string[]) {
         );
       }
 
-      const model = cliModel || provCfg?.model || cfg?.model || process.env.OPENCODE_MODEL || 'deepseek-chat';
+      // 模型名规范化: opencode 需要 API 能识别的模型名
+      // 去掉 provider/ 前缀（如 deepseek/deepseek-chat → deepseek-chat）
+      let rawModel = cliModel || provCfg?.model || cfg?.model || process.env.OPENCODE_MODEL || 'deepseek-chat';
+      const model = rawModel.includes('/') ? rawModel.split('/').pop()! : rawModel;
+      if (model !== rawModel) {
+        log(`模型名归一化: ${rawModel} → ${model}`);
+      }
+      // DeepSeek 供应商标准模型名校验（仅做提示，不强制）
+      const KNOWN_DEEPSEEK_MODELS = ['deepseek-chat', 'deepseek-reasoner'];
+      if (baseUrl.includes('deepseek.com') && !KNOWN_DEEPSEEK_MODELS.includes(model)) {
+        log(`⚠️ 模型名 "${model}" 可能不被 DeepSeek API 识别（标准: ${KNOWN_DEEPSEEK_MODELS.join('/')}）`);
+        log(`   如果 Sidecar 长时间无响应，试试 --model deepseek-chat`);
+      }
 
       spawnEnv = {
         ...spawnEnv,

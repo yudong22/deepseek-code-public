@@ -173,8 +173,8 @@ ${errorLog}
     child.stdin.end();
 
     // Sidecar timeout handling
-    const SIDECAR_TIMEOUT_MS = parseInt(process.env.SIDECAR_TIMEOUT_MS || "180000", 10);
-    const IDLE_WARN_MS = parseInt(process.env.SIDECAR_IDLE_WARN_MS || "60000", 10);
+    const SIDECAR_TIMEOUT_MS = parseInt(process.env.SIDECAR_TIMEOUT_MS || "300000", 10);
+    const IDLE_WARN_MS = parseInt(process.env.SIDECAR_IDLE_WARN_MS || "30000", 10);
     let lastEventTime = Date.now();
     let lastEventType = 'none';
     let idleWarnShown = false;
