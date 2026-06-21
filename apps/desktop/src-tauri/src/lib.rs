@@ -48,6 +48,16 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+/// 归一化 session ID：opencode 的 ID 格式要求以 "ses" 开头。
+/// 旧版 DB 存储的是纯 UUID，需要补 "ses_" 前缀。
+fn normalize_session_id(id: &str) -> String {
+    if id.starts_with("ses") {
+        id.to_string()
+    } else {
+        format!("ses_{}", id)
+    }
+}
+
 #[tauri::command]
 async fn run_agent_loop(
     app: tauri::AppHandle,
@@ -106,7 +116,7 @@ async fn run_agent_loop(
         .env("DEEPSEEK_API_KEY", &api_key)
         .env("OPENCODE_MODEL", &model)
         .env("WORKSPACE_PATH", &workspace_path)
-        .env("OPENCODE_SESSION_ID", &session_id);
+        .env("OPENCODE_SESSION_ID", &normalize_session_id(&session_id));
 
     if let Some(ref mode) = agent_mode {
         cmd.env("OPENCODE_AGENT_MODE", mode);
