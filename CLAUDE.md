@@ -266,6 +266,7 @@ apps/desktop/src-tauri/
 - `ChatMessage` 有两个独立结构体：`ToolCallFunctionDef`（`arguments: String` 用于 assistant 消息）和 `FunctionDef`（`parameters: Value` 用于 tools 数组）
 - `build_tool_success_result` 支持两种输入格式：opencode 嵌套 `{result: {}}` 和 Rust 工具扁平 `{stdout, stderr, exit_code}`
 - **v0.5.1: 并行工具执行**：只读工具（grep/glob/file_read）通过 `spawn_blocking` + `join_all` 并行执行，写入工具保持串行。Tool trait 新增 `is_read_only()`，ToolRegistry 使用 `Arc<dyn Tool>` 支持跨线程共享
+- **v0.5.1: 自动续写**：SSE 解析器新增 `FinishReason` 变体；LLM 返回 `finish_reason="length"` 时 agent 自动注入续写消息（上限 5 次），不消耗 25 步预算
 - question 工具通过 `tokio::select!` 同时等待用户回答和取消信号，失败时也推送 tool 消息满足 API 契约
 - 错误处理：`run()` 包装 `run_inner()`，所有错误先发 `AgentEvent::Error` 再返回
 
@@ -278,6 +279,7 @@ apps/desktop/src-tauri/
 | **只读工具并行执行** | grep/glob/file_read 通过 `spawn_blocking` + `futures::future::join_all` 并行运行 |
 | **Tool 分区模型** | 只读(multiple) vs 写入(serial) 两阶段执行，Tool trait 新增 `is_read_only()` 方法 |
 | **Arc 共享注册表** | ToolRegistry 改用 `Arc<dyn Tool>`，`find()` 返回可跨线程 clone 的 Arc |
+| **max_tokens 自动续写** | SseChunk 新增 `FinishReason`；检测 `finish_reason="length"` 时自动注入续写消息，不消耗 step 预算 |
 
 ### v0.5.0 关键改进
 

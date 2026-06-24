@@ -161,6 +161,12 @@ pub enum SseChunk {
         reasoning: u64,
     },
 
+    /// The stream finished with a specific reason (e.g., "length" — truncated).
+    /// Used by the agent loop to detect truncated responses and auto-continue.
+    FinishReason {
+        reason: String,
+    },
+
     /// An error occurred during streaming
     Error {
         message: String,
@@ -284,6 +290,21 @@ fn parse_sse_data(data_str: &str, state: &mut ParserState) -> Vec<SseChunk> {
             }
         }
 
+        // Handle other finish_reasons (e.g., "length" — truncated response)
+        if !finish_reason.is_empty() && finish_reason != "stop" && finish_reason != "tool_calls" {
+            if state.reasoning_active {
+                chunks.push(SseChunk::ReasoningEnd);
+                state.reasoning_active = false;
+            }
+            if state.text_active {
+                chunks.push(SseChunk::TextEnd);
+                state.text_active = false;
+            }
+            chunks.push(SseChunk::FinishReason {
+                reason: finish_reason.to_string(),
+            });
+        }
+
         return chunks;
     }
 
@@ -396,6 +417,21 @@ fn parse_sse_data(data_str: &str, state: &mut ParserState) -> Vec<SseChunk> {
                 args: buf.args_buffer,
             });
         }
+    }
+
+    // Handle other finish_reasons (e.g., "length") when content is present
+    if !finish_reason.is_empty() && finish_reason != "stop" && finish_reason != "tool_calls" {
+        if state.reasoning_active {
+            chunks.push(SseChunk::ReasoningEnd);
+            state.reasoning_active = false;
+        }
+        if state.text_active {
+            chunks.push(SseChunk::TextEnd);
+            state.text_active = false;
+        }
+        chunks.push(SseChunk::FinishReason {
+            reason: finish_reason.to_string(),
+        });
     }
 
     chunks

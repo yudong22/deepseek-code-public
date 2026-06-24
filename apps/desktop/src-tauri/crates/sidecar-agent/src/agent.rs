@@ -14,6 +14,9 @@ use tokio::sync::mpsc;
 /// Maximum number of agent steps (LLM → tool → LLM cycles).
 const MAX_STEPS: usize = 25;
 
+/// Maximum number of consecutive auto-continuations (finish_reason="length" retries).
+const MAX_CONTINUATIONS: usize = 5;
+
 /// Agent configuration.
 #[derive(Debug, Clone)]
 pub struct AgentConfig {
@@ -123,7 +126,9 @@ impl Agent {
         store.create_session().map_err(|e| format!("Session 创建失败: {}", e))?;
 
         // Main loop
-        for _ in 0..MAX_STEPS {
+        let mut continuation_count: usize = 0;
+
+        while self.step_count < MAX_STEPS {
             if self.cancel_flag.load(Ordering::SeqCst) {
                 self.emit(AgentEvent::Error {
                     message: "Agent cancelled by user".to_string(),
@@ -149,6 +154,7 @@ impl Agent {
 
             let mut tool_calls_this_turn: Vec<(String, String, String)> = Vec::new(); // (call_id, name, args)
             let mut assistant_content = String::new();
+            let mut finish_reason: Option<String> = None;
 
             use futures::StreamExt;
             tokio::pin!(stream);
@@ -198,6 +204,9 @@ impl Agent {
                         self.total_tokens_output += output as i64;
                         self.total_tokens_reasoning += reasoning as i64;
                     }
+                    SseChunk::FinishReason { reason } => {
+                        finish_reason = Some(reason);
+                    }
                     SseChunk::Error { message } => {
                         self.emit(AgentEvent::Error {
                             message: message.clone(),
@@ -234,9 +243,28 @@ impl Agent {
                 });
             }
 
-            // Execute tool calls
+            // ── Handle truncated response (finish_reason="length", no tool calls) ──
             if tool_calls_this_turn.is_empty() {
-                // No tools called — agent is done
+                if let Some(reason) = &finish_reason {
+                    if reason == "length" && continuation_count < MAX_CONTINUATIONS {
+                        continuation_count += 1;
+                        // Notify user in the UI
+                        self.emit(AgentEvent::Text(
+                            "\n\n_(回复已截断，自动继续...)_".to_string(),
+                        ))?;
+                        // Inject continuation message so LLM continues writing
+                        self.messages.push(ChatMessage {
+                            role: "user".to_string(),
+                            content: Some("请继续（不要重复已有的内容）".to_string()),
+                            tool_call_id: None,
+                            tool_calls: None,
+                        });
+                        self.emit(AgentEvent::StepEnded)?;
+                        self.step_count -= 1; // Don't consume the MAX_STEPS budget
+                        continue;
+                    }
+                }
+                // Normal completion — no tools called
                 break;
             }
 
