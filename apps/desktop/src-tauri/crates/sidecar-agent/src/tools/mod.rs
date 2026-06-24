@@ -5,6 +5,7 @@
 
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 // ─── Tool Trait ──────────────────────────────────
 
@@ -57,13 +58,26 @@ pub trait Tool: Send + Sync {
 
     /// Execute the tool with the given input and context.
     fn execute(&self, input: serde_json::Value, ctx: &ToolContext) -> ToolResult;
+
+    /// Whether this tool is read-only (safe to run in parallel with other read-only tools).
+    ///
+    /// Read-only tools don't modify the filesystem — they can be executed concurrently
+    /// without side-effect conflicts. Mutating tools (bash, file_write, file_edit, question)
+    /// must run serially.
+    fn is_read_only(&self) -> bool {
+        false
+    }
 }
 
 // ─── Tool Registry ───────────────────────────────
 
 /// A collection of registered tools.
+///
+/// Internally stores tools as `Arc<dyn Tool>` so that `find()` returns an
+/// owned `Arc` — callers can clone it and run the tool in a separate thread
+/// for parallel execution.
 pub struct ToolRegistry {
-    tools: Vec<Box<dyn Tool>>,
+    tools: Vec<Arc<dyn Tool>>,
 }
 
 impl ToolRegistry {
@@ -74,12 +88,13 @@ impl ToolRegistry {
 
     /// Register a tool.
     pub fn register(&mut self, tool: Box<dyn Tool>) {
-        self.tools.push(tool);
+        self.tools.push(Arc::from(tool));
     }
 
-    /// Find a tool by name.
-    pub fn find(&self, name: &str) -> Option<&dyn Tool> {
-        self.tools.iter().find(|t| t.name() == name).map(|t| t.as_ref())
+    /// Find a tool by name. Returns an `Arc` so the caller can move it into
+    /// a separate thread for parallel tool execution.
+    pub fn find(&self, name: &str) -> Option<Arc<dyn Tool>> {
+        self.tools.iter().find(|t| t.name() == name).map(|t| Arc::clone(t))
     }
 
     /// Get all tool definitions for the LLM API request.

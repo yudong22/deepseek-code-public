@@ -4,7 +4,7 @@
 
 use crate::protocol::{AgentEvent, build_tool_success_result};
 use crate::provider::{self, ChatMessage, ProviderConfig, SseChunk};
-use crate::tools::{ToolContext, ToolRegistry, ToolResult};
+use crate::tools::{Tool, ToolContext, ToolRegistry, ToolResult};
 use crate::session::SessionStore;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -240,21 +240,138 @@ impl Agent {
                 break;
             }
 
-            for (call_id, name, args) in &tool_calls_this_turn {
+            // ── Partition into read-only (parallel-safe) and mutating (serial) ──
+            struct PendingCall {
+                call_id: String,
+                name: String,
+                args: serde_json::Value,
+            }
+
+            let mut read_only_calls: Vec<PendingCall> = Vec::new();
+            let mut mutating_calls: Vec<PendingCall> = Vec::new();
+
+            for (call_id, name, args_str) in &tool_calls_this_turn {
+                let args: serde_json::Value =
+                    serde_json::from_str(args_str).unwrap_or_default();
+                let entry = PendingCall {
+                    call_id: call_id.clone(),
+                    name: name.clone(),
+                    args,
+                };
+                match name.as_str() {
+                    "file_read" | "grep" | "glob" => read_only_calls.push(entry),
+                    _ => mutating_calls.push(entry),
+                }
+            }
+
+            // ── Read-only tools: execute in parallel ──
+            if !read_only_calls.is_empty() {
+                // Emit ToolStarted for all read-only tools at once (signal parallelism)
+                for call in &read_only_calls {
+                    self.emit(AgentEvent::ToolStarted {
+                        call_id: call.call_id.clone(),
+                    })?;
+                }
+
+                // Pre-collect tool references so closures don't borrow self
+                let mut tool_refs: Vec<Option<Arc<dyn Tool>>> =
+                    Vec::with_capacity(read_only_calls.len());
+                for call in &read_only_calls {
+                    tool_refs.push(self.tools.find(&call.name));
+                }
+
+                let workspace = self.config.workspace_path.clone();
+                let session = self.config.session_id.clone();
+
+                let parallel_futures: Vec<_> = read_only_calls
+                    .into_iter()
+                    .zip(tool_refs)
+                    .map(|(call, tool_opt)| {
+                        let workspace = workspace.clone();
+                        let session = session.clone();
+                        tokio::task::spawn_blocking(move || {
+                            let result = match tool_opt {
+                                Some(tool) => {
+                                    let ctx = ToolContext {
+                                        workspace_path: workspace,
+                                        session_id: session,
+                                        call_id: call.call_id.clone(),
+                                    };
+                                    tool.execute(call.args, &ctx)
+                                }
+                                None => {
+                                    ToolResult::error(format!("Unknown tool: {}", call.name))
+                                }
+                            };
+                            (call.call_id, call.name, result)
+                        })
+                    })
+                    .collect();
+
+                let parallel_results = futures::future::join_all(parallel_futures).await;
+
+                for result in parallel_results {
+                    match result {
+                        Ok((call_id, name, tool_result)) => {
+                            match tool_result {
+                                ToolResult::Success { output } => {
+                                    let enriched = build_tool_success_result(&output);
+                                    let result_str = serde_json::to_string(&enriched)
+                                        .unwrap_or_default();
+                                    self.emit(AgentEvent::ToolSuccess {
+                                        name: name.clone(),
+                                        result: result_str.clone(),
+                                        call_id: call_id.clone(),
+                                    })?;
+                                    self.messages.push(ChatMessage {
+                                        role: "tool".to_string(),
+                                        content: Some(result_str),
+                                        tool_call_id: Some(call_id.clone()),
+                                        tool_calls: None,
+                                    });
+                                }
+                                ToolResult::Error { message } => {
+                                    self.emit(AgentEvent::ToolFailed {
+                                        name: name.clone(),
+                                        error: message.clone(),
+                                        call_id: call_id.clone(),
+                                    })?;
+                                    self.messages.push(ChatMessage {
+                                        role: "tool".to_string(),
+                                        content: Some(format!("Error: {}", message)),
+                                        tool_call_id: Some(call_id.clone()),
+                                        tool_calls: None,
+                                    });
+                                }
+                            }
+                            self.emit(AgentEvent::ToolEnded { call_id })?;
+                        }
+                        Err(e) => {
+                            self.emit(AgentEvent::ToolFailed {
+                                name: "tool".to_string(),
+                                error: format!("Tool execution panicked: {}", e),
+                                call_id: "?".to_string(),
+                            })?;
+                        }
+                    }
+                }
+            }
+
+            // ── Mutating tools: execute serially ──
+            for call in &mutating_calls {
                 if self.cancel_flag.load(Ordering::SeqCst) {
                     break;
                 }
 
                 self.emit(AgentEvent::ToolStarted {
-                    call_id: call_id.clone(),
+                    call_id: call.call_id.clone(),
                 })?;
 
                 // Special handling for question tool: wait for user answer or cancellation
-                if name == "question" {
+                if call.name == "question" {
                     let answer = tokio::select! {
                         a = self.answer_rx.recv() => a,
                         _ = self.cancel_notify.changed() => {
-                            // Cancelled — emit failure AND push tool result to satisfy API contract
                             None
                         }
                     };
@@ -266,93 +383,88 @@ impl Agent {
                                 "status": "answered"
                             });
                             self.emit(AgentEvent::ToolSuccess {
-                                name: name.clone(),
+                                name: call.name.clone(),
                                 result: serde_json::to_string(&result).unwrap_or_default(),
-                                call_id: call_id.clone(),
+                                call_id: call.call_id.clone(),
                             })?;
                             self.messages.push(ChatMessage {
                                 role: "tool".to_string(),
                                 content: Some(format!("User answered: {}", answer)),
-                                tool_call_id: Some(call_id.clone()),
+                                tool_call_id: Some(call.call_id.clone()),
                                 tool_calls: None,
                             });
                         }
                         None => {
-                            // Channel closed or cancelled — must still push a tool result
-                            // to satisfy the "each tool_call must have a tool response" API contract
                             let err_msg = if self.cancel_flag.load(Ordering::SeqCst) {
                                 "User cancelled".to_string()
                             } else {
                                 "No answer received (channel closed)".to_string()
                             };
                             self.emit(AgentEvent::ToolFailed {
-                                name: name.clone(),
+                                name: call.name.clone(),
                                 error: err_msg.clone(),
-                                call_id: call_id.clone(),
+                                call_id: call.call_id.clone(),
                             })?;
                             self.messages.push(ChatMessage {
                                 role: "tool".to_string(),
                                 content: Some(err_msg),
-                                tool_call_id: Some(call_id.clone()),
+                                tool_call_id: Some(call.call_id.clone()),
                                 tool_calls: None,
                             });
                         }
                     }
                 } else {
                     // Execute the tool
-                    let input: serde_json::Value =
-                        serde_json::from_str(args).unwrap_or_default();
                     let ctx = ToolContext {
                         workspace_path: self.config.workspace_path.clone(),
                         session_id: self.config.session_id.clone(),
-                        call_id: call_id.clone(),
+                        call_id: call.call_id.clone(),
                     };
 
-                    match self.tools.find(name) {
-                        Some(tool) => match tool.execute(input, &ctx) {
+                    match self.tools.find(&call.name) {
+                        Some(tool) => match tool.execute(call.args.clone(), &ctx) {
                             ToolResult::Success { output } => {
                                 let enriched = build_tool_success_result(&output);
                                 let result_str = serde_json::to_string(&enriched)
                                     .unwrap_or_default();
                                 self.emit(AgentEvent::ToolSuccess {
-                                    name: name.clone(),
+                                    name: call.name.clone(),
                                     result: result_str.clone(),
-                                    call_id: call_id.clone(),
+                                    call_id: call.call_id.clone(),
                                 })?;
-                                // Add tool result to messages
                                 self.messages.push(ChatMessage {
                                     role: "tool".to_string(),
                                     content: Some(result_str),
-                                    tool_call_id: Some(call_id.clone()),
+                                    tool_call_id: Some(call.call_id.clone()),
                                     tool_calls: None,
                                 });
                             }
                             ToolResult::Error { message } => {
                                 self.emit(AgentEvent::ToolFailed {
-                                    name: name.clone(),
+                                    name: call.name.clone(),
                                     error: message.clone(),
-                                    call_id: call_id.clone(),
+                                    call_id: call.call_id.clone(),
                                 })?;
                                 self.messages.push(ChatMessage {
                                     role: "tool".to_string(),
                                     content: Some(format!("Error: {}", message)),
-                                    tool_call_id: Some(call_id.clone()),
+                                    tool_call_id: Some(call.call_id.clone()),
                                     tool_calls: None,
                                 });
                             }
                         },
                         None => {
                             self.emit(AgentEvent::ToolFailed {
-                                name: name.clone(),
-                                error: format!("Unknown tool: {}", name),
-                                call_id: call_id.clone(),
+                                name: call.name.clone(),
+                                error: format!("Unknown tool: {}", call.name),
+                                call_id: call.call_id.clone(),
                             })?;
                         }
                     }
                 }
 
                 self.emit(AgentEvent::ToolEnded {
-                    call_id: call_id.clone(),
+                    call_id: call.call_id.clone(),
                 })?;
             }
 

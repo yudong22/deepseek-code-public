@@ -86,15 +86,18 @@ The frontend never calls Tauri APIs directly. All backend communication goes thr
 - **`mock.ts`** — Browser fallback: localStorage for persistence, simulated agent events, mock file returns
 - **`bridge.test.ts`** — Unit tests for mock bridge (Bun test runner, `describe`/`test`/`expect`)
 
-### Agent Loop (v0.5.0)
+### Agent Loop (v0.5.1)
 
 **桌面端**：代理循环在 Tauri 进程内运行，通过 `sidecar-agent` Rust library crate：
 
 `apps/desktop/src-tauri/crates/sidecar-agent/src/`:
+- **`agent.rs`** — 主代理循环：LLM SSE 流 → ToolCall → 工具执行 → tool result → 下一轮（最多 25 步）。
+  v0.5.1: 只读工具（grep/glob/file_read）通过 `spawn_blocking` + `join_all` 并行执行，
+         写入工具（bash/file_write/file_edit）和问答工具保持串行。
+- **`tools/mod.rs`** — Tool trait 新增 `is_read_only()` 方法；ToolRegistry 改用 `Arc<dyn Tool>` 支持跨线程共享
 - **`protocol.rs`** — 17 AgentEvent 类型（自定义 Serialize 确保 `"payload": null`），stdin 解析，工具结果增强
 - **`provider.rs`** — 4 供应商 SSE 流（OpenAI-compatible），`ChatCompletionRequest` 序列化，SSE chunk 解析
-- **`agent.rs`** — 主代理循环：LLM SSE 流 → ToolCall → 工具执行 → tool result → 下一轮（最多 25 步）
-- **`tools/`** — 7 工具：`bash`/`file_read`/`file_write`/`file_edit`/`grep`/`glob`/`question`
+- **`tools/`** — 7 工具：`bash`(mutating)/`file_read`(read-only)/`file_write`(mutating)/`file_edit`(mutating)/`grep`(read-only)/`glob`(read-only)/`question`(serial)
 - **`session.rs`** — SQLite 会话管理（`.opencode/opencode.db`）
 
 `apps/desktop/src-tauri/src/lib.rs`:
@@ -262,10 +265,19 @@ apps/desktop/src-tauri/
 **关键设计决策**：
 - `ChatMessage` 有两个独立结构体：`ToolCallFunctionDef`（`arguments: String` 用于 assistant 消息）和 `FunctionDef`（`parameters: Value` 用于 tools 数组）
 - `build_tool_success_result` 支持两种输入格式：opencode 嵌套 `{result: {}}` 和 Rust 工具扁平 `{stdout, stderr, exit_code}`
+- **v0.5.1: 并行工具执行**：只读工具（grep/glob/file_read）通过 `spawn_blocking` + `join_all` 并行执行，写入工具保持串行。Tool trait 新增 `is_read_only()`，ToolRegistry 使用 `Arc<dyn Tool>` 支持跨线程共享
 - question 工具通过 `tokio::select!` 同时等待用户回答和取消信号，失败时也推送 tool 消息满足 API 契约
 - 错误处理：`run()` 包装 `run_inner()`，所有错误先发 `AgentEvent::Error` 再返回
 
 **CLI 工具 (`openhands run`)**：仍使用 `packages/sidecar/src/index.ts` + `@opencode-ai/core`（Bun 运行时）
+
+### v0.5.1 关键改进
+
+| 改进 | 说明 |
+|------|------|
+| **只读工具并行执行** | grep/glob/file_read 通过 `spawn_blocking` + `futures::future::join_all` 并行运行 |
+| **Tool 分区模型** | 只读(multiple) vs 写入(serial) 两阶段执行，Tool trait 新增 `is_read_only()` 方法 |
+| **Arc 共享注册表** | ToolRegistry 改用 `Arc<dyn Tool>`，`find()` 返回可跨线程 clone 的 Arc |
 
 ### v0.5.0 关键改进
 
@@ -341,10 +353,28 @@ bun run scripts/bump-version.ts <version>   # 例如 0.5.0
 ### 3. 构建 + 签名
 ```
 bun run build:mac                         # 构建 macOS .app
-tauri sign --private-key ~/.tauri/tauri.key \
-  --file target/release/bundle/macos/...  # 签名 .tar.gz（需私钥）
 ```
-将签名填入 `update.json` 中对应平台的 `signature` 字段。
+**重要:** `.tauri/updater.key` 是 minisign 私钥，用于签署更新归档。构建完成后，手动执行为每个平台签名：
+
+```bash
+# Apple Silicon (M1/M2/M3/M4)
+bun run scripts/sign-update.ts \
+  apps/desktop/src-tauri/target/release/bundle/macos/deepseek-code_aarch64.app.tar.gz \
+  darwin-aarch64
+
+# Intel Mac
+bun run scripts/sign-update.ts \
+  apps/desktop/src-tauri/target/release/bundle/macos/deepseek-code_x86_64.app.tar.gz \
+  darwin-x86_64
+```
+该脚本会自动调用 minisign 签署归档文件，并将签名写入 `update.json`。
+
+**手动签名 (若脚本不可用):**
+```
+minisign -Sm apps/desktop/src-tauri/target/release/bundle/macos/deepseek-code_aarch64.app.tar.gz -s .tauri/updater.key
+cat apps/desktop/src-tauri/target/release/bundle/macos/deepseek-code_aarch64.app.tar.gz.minisig
+```
+将 .minisig 文件内容复制到 `update.json` 中对应平台的 `signature` 字段。
 
 ### 4. 提交 + 打标签 + 推送
 ```

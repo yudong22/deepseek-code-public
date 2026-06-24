@@ -36,6 +36,10 @@ impl Tool for FileReadTool {
         })
     }
 
+    fn is_read_only(&self) -> bool {
+        true
+    }
+
     fn execute(&self, input: Value, ctx: &ToolContext) -> ToolResult {
         let relative_path = input
             .get("path")

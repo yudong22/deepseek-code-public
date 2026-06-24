@@ -27,6 +27,10 @@ impl Tool for GlobTool {
         })
     }
 
+    fn is_read_only(&self) -> bool {
+        true
+    }
+
     fn execute(&self, input: Value, ctx: &ToolContext) -> ToolResult {
         let pattern = input
             .get("pattern")

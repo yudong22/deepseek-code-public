@@ -68,24 +68,35 @@ apps/desktop/src/
 
 ### 后端目录 (Backend: `src-tauri/`)
 ```bash
-src-tauri/
-├── Cargo.toml               # Rust 依赖与包管理配置文件（集成了 ds-api, tokio, regex, ignore, globset 等库）
+apps/desktop/src-tauri/
+├── Cargo.toml               # Tauri 应用主 crate 依赖
 ├── tauri.conf.json          # Tauri 核心配置文件（窗口、权限、构建指令等）
-├── capabilities/            # 权限与功能配置文件（Tauri v2 新增）
+├── capabilities/
 │   └── default.json         # 默认允许的应用权限与功能配置
 ├── src/
-│   ├── main.rs              # 应用程序启动入口，调用 lib.rs 中的 run 函数
-│   ├── lib.rs               # 后端核心业务逻辑，注册并实现了 run_agent_loop 以及 select_directory Tauri 指令（前者启动外部 sidecar，后者用于跨平台调用文件夹选择器）
-│   ├── safety.rs            # [NEW] 安全拦截器，提供工作区路径防越界（Path Jail）校验
-│   └── tools/               # [NEW] 核心本地 Agent 工具集目录
-│       ├── mod.rs           # 统一特质声明 (AgentTool) 与子模块导出
-│       ├── file_read.rs     # 读文件工具，支持指定行范围与分页格式化
-│       ├── file_write.rs    # 新建文件工具，防覆盖保护
-│       ├── file_edit.rs     # 精准单次匹配替换工具
-│       ├── grep.rs          # 正则全文搜索工具（遵循 .gitignore）
-│       ├── glob.rs          # 文件模式搜索工具（遵循 .gitignore）
-│       └── bash.rs          # 异步 Bash 命令运行工具，内置 30 秒超时熔断保护机制
-└── icons/                   # 应用程序图标（支持多平台格式）
+│   ├── main.rs              # 应用程序入口
+│   ├── lib.rs               # Tauri commands: run_agent_loop, respond_to_agent, cancel_agent
+│   │                        # AgentState (AtomicBool cancel + mpsc answer + watch cancel)
+├── icons/                   # 应用程序图标
+└── crates/
+    └── sidecar-agent/       # [v0.5.0] Rust 原生代理引擎（替代 Bun sidecar）
+        ├── Cargo.toml
+        └── src/
+            ├── lib.rs       # 模块声明
+            ├── agent.rs     # 主代理循环：LLM SSE 流 → ToolCall → 工具执行 → 下一轮
+            │                # v0.5.1: 只读工具并行执行（spawn_blocking + join_all）
+            ├── protocol.rs  # AgentEvent (17 种)、parse_stdin_input、build_tool_success_result
+            ├── provider.rs  # SSE 流解析、ChatCompletionRequest、多 provider 路由
+            ├── session.rs   # SQLite 会话管理（.opencode/opencode.db）
+            └── tools/
+                ├── mod.rs   # Tool trait（含 is_read_only）、ToolRegistry（Arc 共享）
+                ├── bash.rs
+                ├── file_read.rs   # 只读 — 可并行
+                ├── file_write.rs  # 写入 — 串行
+                ├── file_edit.rs   # 写入 — 串行
+                ├── grep.rs        # 只读 — 可并行
+                ├── glob.rs        # 只读 — 可并行
+                └── question.rs    # 交互式 Q&A — 串行
 ```
 
 ---
