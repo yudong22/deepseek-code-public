@@ -109,11 +109,9 @@ jobs:
           SIG_FILE="${ARCHIVE}.minisig"
           rm -f "$SIG_FILE"
 
-          # 将私钥写入临时文件（用单引号 heredoc 保护特殊字符不被 shell 解释）
+          # 将私钥写入临时文件（echo 安全，因 base64 不含 $ 等 shell 特殊字符）
           TMPKEY=$(mktemp)
-          cat > "$TMPKEY" << 'TAURI_KEY_EOF'
-${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-TAURI_KEY_EOF
+          echo '${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}' > "$TMPKEY"
 
           bun run --cwd apps/desktop tauri signer sign \
             -f "$TMPKEY" \
