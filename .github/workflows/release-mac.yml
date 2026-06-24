@@ -108,18 +108,14 @@ jobs:
           fi
           echo "Signing $ARCHIVE ..."
 
-          # 将私钥写入临时文件（-f 接受文件路径，比 -k 传字符串更可靠）
-          TMPKEY=$(mktemp)
-          echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" > "$TMPKEY"
-
           # 清理可能已存在的 .minisig 文件（Tauri 构建可能自动生成）
           SIG_FILE="${ARCHIVE}.minisig"
           rm -f "$SIG_FILE"
 
-          # 使用项目本地 CLI 签名（bun run tauri 确保使用 lockfile 中的版本）
-          # 注意: 不使用 2>/dev/null，以便失败时能看到错误
+          # 使用项目本地 CLI 签名。
+          # TAURI_SIGNING_PRIVATE_KEY 和 TAURI_SIGNING_KEY_PASSWORD 环境变量已在步骤中设置，
+          # Tauri 会自动读取（不传 -k/-f 避免与 env var 冲突）。
           bun run --cwd apps/desktop tauri signer sign \
-            -f "$TMPKEY" \
             -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
             "$ARCHIVE"
 
@@ -131,13 +127,10 @@ jobs:
             echo "❌ No .minisig file generated at $SIG_FILE"
             echo "   Tauri signer output:"
             bun run --cwd apps/desktop tauri signer sign \
-              -f "$TMPKEY" \
               -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
               "$ARCHIVE" 2>&1 || true
-            rm -f "$TMPKEY"
             exit 1
           fi
-          rm -f "$TMPKEY"
 
           if [ -z "$SIGNATURE" ]; then
             echo "❌ Signature is empty!"
