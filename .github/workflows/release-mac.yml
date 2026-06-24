@@ -85,6 +85,8 @@ jobs:
 
       - name: Generate updater signature and update update.json
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
@@ -109,16 +111,11 @@ jobs:
           SIG_FILE="${ARCHIVE}.minisig"
           rm -f "$SIG_FILE"
 
-          # 将私钥写入临时文件（echo 安全，因 base64 不含 $ 等 shell 特殊字符）
-          TMPKEY=$(mktemp)
-          printf '%s' '${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}' > "$TMPKEY"
-          echo "签名密钥文件大小: $(wc -c < "$TMPKEY") 字节"
-
+          # TAURI_SIGNING_PRIVATE_KEY 由 GitHub Actions 通过 env: 直接注入进程环境
+          # （不经过 shell 解释，无引号/特殊字符风险）
           bun run --cwd apps/desktop tauri signer sign \
-            -f "$TMPKEY" \
             -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
             "$ARCHIVE"
-          rm -f "$TMPKEY"
 
           # 从 .minisig 文件读取签名（tauri signer sign 自动生成此文件）
           if [ -f "$SIG_FILE" ]; then
