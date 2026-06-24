@@ -111,7 +111,8 @@ jobs:
 
           # 将私钥写入临时文件（echo 安全，因 base64 不含 $ 等 shell 特殊字符）
           TMPKEY=$(mktemp)
-          echo '${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}' > "$TMPKEY"
+          printf '%s' '${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}' > "$TMPKEY"
+          echo "签名密钥文件大小: $(wc -c < "$TMPKEY") 字节"
 
           bun run --cwd apps/desktop tauri signer sign \
             -f "$TMPKEY" \
