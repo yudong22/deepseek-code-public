@@ -66,9 +66,6 @@ jobs:
       - name: Export Updater Signing Env (for auto-update)
         shell: bash
         run: |
-          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
-            echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
-          fi
           if [ -n "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" ]; then
             echo "TAURI_SIGNING_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" >> $GITHUB_ENV
           fi
@@ -112,23 +109,24 @@ jobs:
           SIG_FILE="${ARCHIVE}.minisig"
           rm -f "$SIG_FILE"
 
-          # 使用项目本地 CLI 签名。
-          # TAURI_SIGNING_PRIVATE_KEY 和 TAURI_SIGNING_KEY_PASSWORD 环境变量已在步骤中设置，
-          # Tauri 会自动读取（不传 -k/-f 避免与 env var 冲突）。
+          # 将私钥写入临时文件（用单引号 heredoc 保护特殊字符不被 shell 解释）
+          TMPKEY=$(mktemp)
+          cat > "$TMPKEY" << 'TAURI_KEY_EOF'
+${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+TAURI_KEY_EOF
+
           bun run --cwd apps/desktop tauri signer sign \
+            -f "$TMPKEY" \
             -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
             "$ARCHIVE"
+          rm -f "$TMPKEY"
 
-          # 从 .minisig 文件读取签名（比解析 stdout 更可靠）
+          # 从 .minisig 文件读取签名（tauri signer sign 自动生成此文件）
           if [ -f "$SIG_FILE" ]; then
             SIGNATURE=$(cat "$SIG_FILE")
             echo "✅ Signature generated (${#SIGNATURE} bytes)"
           else
             echo "❌ No .minisig file generated at $SIG_FILE"
-            echo "   Tauri signer output:"
-            bun run --cwd apps/desktop tauri signer sign \
-              -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
-              "$ARCHIVE" 2>&1 || true
             exit 1
           fi
 
