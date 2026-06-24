@@ -69,7 +69,7 @@ jobs:
           if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
             echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" ]]; then
+          if [ -n "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" ]; then
             echo "TAURI_SIGNING_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" >> $GITHUB_ENV
           fi
 
@@ -89,60 +89,102 @@ jobs:
       - name: Generate updater signature and update update.json
         shell: bash
         run: |
+          set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           if [ -d "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle" ]; then
             ARCHIVE_DIR="apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle"
           else
             ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
           fi
-          SIGNATURE=""
 
-          # Tauri 构建时若设置了 TAURI_SIGNING_PRIVATE_KEY 会自动签名并输出签名
-          # 这里从构建日志或 artifacts 中获取签名
           # 优先查找 .tar.gz（updater 格式），回退到 .dmg
           TAR_PATH=$(find "$ARCHIVE_DIR" -name "*.tar.gz" -print -quit 2>/dev/null || true)
           DMG_PATH=$(find "$ARCHIVE_DIR" -name "*.dmg" -print -quit 2>/dev/null || true)
+          ARCHIVE="${TAR_PATH:-${DMG_PATH:-}}"
 
-          if [ -n "$TAR_PATH" ]; then
-            echo "Signing $TAR_PATH ..."
-            SIGNATURE=$(npx @tauri-apps/cli@latest signer sign \
-              -k <(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}") \
-              -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
-              "$TAR_PATH" 2>/dev/null | sed -n 's/.*signature: *//p' | tr -d '\n\r' | head -1 || true)
-            echo "Got signature: ${SIGNATURE:0:20}..."
-          elif [ -n "$DMG_PATH" ]; then
-            echo "Signing $DMG_PATH (no .tar.gz found) ..."
-            SIGNATURE=$(npx @tauri-apps/cli@latest signer sign \
-              -k <(echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}") \
-              -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
-              "$DMG_PATH" 2>/dev/null | sed -n 's/.*signature: *//p' | tr -d '\n\r' | head -1 || true)
-            echo "Got signature: ${SIGNATURE:0:20}..."
-          else
+          if [ -z "$ARCHIVE" ]; then
             echo "⚠️  No bundle artifacts found, skipping signing"
+            exit 1
+          fi
+          echo "Signing $ARCHIVE ..."
+
+          # 将私钥写入临时文件（-f 接受文件路径，比 -k 传字符串更可靠）
+          TMPKEY=$(mktemp)
+          echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" > "$TMPKEY"
+
+          # 清理可能已存在的 .minisig 文件（Tauri 构建可能自动生成）
+          SIG_FILE="${ARCHIVE}.minisig"
+          rm -f "$SIG_FILE"
+
+          # 使用项目本地 CLI 签名（bun run tauri 确保使用 lockfile 中的版本）
+          # 注意: 不使用 2>/dev/null，以便失败时能看到错误
+          bun run --cwd apps/desktop tauri signer sign \
+            -f "$TMPKEY" \
+            -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
+            "$ARCHIVE"
+
+          # 从 .minisig 文件读取签名（比解析 stdout 更可靠）
+          if [ -f "$SIG_FILE" ]; then
+            SIGNATURE=$(cat "$SIG_FILE")
+            echo "✅ Signature generated (${#SIGNATURE} bytes)"
+          else
+            echo "❌ No .minisig file generated at $SIG_FILE"
+            echo "   Tauri signer output:"
+            bun run --cwd apps/desktop tauri signer sign \
+              -f "$TMPKEY" \
+              -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
+              "$ARCHIVE" 2>&1 || true
+            rm -f "$TMPKEY"
+            exit 1
+          fi
+          rm -f "$TMPKEY"
+
+          if [ -z "$SIGNATURE" ]; then
+            echo "❌ Signature is empty!"
+            exit 1
+          fi
+
+          # 确定平台架构
+          if echo "$ARCHIVE" | grep -q "aarch64"; then
+            PLATFORM="darwin-aarch64"
+            ARCH_SHORT="aarch64"
+          elif echo "$ARCHIVE" | grep -q "x86_64"; then
+            PLATFORM="darwin-x86_64"
+            ARCH_SHORT="x86_64"
+          else
+            echo "⚠️  Unknown architecture from archive name, skipping platform detection"
+            PLATFORM=""
           fi
 
           # 将签名写入 update.json
-          if [ -n "$SIGNATURE" ] && [ -f "update.json" ]; then
-            # 使用 Python 或 node 更新 JSON
+          if [ -n "$PLATFORM" ] && [ -f "update.json" ]; then
             node -e "
               const fs = require('fs');
               const up = JSON.parse(fs.readFileSync('update.json', 'utf-8'));
               up.version = '$VERSION';
               up.pub_date = new Date().toISOString().replace(/\.\d{3}Z/, 'Z');
-              if (up.platforms) {
-                const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
-                const key = 'darwin-' + arch;
-                if (up.platforms[key]) {
-                  up.platforms[key].signature = '$SIGNATURE';
-                  up.platforms[key].url = 'https://github.com/yudong22/deepseek-code-public/releases/download/v$VERSION/deepseek-code_' + arch + '.app.tar.gz';
-                }
+              const plat = '$PLATFORM';
+              if (up.platforms && up.platforms[plat]) {
+                up.platforms[plat].signature = require('fs').readFileSync('/dev/stdin', 'utf-8').trim();
+                up.platforms[plat].url = 'https://github.com/yudong22/deepseek-code-public/releases/download/v$VERSION/deepseek-code_${ARCH_SHORT}.app.tar.gz';
               }
               fs.writeFileSync('update.json', JSON.stringify(up, null, 2) + '\n');
-              console.log('✅ update.json updated with signature');
+              console.log('update.json updated for ' + plat);
+            " <<< "$SIGNATURE"
+            echo "update.json 已更新签名: ${SIGNATURE:0:40}..."
+          elif [ -f "update.json" ]; then
+            echo "⚠️  Unknown platform, only updating version in update.json"
+            node -e "
+              const fs = require('fs');
+              const up = JSON.parse(fs.readFileSync('update.json', 'utf-8'));
+              up.version = '$VERSION';
+              up.pub_date = new Date().toISOString().replace(/\.\d{3}Z/, 'Z');
+              fs.writeFileSync('update.json', JSON.stringify(up, null, 2) + '\n');
             "
-          else
-            echo "⚠️  No signature generated, update.json unchanged"
           fi
+
+          # 清理临时签名文件
+          rm -f "$SIG_FILE"
 
       - name: Commit update.json signature
         shell: bash
@@ -155,7 +197,7 @@ jobs:
             git add update.json
             git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
             git push
-            echo "✅ update.json signature committed"
+            echo "update.json signature committed"
           fi
 
       - name: Generate changelog and update release
