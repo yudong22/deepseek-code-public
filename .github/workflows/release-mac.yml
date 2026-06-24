@@ -185,7 +185,7 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add update.json
             git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
-            git push
+            git push origin HEAD:main
             echo "update.json signature committed"
           fi
 
