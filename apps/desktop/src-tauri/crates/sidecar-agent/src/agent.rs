@@ -250,7 +250,7 @@ impl Agent {
                         continuation_count += 1;
                         // Notify user in the UI
                         self.emit(AgentEvent::Text(
-                            "\n\n_(回复已截断，自动继续...)_".to_string(),
+                            "\n\n— 内容已达长度限制，正在自动续写 —".to_string(),
                         ))?;
                         // Inject continuation message so LLM continues writing
                         self.messages.push(ChatMessage {

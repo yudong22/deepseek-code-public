@@ -114,6 +114,8 @@ pub struct ChatCompletionRequest {
     pub tools: Option<Vec<ToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
 }
 
 // ─── SSE Chunk Types ─────────────────────────────
@@ -465,6 +467,7 @@ pub async fn stream_chat_completion(
         stream: true,
         tools: tools.map(|t| t.to_vec()),
         temperature: None,
+        max_tokens: None, // 由 API 服务端决定默认值，不限死输出长度
     };
 
     // Log request for debugging (first 200 chars)
@@ -739,6 +742,62 @@ mod tests {
         assert_eq!(tool_ends.len(), 2);
     }
 
+    // ─── SSE Parsing: FinishReason (length truncation) ──
+
+    #[test]
+    fn parse_finish_reason_length_empty_delta() {
+        let mut state = ParserState::new();
+        // Simulate a final chunk with empty delta and finish_reason="length"
+        let chunks = parse_sse_data(
+            r#"{"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}"#,
+            &mut state,
+        );
+        assert!(chunks.len() >= 1);
+        // Should emit a FinishReason with reason "length"
+        let fr = chunks.iter().find(|c| matches!(c, SseChunk::FinishReason { .. }));
+        assert!(fr.is_some(), "Expected FinishReason, got: {:?}", chunks);
+        match fr.unwrap() {
+            SseChunk::FinishReason { reason } => assert_eq!(reason, "length"),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn parse_finish_reason_length_after_text() {
+        let mut state = ParserState::new();
+        // First chunk: text content (starts text block)
+        parse_sse_data(
+            r#"{"choices":[{"index":0,"delta":{"content":"partial response "},"finish_reason":null}]}"#,
+            &mut state,
+        );
+        // Second chunk: finish_reason="length", no delta (closes text + emits FinishReason)
+        let chunks = parse_sse_data(
+            r#"{"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}"#,
+            &mut state,
+        );
+        // Should get: TextEnd + FinishReason
+        assert!(chunks.iter().any(|c| matches!(c, SseChunk::TextEnd)),
+            "Expected TextEnd, got: {:?}", chunks);
+        assert!(chunks.iter().any(|c| {
+            matches!(c, SseChunk::FinishReason { reason } if reason == "length")
+        }), "Expected FinishReason(length), got: {:?}", chunks);
+    }
+
+    #[test]
+    fn parse_finish_reason_length_with_content_present() {
+        let mut state = ParserState::new();
+        // Some providers send content + finish_reason="length" in the SAME chunk
+        let chunks = parse_sse_data(
+            r#"{"choices":[{"index":0,"delta":{"content":" truncated"},"finish_reason":"length"}]}"#,
+            &mut state,
+        );
+        // Should get: TextStart + TextDelta + TextEnd + FinishReason
+        assert!(chunks.iter().any(|c| matches!(c, SseChunk::TextDelta { .. })));
+        assert!(chunks.iter().any(|c| matches!(c, SseChunk::TextEnd)));
+        let fr = chunks.iter().find(|c| matches!(c, SseChunk::FinishReason { .. }));
+        assert!(fr.is_some(), "Expected FinishReason, got: {:?}", chunks);
+    }
+
     // ─── SSE Parsing: Usage ────────────────────────
 
     #[test]
@@ -922,6 +981,7 @@ mod tests {
                 },
             }]),
             temperature: None,
+            max_tokens: None,
         };
 
         let json = serde_json::to_string(&request).unwrap();
@@ -983,6 +1043,7 @@ mod tests {
             stream: true,
             tools: None,
             temperature: None,
+            max_tokens: None,
         };
 
         let json = serde_json::to_string(&request).unwrap();
