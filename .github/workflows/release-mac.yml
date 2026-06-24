@@ -113,6 +113,8 @@ jobs:
 
           # TAURI_SIGNING_PRIVATE_KEY 由 GitHub Actions 通过 env: 直接注入进程环境
           # （不经过 shell 解释，无引号/特殊字符风险）
+          # ARCHIVE 路径相对于 repo root，需要在 --cwd 下去掉 apps/desktop/ 前缀
+          ARCHIVE="${ARCHIVE#apps/desktop/}"
           bun run --cwd apps/desktop tauri signer sign \
             -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
             "$ARCHIVE"
