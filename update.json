@@ -6,10 +6,6 @@
     "darwin-aarch64": {
       "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.2/deepseek-code_aarch64.app.tar.gz",
       "signature": ""
-    },
-    "darwin-x86_64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.2/deepseek-code_x86_64.app.tar.gz",
-      "signature": ""
     }
   }
 }

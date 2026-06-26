@@ -292,8 +292,15 @@ updateJson(path.join(rootDir, "update.json"), () => {
   content.version = newVersion;
   content.notes = changelogText.split("\n").slice(0, 3).join("；");
   content.pub_date = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  for (const [key, val] of Object.entries(content.platforms || {})) {
-    (val as any).url = `https://github.com/yudong22/deepseek-code-public/releases/download/v${newVersion}/deepseek-code_${key === "darwin-aarch64" ? "aarch64" : "x86_64"}.app.tar.gz`;
+  // v0.5.2+: 只保留 darwin-aarch64（CI 只 build Apple Silicon）。删除其他平台段以避免用户看到无产物的空 entry。
+  const SUPPORTED_PLATFORMS = new Set(["darwin-aarch64"]);
+  for (const key of Object.keys(content.platforms || {})) {
+    if (!SUPPORTED_PLATFORMS.has(key)) {
+      delete content.platforms[key];
+    }
+  }
+  for (const [key, val] of Object.entries(content.platforms)) {
+    (val as any).url = `https://github.com/yudong22/deepseek-code-public/releases/download/v${newVersion}/deepseek-code_aarch64.app.tar.gz`;
   }
   fs.writeFileSync(path.join(rootDir, "update.json"), JSON.stringify(content, null, 2) + "\n");
   files.push({ path: "update.json", label: "Tauri 更新清单" });
