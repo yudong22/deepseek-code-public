@@ -163,21 +163,11 @@ function MainDashboard() {
         console.error("Database initialization failed:", err);
       }
 
-      // 静默检查并自动更新
+      // 静默检查更新（v0.5.2: 不再自动下载/安装，仅提示用户前往设置手动触发）
       try {
         const updateResult = await bridge.checkForUpdates();
         if (updateResult.hasUpdate) {
-          showToast(`📦 正在下载 v${updateResult.version}...`);
-          // 后台自动下载安装
-          bridge.installUpdate((status) => {
-            if (status.status === "downloading" && status.progress !== undefined) {
-              showToast(`📦 更新下载中 ${status.progress}%`);
-            } else if (status.status === "downloaded") {
-              // 安装后会自动 relaunch，无需操作
-            } else if (status.status === "error") {
-              console.warn("自动更新失败:", status.error);
-            }
-          }).catch(() => {});
+          showToast(`📦 发现新版本 v${updateResult.version}，前往"设置"→"检查更新"以升级。`);
         }
       } catch (_e) {
         // 静默失败，不影响正常启动

@@ -5,7 +5,7 @@ export interface UpdateResult {
 }
 
 export interface UpdateStatus {
-  status: "checking" | "available" | "downloading" | "downloaded" | "error";
+  status: "checking" | "available" | "downloading" | "downloaded" | "awaiting-confirm" | "error";
   version?: string;
   progress?: number; // 0-100 下载进度
   error?: string;
@@ -56,10 +56,24 @@ export interface IBridge {
   checkForUpdates(): Promise<UpdateResult>;
 
   /**
-   * 下载并安装更新（自动处理下载进度、解压和重启）
+   * 第一阶段：检查并下载更新，下载完成后停在 "downloaded" 状态。
+   * 不自动 install / relaunch —— 调用方应在收到 "downloaded" 后调用
+   * confirmUpdateInstall() 询问用户，再调用 installDownloadedUpdate() 完成安装重启。
    * @param onStatus 状态回调，实时反馈下载进度
    */
   installUpdate(onStatus?: (status: UpdateStatus) => void): Promise<void>;
+
+  /**
+   * 弹出原生确认对话框（tauri-plugin-dialog ask()），询问用户是否立即重启应用以应用已下载的更新。
+   * 用户选择"立即重启"返回 true；选择"稍后"返回 false。
+   * Mock 环境 fallback 到 window.confirm。
+   */
+  confirmUpdateInstall(version: string): Promise<boolean>;
+
+  /**
+   * 第二阶段：执行 install + relaunch。调用前必须先通过 confirmUpdateInstall() 获得用户确认。
+   */
+  installDownloadedUpdate(): Promise<void>;
 
   /**
    * 初始化数据库并创建表结构

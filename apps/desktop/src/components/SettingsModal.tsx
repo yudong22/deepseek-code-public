@@ -65,31 +65,47 @@ export default function SettingsModal({
     setUpdateStatus({ type: "info", message: "正在检查更新..." });
     try {
       const result = await bridge.checkForUpdates();
-      if (result.hasUpdate) {
-        setUpdateStatus({ type: "info", message: `正在下载 v${result.version}...` });
-        bridge.installUpdate((status) => {
-          if (status.status === "downloading" && status.progress !== undefined) {
-            setUpdateStatus({
-              type: "info",
-              message: `📦 更新下载中 ${status.progress}%`,
-            });
-          } else if (status.status === "downloaded") {
-            setUpdateStatus({
-              type: "success",
-              message: "✅ 更新已完成，应用将自动重启...",
-            });
-          } else if (status.status === "error") {
-            setUpdateStatus({
-              type: "error",
-              message: `更新失败: ${status.error || "未知错误"}`,
-            });
-          }
-        }).catch((err) => {
-          setUpdateStatus({ type: "error", message: `更新失败: ${String(err)}` });
-        });
-      } else {
+      if (!result.hasUpdate) {
         setUpdateStatus({ type: "info", message: "您的应用已是最新版本。" });
+        return;
       }
+      setUpdateStatus({ type: "info", message: `正在下载 v${result.version}...` });
+      const version = result.version || "unknown";
+      await bridge.installUpdate((status) => {
+        if (status.status === "downloading" && status.progress !== undefined) {
+          setUpdateStatus({
+            type: "info",
+            message: `📦 更新下载中 ${status.progress}%`,
+          });
+        } else if (status.status === "downloaded") {
+          // v0.5.2: 下载完成 → 弹原生确认框，用户确认后才 install+relaunch。
+          setUpdateStatus({
+            type: "info",
+            message: `v${version} 已下载完成，等待您确认是否立即重启...`,
+          });
+          (async () => {
+            const ok = await bridge.confirmUpdateInstall(version);
+            if (ok) {
+              setUpdateStatus({ type: "success", message: "正在重启应用以应用更新..." });
+              try {
+                await bridge.installDownloadedUpdate();
+              } catch (err) {
+                setUpdateStatus({ type: "error", message: `重启失败: ${String(err)}` });
+              }
+            } else {
+              setUpdateStatus({
+                type: "info",
+                message: `已取消更新。v${version} 文件已下载，下次手动重启或再次检查更新时应用。`,
+              });
+            }
+          })();
+        } else if (status.status === "error") {
+          setUpdateStatus({
+            type: "error",
+            message: `更新失败: ${status.error || "未知错误"}`,
+          });
+        }
+      });
     } catch (err) {
       setUpdateStatus({ type: "error", message: `检查更新失败: ${String(err)}` });
     } finally {

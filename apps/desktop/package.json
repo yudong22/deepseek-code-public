@@ -4,17 +4,17 @@
   "version": "0.5.0",
   "type": "module",
   "scripts": {
-    "build:sidecar": "bun run --cwd ../../packages/sidecar build",
-    "build": "bun run build:sidecar && vite build",
-    "dev": "bun run build:sidecar && vite",
-    "preview": "bun run build:sidecar && tauri dev",
-    "build:mac": "bun run build:sidecar && tauri build && (killall deepseek-code || true) && cp -rf src-tauri/target/release/bundle/macos/deepseek-code.app /Applications/",
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "tauri dev",
+    "build:mac": "tauri build && (killall deepseek-code || true) && cp -rf src-tauri/target/release/bundle/macos/deepseek-code.app /Applications/",
     "tauri": "tauri",
     "test": "cargo check --manifest-path src-tauri/Cargo.toml && bun test"
   },
   "dependencies": {
     "@ag-ui/core": "^0.0.57",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-sql": "^2.4.0",

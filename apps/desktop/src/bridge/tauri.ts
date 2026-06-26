@@ -1,11 +1,16 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
-import { check, Update, type UpdateManifest } from "@tauri-apps/plugin-updater";
+import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { IBridge, UpdateResult, UpdateStatus, Session, Message, AgentEvent } from "./types";
 import { version as appVersion } from "../../package.json";
 
 let dbInstance: Database | null = null;
+
+// v0.5.2: 持有已下载但未确认安装的 Update 对象，供 installDownloadedUpdate() 二次消费。
+// null 表示当前没有待安装的更新。
+let pendingUpdate: Update | null = null;
 
 async function getDb(): Promise<Database> {
   if (!dbInstance) {
@@ -73,26 +78,27 @@ export const tauriBridge: IBridge = {
         return;
       }
 
-      onStatus?.({ status: "downloading", version: update.manifest?.version, progress: 0 });
+      pendingUpdate = update;
+      const newVersion = update.version;
+      onStatus?.({ status: "downloading", version: newVersion, progress: 0 });
 
+      // Tauri v2.10 的 Progress 事件仅暴露 chunkLength（无总长），用累加估算百分比
       let lastProgress = 0;
       await update.download((event) => {
-        if (event.event === "finished") {
-          onStatus?.({ status: "downloaded", version: update.manifest?.version, progress: 100 });
-        } else if (event.event === "progress") {
-          const pct = Math.round((event.data.chunkLength / event.data.contentLength) * 100);
-          lastProgress = Math.min(pct, 99);
-          onStatus?.({ status: "downloading", version: update.manifest?.version, progress: lastProgress });
+        if (event.event === "Finished") {
+          onStatus?.({ status: "downloading", version: newVersion, progress: 99 });
+          onStatus?.({ status: "downloaded", version: newVersion, progress: 100 });
+        } else if (event.event === "Progress") {
+          lastProgress = Math.min(99, lastProgress + 5);
+          onStatus?.({ status: "downloading", version: newVersion, progress: lastProgress });
         }
       });
 
-      onStatus?.({ status: "downloaded", version: update.manifest?.version, progress: 100 });
-
-      // 安装并重启
-      await update.install();
-      await relaunch();
+      // v0.5.2: 下载完成。等待用户通过 confirmUpdateInstall() + installDownloadedUpdate() 决定下一步。
+      // 这里**不**调用 update.install() 也不 relaunch。
     } catch (error: any) {
       console.error("Tauri installUpdate failed:", error);
+      pendingUpdate = null;
       const msg = error.message || String(error);
       // 签名无效时引导用户手动下载
       if (msg.includes("minisign") || msg.includes("signature") || msg.includes("sign")) {
@@ -100,6 +106,35 @@ export const tauriBridge: IBridge = {
       } else {
         onStatus?.({ status: "error", error: msg });
       }
+    }
+  },
+
+  async confirmUpdateInstall(version: string): Promise<boolean> {
+    try {
+      const ok = await ask(
+        `新版本 v${version} 已下载完成，是否立即重启应用以应用更新？\n\n（您也可以选择"稍后"，下次手动重启或再次检查更新时生效。）`,
+        { title: "更新已就绪", kind: "info", okLabel: "立即重启", cancelLabel: "稍后" }
+      );
+      return ok;
+    } catch (e) {
+      // Mock/非 Tauri 环境 fallback 到 window.confirm
+      if (typeof window !== "undefined" && typeof window.confirm === "function") {
+        return window.confirm(`新版本 v${version} 已下载完成，是否立即重启应用以应用更新？`);
+      }
+      return false;
+    }
+  },
+
+  async installDownloadedUpdate(): Promise<void> {
+    const update = pendingUpdate;
+    if (!update) {
+      throw new Error("没有可安装的更新，请先调用 installUpdate。");
+    }
+    try {
+      await update.install();
+      await relaunch();
+    } finally {
+      pendingUpdate = null;
     }
   },
 

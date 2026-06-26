@@ -47,14 +47,25 @@ export const mockBridge: IBridge = {
   },
 
   async installUpdate(onStatus?: (status: UpdateStatus) => void): Promise<void> {
-    console.warn("[Bridge Mock] installUpdate called. Simulating silent update.");
+    console.warn("[Bridge Mock] installUpdate called. Simulating download only; awaiting user confirm.");
     onStatus?.({ status: "downloading", version: "0.3.1", progress: 0 });
     await new Promise((r) => setTimeout(r, 500));
     onStatus?.({ status: "downloading", version: "0.3.1", progress: 50 });
     await new Promise((r) => setTimeout(r, 500));
-    onStatus?.({ status: "downloadeded", version: "0.3.1", progress: 100 });
-    // 在 mock 环境中不实际重启
-    console.warn("[Bridge Mock] Update downloaded. Relaunch skipped in mock.");
+    onStatus?.({ status: "downloaded", version: "0.3.1", progress: 100 });
+    console.warn("[Bridge Mock] Update downloaded. Awaiting confirmUpdateInstall().");
+  },
+
+  async confirmUpdateInstall(version: string): Promise<boolean> {
+    console.warn(`[Bridge Mock] confirmUpdateInstall called for v${version}. Using window.confirm.`);
+    if (typeof window !== "undefined" && typeof window.confirm === "function") {
+      return window.confirm(`[Mock] 新版本 v${version} 已下载完成，是否立即重启？`);
+    }
+    return false;
+  },
+
+  async installDownloadedUpdate(): Promise<void> {
+    console.warn("[Bridge Mock] installDownloadedUpdate called. No-op (mock environment).");
   },
 
   async selectDirectory(): Promise<string | null> {
@@ -156,11 +167,11 @@ export const mockBridge: IBridge = {
     onEvent({ type: "ThinkingEnded", payload: null });
 
     onEvent({ type: "StepStarted", payload: null });
-    onEvent({ type: "ToolCall", payload: { name: "Glob", args: JSON.stringify({ pattern: "**/*.tsx" }), callID: "call_1" } });
-    onEvent({ type: "ToolStarted", payload: { callID: "call_1" } });
+    onEvent({ type: "ToolCall", payload: { name: "Glob", args: JSON.stringify({ pattern: "**/*.tsx" }), call_id: "call_1" } });
+    onEvent({ type: "ToolStarted", payload: { call_id: "call_1" } });
     await new Promise((r) => setTimeout(r, 400));
-    onEvent({ type: "ToolSuccess", payload: { name: "Glob", result: JSON.stringify({ files: ["src/App.tsx", "src/main.tsx"] }), callID: "call_1" } });
-    onEvent({ type: "ToolEnded", payload: { callID: "call_1" } });
+    onEvent({ type: "ToolSuccess", payload: { name: "Glob", result: JSON.stringify({ files: ["src/App.tsx", "src/main.tsx"] }), call_id: "call_1" } });
+    onEvent({ type: "ToolEnded", payload: { call_id: "call_1" } });
     onEvent({ type: "StepEnded", payload: null });
 
     // 模拟 question 工具调用（测试交互式问答卡片）
@@ -219,7 +230,7 @@ export const mockBridge: IBridge = {
       "src/utils/markdown.tsx",
       "src-tauri/src/lib.rs",
       "src-tauri/Cargo.toml",
-      "src-sidecar/index.ts",
+      "packages/sidecar/src/index.ts",
       "README.md",
       "package.json",
       "tsconfig.json",
