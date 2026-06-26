@@ -82,6 +82,11 @@ jobs:
           projectPath: apps/desktop
           tauriScript: bun run tauri
           args: --target aarch64-apple-darwin
+          # v0.5.2+: update.json 由 CI 后续 step 写到 updater/latest 分支（专用），
+          # 不再让 tauri-action 上传 main 上的 update.json 作为 release asset。
+          # 关闭后 tauri-action 不会因为 main 没有 update.json 而跳过 .app.tar.gz 上传。
+          includeUpdaterJson: false
+          uploadUpdaterJson: false
 
       - name: Generate updater signature and update update.json
         shell: bash
