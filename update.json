@@ -1,7 +1,7 @@
 {
   "version": "0.5.2",
-  "notes": "### 🚀 新功能；- feat: 清理 TS sidecar 死代码并重构更新流程",
-  "pub_date": "2026-06-26T16:15:13Z",
+  "notes": "### 🚀 新功能；- feat: 清理 TS sidecar 死代码并重构更新流程；- feat: 清理 TS sidecar 死代码并重构更新流程",
+  "pub_date": "2026-06-26T16:16:05Z",
   "platforms": {
     "darwin-aarch64": {
       "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.2/deepseek-code_aarch64.app.tar.gz",
