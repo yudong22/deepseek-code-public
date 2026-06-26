@@ -203,11 +203,8 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
-          if [ -d "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle" ]; then
-            ARCHIVE_DIR="apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle"
-          else
-            ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
-          fi
+          # macos-14 原生 runner：cargo 产物直接落到 target/release/bundle
+          ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
 
           # 优先查找 .tar.gz（updater 格式），回退到 .dmg
           TAR_PATH=$(find "$ARCHIVE_DIR" -name "*.tar.gz" -print -quit 2>/dev/null || true)
@@ -245,17 +242,11 @@ jobs:
           fi
 
           # 确定平台架构
-          if echo "$ARCHIVE" | grep -q "aarch64"; then
-            PLATFORM="darwin-aarch64"
-            ARCH_SHORT="aarch64"
-          elif echo "$ARCHIVE" | grep -q "x86_64"; then
-            PLATFORM="darwin-x86_64"
-            ARCH_SHORT="x86_64"
-          else
-            echo "⚠️  Unknown architecture from archive name"
-            PLATFORM=""
-            ARCH_SHORT=""
-          fi
+          # macos-14 原生 runner 一定是 aarch64（Apple Silicon），
+          # 但 tauri build 在不指定 --target 时产物文件名可能不带架构后缀，
+          # 所以不再从文件名推断，直接硬编码。
+          PLATFORM="darwin-aarch64"
+          ARCH_SHORT="aarch64"
 
           # 导出到后续 step 使用
           {
@@ -337,11 +328,8 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          if [ -d "apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle" ]; then
-            ARCHIVE_DIR="apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle"
-          else
-            ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
-          fi
+          ARCHIVE_DIR="apps/desktop/src-tauri/target/release/bundle"
+
 
           # 收集构建产物
           ARTIFACTS=()
