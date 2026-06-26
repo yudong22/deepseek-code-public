@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-code/sidecar",
   "private": true,
-  "version": "0.5.3",
+  "version": "0.5.5",
   "type": "module",
   "scripts": {
     "build": "if [ -d ../../../opencode ]; then mkdir -p ../../apps/desktop/src-tauri/binaries && cd ../../../opencode && bun build --compile --minify ../deepseek-code-public/packages/sidecar/src/index.ts --outfile ../deepseek-code-public/apps/desktop/src-tauri/binaries/opencode-sidecar-$(rustc -Vv | grep host | cut -d ' ' -f 2); fi"
