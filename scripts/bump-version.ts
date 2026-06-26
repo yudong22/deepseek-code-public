@@ -12,13 +12,15 @@
  *   bun run scripts/bump-version.ts 0.5.0 --dry-run
  *   bun run scripts/bump-version.ts --retag 0.4.2
  *
- * 升级 6 个配置文件:
- * 1. update.json      — Tauri 自动更新清单
- * 2. Cargo.toml       — Rust 桌面端版本
- * 3. desktop/package.json — 桌面端前端版本
- * 4. client-cli/package.json — CLI 工具版本
- * 5. sidecar/package.json  — Sidecar 版本
- * 6. tauri.conf.json  — Tauri App 配置文件
+ * 升级 5 个配置文件:
+ * 1. Cargo.toml       — Rust 桌面端版本
+ * 2. desktop/package.json — 桌面端前端版本
+ * 3. client-cli/package.json — CLI 工具版本
+ * 4. sidecar/package.json  — Sidecar 版本
+ * 5. tauri.conf.json  — Tauri App 配置文件
+ *
+ * 注意: update.json（v0.5.2+）由 CI release-mac.yml 维护到 `updater/latest` 分支，
+ *       本脚本不再触碰。
  *
  * 推送后 GitHub Actions 自动构建、签名、发布 Release
  */
@@ -287,24 +289,12 @@ function updateJson(path: string, fn: () => void) {
   return false;
 }
 
-updateJson(path.join(rootDir, "update.json"), () => {
-  const content = JSON.parse(fs.readFileSync(path.join(rootDir, "update.json"), "utf-8"));
-  content.version = newVersion;
-  content.notes = changelogText.split("\n").slice(0, 3).join("；");
-  content.pub_date = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-  // v0.5.2+: 只保留 darwin-aarch64（CI 只 build Apple Silicon）。删除其他平台段以避免用户看到无产物的空 entry。
-  const SUPPORTED_PLATFORMS = new Set(["darwin-aarch64"]);
-  for (const key of Object.keys(content.platforms || {})) {
-    if (!SUPPORTED_PLATFORMS.has(key)) {
-      delete content.platforms[key];
-    }
-  }
-  for (const [key, val] of Object.entries(content.platforms)) {
-    (val as any).url = `https://github.com/yudong22/deepseek-code-public/releases/download/v${newVersion}/deepseek-code_aarch64.app.tar.gz`;
-  }
-  fs.writeFileSync(path.join(rootDir, "update.json"), JSON.stringify(content, null, 2) + "\n");
-  files.push({ path: "update.json", label: "Tauri 更新清单" });
-});
+// v0.5.2+: update.json 不再由 bump-version.ts 维护。
+// 它现在存放在专用分支 `updater/latest`，由 CI release-mac.yml 写入签名。
+// 原因：把 update.json 放在 main 上会导致 CI 频繁 push 污染 main 历史
+//      + 多次发布的 non-fast-forward 冲突（v0.5.2 实战中遇过）。
+// 这里仅记录此事实，跳过任何对 update.json 的操作。
+console.log(`  ${colors.dim}⏭ update.json 由 CI release-mac.yml 维护（updater/latest 分支），bump-version.ts 不再触碰${colors.reset}`);
 
 updateJson(path.join(rootDir, "apps/desktop/src-tauri/Cargo.toml"), () => {
   const p = path.join(rootDir, "apps/desktop/src-tauri/Cargo.toml");

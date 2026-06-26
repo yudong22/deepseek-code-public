@@ -179,6 +179,9 @@ jobs:
         # Failure here must not block the changelog/release-notes steps
         # below — otherwise the release body keeps the placeholder
         # "等待生成完整 changelog..." and never gets replaced.
+        # v0.5.2+: 把签名 commit 推到专用 `updater/latest` 分支（不是 main）。
+        # updater/latest 只包含 update.json 一个文件，被 force-with-lease 覆盖。
+        # 这避免了 main 分支被 CI 流程污染 + 解除了 non-fast-forward 冲突。
         continue-on-error: true
         shell: bash
         run: |
@@ -187,19 +190,16 @@ jobs:
           else
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
+            # 把当前 working tree 的 update.json 应用到 updater/latest 分支顶端
+            git fetch origin updater/latest
+            git checkout -B updater/latest origin/updater/latest
             git add update.json
             git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
-            # v0.5.2: 之前 detached HEAD 的 `git push origin HEAD:main` 会被 non-fast-forward 拒绝
-            # （当 main 在 CI 启动后被其他人推过 commit，例如 bump-version.ts 的 merge conflict 解决）。
-            # 用 rebase 把签名 commit 接到 origin/main 顶端再 push，强制 fast-forward。
-            git fetch origin main
-            git rebase origin/main || {
-              echo "::warning::rebase 失败，回退到 force-with-lease（签名 commit 是一次性消费，不会丢失）"
-              git push --force-with-lease origin HEAD:main
-              exit 0
-            }
-            git push origin HEAD:main
-            echo "update.json signature committed"
+            # force-with-lease 安全：CI 自己是 updater/latest 唯一写入者
+            git push --force-with-lease origin updater/latest
+            echo "update.json signature committed to updater/latest"
+            # 切回 main 避免影响后续 step
+            git checkout main
           fi
 
       - name: Generate changelog and update release
