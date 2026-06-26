@@ -189,6 +189,15 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add update.json
             git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
+            # v0.5.2: 之前 detached HEAD 的 `git push origin HEAD:main` 会被 non-fast-forward 拒绝
+            # （当 main 在 CI 启动后被其他人推过 commit，例如 bump-version.ts 的 merge conflict 解决）。
+            # 用 rebase 把签名 commit 接到 origin/main 顶端再 push，强制 fast-forward。
+            git fetch origin main
+            git rebase origin/main || {
+              echo "::warning::rebase 失败，回退到 force-with-lease（签名 commit 是一次性消费，不会丢失）"
+              git push --force-with-lease origin HEAD:main
+              exit 0
+            }
             git push origin HEAD:main
             echo "update.json signature committed"
           fi
