@@ -183,7 +183,7 @@ jobs:
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           tagName: ${{ github.event.inputs.tag_name || github.ref_name }}
           releaseName: 'deepseek-code ${{ github.event.inputs.tag_name || github.ref_name }}'
@@ -329,7 +329,7 @@ jobs:
 
       - name: Upload release artifacts and publish release notes
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
