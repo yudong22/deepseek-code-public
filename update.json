@@ -1,14 +1,14 @@
 {
-  "version": "0.5.0",
-  "notes": "### 🚀 新功能；- feat: 将代理引擎从 Bun 子进程重写为进程内 Rust crate",
-  "pub_date": "2026-06-24T13:00:31Z",
+  "version": "0.5.2",
+  "notes": "### 🚀 新功能；- feat: 清理 TS sidecar 死代码并重构更新流程",
+  "pub_date": "2026-06-26T16:15:13Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.0/deepseek-code_aarch64.app.tar.gz",
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.2/deepseek-code_aarch64.app.tar.gz",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSUEhROWhKSk4xbWlyZ0Z5RHBvU2p0ZGFsOFN1akthNitMdm52UGpsNXQ4QXMwSFhUREdDcVRrVmFmZ2dvOUF2cjc0b1ppVU5CejB0Y1AxblI5Z2VBWnJtTS9tSzhOYnc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyMzA2MDMxCWZpbGU6ZGVlcHNlZWstY29kZS5hcHAudGFyLmd6CmhuRFpObEp3dE9EbEhFK2R0Rk80cEs4ekgzUGc0RC9XRUx3Zk4ySkJoaUlqY3NoTlhSbFF3bmVLOVdlZ2ZGSFNmdkZjSVpRL0RiOThxc0JwTkxjS0NnPT0K"
     },
     "darwin-x86_64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.0/deepseek-code_x86_64.app.tar.gz",
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.2/deepseek-code_x86_64.app.tar.gz",
       "signature": ""
     }
   }
