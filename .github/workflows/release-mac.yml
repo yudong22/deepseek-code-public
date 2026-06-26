@@ -94,38 +94,85 @@ jobs:
           fi
 
       - name: Generate changelog
-        # 把 changelog 生成从 build 之后移到 build 之前，让它跟 tauri build 并行
+        # AI 生成 changelog（DeepSeek API），与 tauri build 并行
         # changelog 只依赖 git log（~3s），跟 build 产物完全无关
         shell: bash
-        run: |
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: >
           VERSION="${GITHUB_REF_NAME#v}"
+
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
 
-          # 生成分类 changelog
-          CHANGELOG=$(
-            echo "## v${VERSION} Release Notes"
-            echo ""
-            for type in "feat:🚀 新功能" "fix:🐛 Bug 修复" "docs:📝 文档" "refactor:♻️ 重构" "style:🎨 样式" "test:✅ 测试" "chore:🔧 工程化"; do
-              label="${type#*:}"
-              prefix="${type%:*}"
-              LOGS=$(git log --oneline --no-decorate ${PREV_TAG:+"${PREV_TAG}..HEAD"} --grep="^${prefix}" 2>/dev/null | sed 's/^[a-f0-9]* //' | sed 's/^/- /')
-              if [ -n "$LOGS" ]; then
-                echo "### ${label}"
-                echo "$LOGS"
-                echo ""
-              fi
-            done
-            # 未分类的
-            REST=$(git log --oneline --no-decorate ${PREV_TAG:+"${PREV_TAG}..HEAD"} 2>/dev/null | grep -vE '^[a-f0-9]+ (feat|fix|docs|refactor|style|test|chore)[:(]' | sed 's/^[a-f0-9]* //' | sed 's/^/- /')
-            if [ -n "$REST" ]; then
-              echo "### 📦 其他"
-              echo "$REST"
-              echo ""
-            fi
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, using commit list"
+            CHANGELOG="## v${VERSION} Release Notes\n\n$(git log --pretty=format:'- %s' -20)"
+            echo -e "$CHANGELOG" > .release-notes.md
+            exit 0
+          fi
+
+          COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"%H%n%s%n%b%n---COMMIT_SEP---")
+
+          FILE_CHANGES=$(git diff --stat "${PREV_TAG}..HEAD")
+
+          PROMPT=$(printf '%s' 'You are a technical writer generating release notes for a desktop AI programming assistant called deepseek-code (also known as OpenHands). It uses Tauri v2 + React 19 as the desktop client, a Rust-native agent loop, and a Go API gateway.
+
+          Generate a well-structured changelog in Markdown format. Follow these guidelines:
+
+          1. Start with a brief summary paragraph (2-3 sentences) describing the overall theme of this release
+          2. Group changes into sections with these exact headers:
+             - **New Features** - New capabilities, enhancements, additions
+             - **Bug Fixes** - Fixes for reported or discovered issues
+             - **Improvements** - Performance, reliability, or code quality improvements
+             - **Documentation** - README, docs, comments, config updates
+             - **Chores** - Build, CI/CD, dependency updates, refactoring
+          3. Each bullet should be concise but descriptive (one line)
+          4. Mention breaking changes prominently with a warning emoji at the top
+          5. Use present tense, imperative mood (e.g. Add feature not Added feature)
+          6. Keep it technical but accessible - target audience is developers using this tool
+
+          Format output as clean Markdown without any preamble or explanation. Do not wrap the entire response in a code block.')
+
+          USER_CONTENT="Git commits since ${PREV_TAG}:\n\n${COMMITS}\n\nFiles changed:\n\n${FILE_CHANGES}"
+
+          MAX_CHARS=12000
+
+          if [ "${#USER_CONTENT}" -gt "$MAX_CHARS" ]; then
+            USER_CONTENT="${USER_CONTENT:0:MAX_CHARS}\n\n[...truncated for length...]"
+          fi
+
+          echo "Generating AI changelog from $PREV_TAG to v$VERSION ..."
+
+          RESPONSE=$(curl -s -L -X POST "https://api.deepseek.com/chat/completions" \
+            -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg prompt "$PROMPT" \
+              --arg user "$USER_CONTENT" \
+              '{
+                model: "deepseek-chat",
+                messages: [
+                  {role: "system", content: $prompt},
+                  {role: "user", content: $user}
+                ],
+                temperature: 0.3,
+                max_tokens: 2000
+              }' \
+            )" \
           )
 
-          echo "$CHANGELOG" > .release-notes.md
+          CHANGELOG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')
+
+          if [ -z "$CHANGELOG" ] || [ "$CHANGELOG" = "null" ]; then
+            echo "Warning: AI changelog generation failed, using commit list instead" >&2
+            echo "API response: $RESPONSE" >&2
+            CHANGELOG="## v${VERSION} Release Notes\n\n$(git log "${PREV_TAG}..HEAD" --pretty=format:'- %s')"
+          fi
+
+          echo -e "$CHANGELOG" > .release-notes.md
+
           echo "📋 Changelog:"
+
           echo "$CHANGELOG"
 
       - name: Build and Release
