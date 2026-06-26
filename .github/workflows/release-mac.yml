@@ -314,7 +314,7 @@ jobs:
           git add update.json
           if git diff --cached --quiet; then
             echo "::warning::nothing to commit (signature unchanged?)"
-            git checkout main
+            git checkout origin/main
             exit 0
           fi
           git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
@@ -324,7 +324,7 @@ jobs:
           echo "update.json signature committed to updater/latest"
 
           # 切回 main 避免影响后续 step
-          git checkout main
+          git checkout origin/main
 
       - name: Upload release artifacts and publish release notes
         env:
