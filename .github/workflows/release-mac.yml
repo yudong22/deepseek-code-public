@@ -314,8 +314,7 @@ jobs:
           git add update.json
           if git diff --cached --quiet; then
             echo "::warning::nothing to commit (signature unchanged?)"
-            git fetch origin main
-            git checkout -B main origin/main
+            git checkout --detach FETCH_HEAD
             exit 0
           fi
           git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
@@ -324,9 +323,8 @@ jobs:
           git push --force-with-lease origin updater/latest
           echo "update.json signature committed to updater/latest"
 
-          # 切回 main 避免影响后续 step
-          git fetch origin main
-          git checkout -B main origin/main
+          # 切回原来的 commit（构建产物还在磁盘上，后续 step 能访问）
+          git checkout --detach FETCH_HEAD
 
       - name: Upload release artifacts and publish release notes
         env:
