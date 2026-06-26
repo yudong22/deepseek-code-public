@@ -176,6 +176,10 @@ jobs:
           rm -f "$SIG_FILE"
 
       - name: Commit update.json signature
+        # Failure here must not block the changelog/release-notes steps
+        # below — otherwise the release body keeps the placeholder
+        # "等待生成完整 changelog..." and never gets replaced.
+        continue-on-error: true
         shell: bash
         run: |
           if git diff --quiet update.json; then
