@@ -10,12 +10,18 @@ on:
         description: 'Tag name for the release (e.g. v0.1.0-beta.1)'
         required: false
         default: 'manual-build'
+      skip_notarize:
+        description: 'Skip Apple notarization (faster, for internal betas)'
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   release:
     permissions:
       contents: write
-    runs-on: macos-latest
+    # macos-14 = 原生 Apple Silicon runner，省掉 cross-compile 到 aarch64 的开销
+    runs-on: macos-14
 
     steps:
       - name: Checkout repository
@@ -28,12 +34,22 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache Bun install
+        # 缓存 Bun 全局模块缓存，避免每次都从 npm registry 全量拉
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lockb', '**/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin
+        # 不再 cross-compile：macos-14 runner 本身就是 aarch64
 
       - name: Rust Cache
+        # macos-14 native aarch64 build，cargo 产物落到 src-tauri/target/release/...
+        # （不再有 target/aarch64-apple-darwin/ 子目录）
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './apps/desktop/src-tauri -> target'
@@ -44,23 +60,30 @@ jobs:
       - name: Export macOS Signing & Notarization Env (if secrets are set)
         shell: bash
         run: |
-          if [ -n "${{ secrets.APPLE_CERTIFICATE }}" ]; then
+          # skip_notarize 透传：workflow_dispatch input 勾选后，
+          # 故意不导出 APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID，
+          # 让 tauri-action 内部检测到 secrets 缺失而跳过 xcrun notarytool。
+          # 这能在不修改 tauri.conf.json 的前提下跳过 notarize（节省 60–180s）。
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_CERTIFICATE }}" ]; then
             echo "APPLE_CERTIFICATE=${{ secrets.APPLE_CERTIFICATE }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" ]; then
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" ]; then
             echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]]; then
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]]; then
             echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.APPLE_ID }}" ]; then
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_ID }}" ]; then
             echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.APPLE_PASSWORD }}" ]]; then
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_PASSWORD }}" ]]; then
             echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> $GITHUB_ENV
           fi
-          if [ -n "${{ secrets.APPLE_TEAM_ID }}" ]]; then
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_TEAM_ID }}" ]]; then
             echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+          fi
+          if [ "${{ inputs.skip_notarize }}" == "true" ]; then
+            echo "⏭️  skip_notarize=true: Apple notarization skipped (faster build for internal betas)"
           fi
 
       - name: Export Updater Signing Env (for auto-update)
@@ -69,6 +92,41 @@ jobs:
           if [ -n "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" ]; then
             echo "TAURI_SIGNING_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" >> $GITHUB_ENV
           fi
+
+      - name: Generate changelog
+        # 把 changelog 生成从 build 之后移到 build 之前，让它跟 tauri build 并行
+        # changelog 只依赖 git log（~3s），跟 build 产物完全无关
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          # 生成分类 changelog
+          CHANGELOG=$(
+            echo "## v${VERSION} Release Notes"
+            echo ""
+            for type in "feat:🚀 新功能" "fix:🐛 Bug 修复" "docs:📝 文档" "refactor:♻️ 重构" "style:🎨 样式" "test:✅ 测试" "chore:🔧 工程化"; do
+              label="${type#*:}"
+              prefix="${type%:*}"
+              LOGS=$(git log --oneline --no-decorate ${PREV_TAG:+"${PREV_TAG}..HEAD"} --grep="^${prefix}" 2>/dev/null | sed 's/^[a-f0-9]* //' | sed 's/^/- /')
+              if [ -n "$LOGS" ]; then
+                echo "### ${label}"
+                echo "$LOGS"
+                echo ""
+              fi
+            done
+            # 未分类的
+            REST=$(git log --oneline --no-decorate ${PREV_TAG:+"${PREV_TAG}..HEAD"} 2>/dev/null | grep -vE '^[a-f0-9]+ (feat|fix|docs|refactor|style|test|chore)[:(]' | sed 's/^[a-f0-9]* //' | sed 's/^/- /')
+            if [ -n "$REST" ]; then
+              echo "### 📦 其他"
+              echo "$REST"
+              echo ""
+            fi
+          )
+
+          echo "$CHANGELOG" > .release-notes.md
+          echo "📋 Changelog:"
+          echo "$CHANGELOG"
 
       - name: Build and Release
         uses: tauri-apps/tauri-action@v0
@@ -81,7 +139,7 @@ jobs:
           prerelease: false
           projectPath: apps/desktop
           tauriScript: bun run tauri
-          args: --target aarch64-apple-darwin
+          # 原生 macos-14 runner 本身就是 aarch64，不需要 --target cross-compile
           # v0.5.2+: update.json 由 CI 后续 step 写到 updater/latest 分支（专用），
           # 不再让 tauri-action 上传 main 上的 update.json 作为 release asset。
           # 关闭后 tauri-action 不会因为 main 没有 update.json 而跳过 .app.tar.gz 上传。
@@ -225,39 +283,6 @@ jobs:
 
           # 切回 main 避免影响后续 step
           git checkout main
-
-      - name: Generate changelog and update release
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          # 生成分类 changelog
-          CHANGELOG=$(
-            echo "## v${VERSION} Release Notes"
-            echo ""
-            for type in "feat:🚀 新功能" "fix:🐛 Bug 修复" "docs:📝 文档" "refactor:♻️ 重构" "style:🎨 样式" "test:✅ 测试" "chore:🔧 工程化"; do
-              label="${type#*:}"
-              prefix="${type%:*}"
-              LOGS=$(git log --oneline --no-decorate ${PREV_TAG:+"${PREV_TAG}..HEAD"} --grep="^${prefix}" 2>/dev/null | sed 's/^[a-f0-9]* //' | sed 's/^/- /')
-              if [ -n "$LOGS" ]; then
-                echo "### ${label}"
-                echo "$LOGS"
-                echo ""
-              fi
-            done
-            # 未分类的
-            REST=$(git log --oneline --no-decorate ${PREV_TAG:+"${PREV_TAG}..HEAD"} 2>/dev/null | grep -vE '^[a-f0-9]+ (feat|fix|docs|refactor|style|test|chore)[:(]' | sed 's/^[a-f0-9]* //' | sed 's/^/- /')
-            if [ -n "$REST" ]; then
-              echo "### 📦 其他"
-              echo "$REST"
-              echo ""
-            fi
-          )
-
-          echo "$CHANGELOG" > .release-notes.md
-          echo "📋 Changelog:"
-          echo "$CHANGELOG"
 
       - name: Upload release artifacts and publish release notes
         env:
