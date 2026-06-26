@@ -88,7 +88,10 @@ jobs:
           includeUpdaterJson: false
           uploadUpdaterJson: false
 
-      - name: Generate updater signature and update update.json
+      - name: Generate updater signature
+        # v0.5.2+: 此 step 只生成签名，导出 SIGNATURE / PLATFORM / ARCH_SHORT 到 $GITHUB_ENV，
+        # 由下一 step "Commit update.json signature" 写入 updater/latest 分支。
+        # （不再写 main 上的 update.json —— main 不再持有这个文件。）
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -116,13 +119,11 @@ jobs:
           SIG_FILE="${ARCHIVE}.sig"
           rm -f "$SIG_FILE"
 
-          # TAURI_SIGNING_PRIVATE_KEY 由 GitHub Actions 通过 env: 直接注入进程环境
-          # （不经过 shell 解释，无引号/特殊字符风险）
           # ARCHIVE 路径相对于 repo root，需要在 --cwd 下去掉 apps/desktop/ 前缀
-          ARCHIVE="${ARCHIVE#apps/desktop/}"
+          ARCHIVE_REL="${ARCHIVE#apps/desktop/}"
           bun run --cwd apps/desktop tauri signer sign \
             -p "${{ secrets.TAURI_SIGNING_KEY_PASSWORD }}" \
-            "$ARCHIVE"
+            "$ARCHIVE_REL"
 
           # 从 .sig 文件读取签名（tauri signer sign 自动生成）
           if [ -f "$SIG_FILE" ]; then
@@ -146,36 +147,20 @@ jobs:
             PLATFORM="darwin-x86_64"
             ARCH_SHORT="x86_64"
           else
-            echo "⚠️  Unknown architecture from archive name, skipping platform detection"
+            echo "⚠️  Unknown architecture from archive name"
             PLATFORM=""
+            ARCH_SHORT=""
           fi
 
-          # 将签名写入 update.json
-          if [ -n "$PLATFORM" ] && [ -f "update.json" ]; then
-            node -e "
-              const fs = require('fs');
-              const up = JSON.parse(fs.readFileSync('update.json', 'utf-8'));
-              up.version = '$VERSION';
-              up.pub_date = new Date().toISOString().replace(/\.\d{3}Z/, 'Z');
-              const plat = '$PLATFORM';
-              if (up.platforms && up.platforms[plat]) {
-                up.platforms[plat].signature = require('fs').readFileSync('/dev/stdin', 'utf-8').trim();
-                up.platforms[plat].url = 'https://github.com/yudong22/deepseek-code-public/releases/download/v$VERSION/deepseek-code_${ARCH_SHORT}.app.tar.gz';
-              }
-              fs.writeFileSync('update.json', JSON.stringify(up, null, 2) + '\n');
-              console.log('update.json updated for ' + plat);
-            " <<< "$SIGNATURE"
-            echo "update.json 已更新签名: ${SIGNATURE:0:40}..."
-          elif [ -f "update.json" ]; then
-            echo "⚠️  Unknown platform, only updating version in update.json"
-            node -e "
-              const fs = require('fs');
-              const up = JSON.parse(fs.readFileSync('update.json', 'utf-8'));
-              up.version = '$VERSION';
-              up.pub_date = new Date().toISOString().replace(/\.\d{3}Z/, 'Z');
-              fs.writeFileSync('update.json', JSON.stringify(up, null, 2) + '\n');
-            "
-          fi
+          # 导出到后续 step 使用
+          {
+            echo "SIGNATURE<<EOF"
+            echo "$SIGNATURE"
+            echo "EOF"
+            echo "PLATFORM=$PLATFORM"
+            echo "ARCH_SHORT=$ARCH_SHORT"
+            echo "RELEASE_VERSION=$VERSION"
+          } >> "$GITHUB_ENV"
 
           # 清理临时签名文件
           rm -f "$SIG_FILE"
@@ -190,22 +175,56 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          if git diff --quiet update.json; then
-            echo "update.json unchanged, skipping commit"
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            # 把当前 working tree 的 update.json 应用到 updater/latest 分支顶端
-            git fetch origin updater/latest
-            git checkout -B updater/latest origin/updater/latest
-            git add update.json
-            git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
-            # force-with-lease 安全：CI 自己是 updater/latest 唯一写入者
-            git push --force-with-lease origin updater/latest
-            echo "update.json signature committed to updater/latest"
-            # 切回 main 避免影响后续 step
-            git checkout main
+          # update.json 不在 main 上（在 updater/latest 分支上），所以不能依赖
+          # `git diff --quiet update.json` —— main working tree 没有此文件会 fatal。
+          # 改用：如果前一步 Generate updater signature 导出了 SIGNATURE env，
+          # 就把 SIGNATURE 内容直接应用 + 推到 updater/latest。
+
+          if [ -z "${SIGNATURE:-}" ] || [ -z "${PLATFORM:-}" ]; then
+            echo "::warning::SIGNATURE/PLATFORM not exported by previous step, skipping commit"
+            exit 0
           fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 把 updater/latest 分支顶端 checkout 出来（保留 update.json）
+          git fetch origin updater/latest
+          git checkout -B updater/latest origin/updater/latest
+
+          # 用 SIGNATURE 替换 update.json 里对应 PLATFORM 平台的 signature 字段
+          SIGNATURE="$SIGNATURE" PLATFORM="$PLATFORM" ARCH_SHORT="$ARCH_SHORT" \
+            RELEASE_VERSION="$RELEASE_VERSION" node -e "
+              const fs = require('fs');
+              const up = JSON.parse(fs.readFileSync('update.json', 'utf-8'));
+              up.version = process.env.RELEASE_VERSION;
+              up.pub_date = new Date().toISOString().replace(/\.\d{3}Z/, 'Z');
+              const plat = process.env.PLATFORM;
+              if (up.platforms && up.platforms[plat]) {
+                up.platforms[plat].signature = process.env.SIGNATURE.trim();
+                up.platforms[plat].url = 'https://github.com/yudong22/deepseek-code-public/releases/download/v' + process.env.RELEASE_VERSION + '/deepseek-code_' + process.env.ARCH_SHORT + '.app.tar.gz';
+              } else {
+                console.error('platform', plat, 'not in update.json; available:', Object.keys(up.platforms));
+                process.exit(1);
+              }
+              fs.writeFileSync('update.json', JSON.stringify(up, null, 2) + '\n');
+              console.log('updated update.json for', plat);
+            "
+
+          git add update.json
+          if git diff --cached --quiet; then
+            echo "::warning::nothing to commit (signature unchanged?)"
+            git checkout main
+            exit 0
+          fi
+          git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
+
+          # force-with-lease 安全：CI 自己是 updater/latest 唯一写入者
+          git push --force-with-lease origin updater/latest
+          echo "update.json signature committed to updater/latest"
+
+          # 切回 main 避免影响后续 step
+          git checkout main
 
       - name: Generate changelog and update release
         shell: bash
