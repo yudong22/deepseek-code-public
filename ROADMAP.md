@@ -1,50 +1,68 @@
 # ROADMAP
 
-> 下一阶段规划。基于 v0.5.1（2026-06-24）现状梳理遗留问题。
-> 路线图按优先级和依赖关系排序，每项标注「动机 / 现状 / 目标 / 风险」。
+> 下一阶段规划。基于 v0.5.5（2026-06-26）现状梳理遗留问题。
+> 路线图按三条主线组织：**主线一：Coding 能力不断完善** / **主线二：长期记忆与自我演进平台建设** / **主线三：治理与可信**。
 
 ---
 
 ## TL;DR
 
-| 优先级 | 主题 | 预计版本 | 状态 |
+> **版本规则**：x.0 / x.y.0 = 功能演进（minor/major bump），x.x.1 / x.x.2 = bug 修复和查缺补漏（patch bump）。
+
+| 主线 | 版本 | 主题 | 状态 |
 |---|---|---|---|
-| P0 | 移除 TypeScript sidecar 死代码（74 MiB 重复二进制） | v0.5.2 | 调研完成 |
-| P0 | `openhands run` 自愈流水线正式启用 + 集成测试 | v0.6.0 | 局部就绪 |
-| P0 | 工具集对齐：TodoWrite / WebFetch / WebSearch / SubAgent | v0.6.0 | UI 占位已有，工具未实现 |
-| P1 | Tool 工具调用基建升级（流式、超时、取消、原子写、沙箱） | v0.6.0 | 串行执行 |
-| P1 | Bash 安全护栏（超时、危险命令确认、env 清理） | v0.6.0 | 无任何保护 |
-| P1 | 上下文压缩 / 总结（消息历史无界） | v0.7.0 | 仅 step 上限 25 |
-| P2 | Rust sidecar-agent 复用至 CLI（合并双引擎） | v0.7.0 | 调研中 |
-| P2 | 多模态（图像输入） | v0.7.0 | 协议层未支持 |
-| P2 | macOS 签名流水线稳定性 | 持续 | v0.5.0 之后 13 次修复 |
+| **v0.6.0** Coding + 治理同步 | | | |
+| Coding 能力 | v0.6.0 | 工具集对齐：TodoWrite / WebFetch / WebSearch / SubAgent | UI 占位已有 |
+| Coding 能力 | v0.6.0 | Tool 工具调用基建升级（流式、超时、取消、原子写） | 串行执行 |
+| Coding 能力 | v0.6.0 | Bash 安全护栏（超时、危险命令确认、env 清理） | 无任何保护 |
+| 治理与可信 | v0.6.0 | Prompt injection 防护（WebFetch 强依赖） | 无 |
+| 治理与可信 | v0.6.0 | 人机协作边界（plan-then-confirm + diff review） | 无 |
+| **v0.6.1 / v0.6.2** Bug 修复 | | | |
+| Coding 能力 | v0.6.1 | `openhands run` 自愈流水线正式启用 + 端到端集成测试 | 局部就绪 |
+| Coding 能力 | v0.6.2 | fastValidate fail-fast、callAgent 失败推进预算、--task-id 校验 | 调研完成 |
+| **v0.7.0** 记忆 + 可观测 + 成本 | | | |
+| Coding 能力 | v0.7.0 | 上下文压缩 / 消息总结 | 仅 step 上限 25 |
+| 记忆与平台 | v0.7.0 | 记忆生命周期治理（TTL、隐私过滤、用户遗忘权） | 无 |
+| 记忆与平台 | v0.7.0 | Rust sidecar-agent 复用至 CLI（合并双引擎） | 调研中 |
+| 治理与可信 | v0.7.0 | Agent 可观测性（OTel trace + replay） | 无 |
+| 治理与可信 | v0.7.0 | 成本预算（token/USD 上限 + 模型路由） | 无 |
+| **v0.7.1** Bug 修复 | | | |
+| | v0.7.1 | 可观测性集成稳定性、记忆 TTL bug 修复 | — |
+| **v0.8.0** 输出侧安全 + 多模态 | | | |
+| Coding 能力 | v0.8.0 | 多模态（图像输入） | 协议层未支持 |
+| 治理与可信 | v0.8.0 | 代码安全扫描集成（gitleaks / semgrep / cargo audit） | 无 |
+| **v0.8.1** Bug 修复 | | | |
+| | v0.8.1 | 签名流水线稳定性（v0.5.0 之后 13 次 fix 收尾） | 持续 |
+| **v0.9.0** 多引擎 + IDE 化 | | | |
+| Coding 能力 | v0.9.0 | 多引擎横向比较：Claude Code / Cursor CLI / Codex 等二进制接入 | 规划中 |
+| Coding 能力 | v0.9.0 | 全场景 IDE 化：多语言 LSP 接入 | 无 |
+| **v0.9.1** Bug 修复 | | | |
+| | v0.9.1 | LSP 集成稳定性、评测基准 bug | — |
+| **v1.0.0** 团队版 / 企业可用 | | | |
+| Coding 能力 | v1.0.0 | Multi-agent 协作（planner / coder / reviewer） | 无 |
+| Coding 能力 | v1.0.0 | 多模型协议兼容：OpenCodeGo / 腾讯 / 阿里 / 字节 coding plan | 无 |
+| 记忆与平台 | v1.0.0 | 自我评估与回放、记忆网络多维化 | 无 |
+| 记忆与平台 | v1.0.0 | 团队版网关（RBAC、审计日志、配额管理） | 无 |
 
 ---
 
-## P0 — 必须尽快解决
+## 三条主线
 
-### 1. 清理 TypeScript Sidecar 死代码
+### 主线一：Coding 能力不断完善
 
-**动机**：桌面端 v0.5.0 已迁移到进程内 Rust crate `sidecar-agent`，但 TypeScript sidecar 构建链未被切断——`apps/desktop/package.json` 的 `dev` / `build` / `preview` / `build:mac` 全部调用 `bun run build:sidecar`，每次开发/构建都会编译一个 **74 MiB 的 `opencode-sidecar-aarch64-apple-darwin`**，然后被丢在 `apps/desktop/src-tauri/binaries/` 无人使用。
+Rust coding 引擎改写自 opencode core，以此为基线持续补齐相对 Claude Code 的 coding 短板。同时支持 Claude Code / Cursor CLI / Codex 等二进制接入，在同一基准下横向比较不同引擎的 coding 效果。
 
-**现状**：
-- `tauri.conf.json` 没有 `bundle.externalBin`，Tauri 不会打包。
-- `apps/desktop/src-tauri/Cargo.toml:32` 只依赖 Rust crate `sidecar-agent`。
-- 真正消费 TS sidecar 的只有 `packages/client-cli/src/openhands-call.js:152-161`。
-- 桌面端 mock 文件夹里还有 `"src-sidecar/index.ts"` 这种残留字面量（`mock.ts:222`）。
+### 主线二：长期记忆与自我演进平台建设
 
-**目标**：
-1. 桌面端 `package.json` 移除 `build:sidecar` 调用链。
-2. 删除 `apps/desktop/src-tauri/binaries/` 下陈旧二进制。
-3. 桌面端代码搜索 `src-sidecar` 残留并清理。
-4. 重新跑 `bun run test` + 桌面端 `bun run preview` 验证。
-5. `CLAUDE.md`「CLI 保留 TypeScript sidecar」一节更明确，区分两套引擎边界。
+构建可持久化、可迁移、可演进的记忆系统，让 agent 越用越聪明。
 
-**风险**：低，纯删除操作。建议作为 v0.5.2 收尾小版本。
+### 主线三：治理与可信
 
----
+补齐企业级落地的可信维度：人机协作边界、可观测性、隐私合规、安全防护、成本控制。这是 DeepSeek Code 从「能用的工具」走向「可信的工具」的必经之路。
 
-### 2. `openhands run` 自愈流水线正式启用
+#### P0 — 必须尽快解决（Coding 能力）
+
+### 1. `openhands run` 自愈流水线正式启用
 
 **动机**：README/CLAUDE.md 把「自愈流水线」作为核心卖点宣传，但实际 CLI 缺乏 `handleRun` 的端到端集成测试（`cli.test.ts` 不覆盖 `handleRun`），且打包出 `bun openhands` 后用户首次运行需要手动 `login` + `doctor`，体感上「还没正式启动」。
 
@@ -72,7 +90,7 @@
 
 ---
 
-### 3. 工具集对齐（Rust Sidecar Agent）
+### 2. 工具集对齐（Rust Sidecar Agent）
 
 **动机**：现代 agent（Claude Code、OpenCode）至少有 TodoWrite、WebFetch、WebSearch、SubAgent、ImageInput 五个工具。本项目 UI 已经为前三个预留了展示分支（`toolUtils.ts:101-112` 的 `webfetch` / `websearch` 分支；`ToolCallCard.tsx:34-36` 的 `todowrite` 分支；`QuestionCard.tsx` 已存在但没接入 `ToolCallCard`），但 Rust 侧没有任何对应工具实现。
 
@@ -99,7 +117,29 @@
 
 ---
 
-## P1 — 下一个里程碑
+#### P0 — 必须尽快解决（治理与可信）
+
+### 3. Prompt Injection 防护
+
+**动机**：v0.6.0 引入 `WebFetch` / `WebSearch` 后，agent 处理的输入会包含大量不可信外部内容（网页、搜索结果、Issue 评论）。攻击者可以在这些内容里嵌入 prompt injection，诱导 agent 执行危险操作（`curl | sh`、泄露 secrets、git push 到恶意远端）。OWASP LLM Top 10（2025 更新版）已经把 prompt injection 列为 LLM 应用第一攻击面。
+
+**现状**：
+- `WebFetch` / `WebSearch` 工具尚未实现，但一旦上线，agent 会把外部内容拼接到 system prompt / user message。
+- 当前没有任何输入校验、输出过滤、工具调用前的安全审查。
+- `Bash` 工具无危险命令拦截（见 Bash 安全护栏 P1）。
+
+**目标**：
+1. **输入隔离**：把外部内容包裹在 `<tool_call>`-like 不可信 token 中，与 system prompt 物理隔离；让 LLM 知道「这是数据，不是指令」。
+2. **工具白名单**：外部触发的 tool call 走严格白名单（如 webfetch 不允许直接触发 bash / file_write）。
+3. **危险命令拦截**：在 `Bash` 工具前置层加入危险命令模式匹配（`rm -rf` / `curl | sh` / `git push --force` / base64 解码执行等），匹配时通过 `question` 工具强制用户确认。
+4. **secret 过滤**：检测工具输出中的 `sk-` / `ghp_` / AWS access key 等模式，自动 mask 并在日志中告警。
+5. **结构化日志**：所有 prompt injection 尝试记录到独立审计日志，UI 可见。
+
+**风险**：高。这是 agent 安全的基础设施，设计需要平衡安全与可用性。建议从「白名单 + 危险命令拦截」入手，secret 过滤作为 v0.6.x 增强。
+
+---
+
+#### P1 — 下一个里程碑（Coding 能力）
 
 ### 4. Tool 基建升级
 
@@ -172,9 +212,106 @@
 
 ---
 
-## P2 — 中期
+#### P1 — 下一个里程碑（记忆与平台）
 
-### 7. CLI 切换到 Rust Sidecar Agent
+### 7. 记忆生命周期治理
+
+**动机**：长期记忆愿景（向量记忆沉淀、跨项目迁移）很好，但没有治理机制会变成「数据黑洞」：记忆会无限增长、敏感信息被 embedding、用户无法控制、过期数据不清理。
+
+**现状**：
+- 记忆只有写入和检索，无 TTL、无项目 scope、无隐私过滤。
+- 无用户「遗忘权」接口。
+- 无跨项目隔离，多个项目的记忆混在一起。
+
+**目标**：
+1. **TTL + 项目 scope**：每条记忆带 `project_id` + `created_at` + `ttl`，过期自动清理。
+2. **隐私过滤**：embedding 前检测 secrets (sk-/ghp_/AWS key) 和 PII (邮箱/手机号)，命中则 mask 或拒绝。
+3. **用户可控遗忘**：UI 提供「清除某项目记忆」「清除某时间段记忆」按钮。
+4. **跨设备同步策略**：记忆数据加密后通过 Go 网关同步，本地缓存 + 远端快照双层存储。
+
+**风险**：中。隐私过滤需要持续维护正则/规则，false positive 会影响正常使用。
+
+---
+
+#### P1 — 下一个里程碑（治理与可信）
+
+### 8. 人机协作边界
+
+**动机**：当前 agent 自主度模糊 —— LLM 输出 `rm -rf` 直接执行，git push 也不二次确认。Claude Code / Cursor CLI 都引入了「plan mode + diff review」作为高风险操作的安全阀。
+
+**现状**：
+- 所有工具调用都是「自动执行」，用户只能在事后看到结果。
+- 无 plan 模式，agent 不会先给出方案再执行。
+- 无 diff review，file_write / file_edit 直接落盘。
+
+**目标**：
+1. **Plan-then-confirm 模式**：高风险任务（涉及多文件修改、git push、rm 操作）必须先输出 plan，用户点确认才执行。
+2. **Diff review UI**：file_write / file_edit 必须先在 UI 渲染 diff，用户点应用才落盘（参考 Cursor 的 inline diff 模式）。
+3. **危险操作二次确认**：通过 `question` 工具实现 `rm -rf` / `git push --force` / `curl | sh` / base64 解码执行 等模式的强制确认。
+4. **撤销能力**：所有文件操作在 5 分钟内可一键撤销（基于 `.bak` 备份 + reflog）。
+
+**风险**：中-高。误伤会影响正常使用（如开发流程常需要 `git push`），需要可配置「风险等级阈值」。
+
+### 9. Agent 可观测性
+
+**动机**：agent 失败时无法归因、无法回放，企业用户无法信任。2026 年的 agent 工具都默认集成 OTel trace。
+
+**现状**：
+- 无结构化 trace 日志。
+- 失败案例无法回放分析。
+- 无性能指标（每 step 耗时、LLM 调用延迟、tool 执行耗时）。
+
+**目标**：
+1. **OTel trace 导出**：每个 agent 循环生成 span（LLM call、tool exec、tool result），支持 OTLP 协议导出到 Jaeger / Tempo / Langfuse。
+2. **失败 replay 模式**：UI 允许重放历史 session，重放时可手动修改 agent 的中间决策。
+3. **性能面板**：展示每 step 的耗时、token 消耗、cost 估算。
+4. **成本可追溯**：每次 LLM 调用记录 model + tokens + cost，session 总成本实时显示。
+
+**风险**：中。OTel 集成对 Rust crate 的依赖增加有限，主要是 schema 设计。
+
+### 10. 成本预算与模型路由
+
+**动机**：企业用户对 API 成本敏感，agent 工具必须有「成本开关」。Claude Code 2026 引入了「Haiku for simple tasks, Sonnet for complex」的智能路由。
+
+**现状**：
+- 模型只能全局配置，所有任务用同一个模型。
+- 无 token / USD 预算控制。
+- 无成本展示。
+
+**目标**：
+1. **模型路由**：根据任务复杂度自动选择模型（grep / file_read 用 mini 即可，复杂设计任务用 opus / sonnet）。
+2. **预算上限**：用户可设置每次 session 的 max tokens / max USD，超额自动暂停。
+3. **成本透明**：UI 展示每次 LLM 调用的 cost，session 累计 cost。
+4. **预算告警**：超过预算 80% 时弹窗提醒。
+
+**风险**：低。路由策略需要 LLM 评分任务复杂度，本身有成本，需要平衡。
+
+---
+
+#### P2 — 中期（Coding 能力）
+
+### 11. 多引擎横向比较
+
+**动机**：Rust coding 引擎改写自 opencode core，但与 Claude Code / Cursor CLI / Codex 等商业引擎相比仍有 gap。需要通过统一基准测试来衡量差距，驱动持续改进。
+
+**现状**：
+- 当前只有 Rust sidecar-agent 一个引擎。
+- 无统一的 benchmark 基准。
+- 无多引擎并行接入的适配层。
+
+**目标**：
+1. 设计统一的 coding 效果评测基准（覆盖代码生成、修复、重构、问答等场景）。
+2. 实现多引擎适配层，支持 Claude Code / Cursor CLI / Codex 等二进制接入。
+3. 在同一基准下横向比较不同引擎的 coding 效果，输出量化报告。
+4. 根据评测结果持续补齐 opencode core 的 coding 短板。
+
+**风险**：中。评测基准的设计需要兼顾客观性和实用性，避免过度拟合。
+
+---
+
+#### P2 — 中期（记忆与平台）
+
+### 12. CLI 切换到 Rust Sidecar Agent
 
 **动机**：当前 CLI 仍跑 `bun run packages/sidecar/src/index.ts`，依赖一个 75MB 的 Bun runtime + sibling `opencode` 仓库。如果 Rust crate 足够稳定，CLI 也可以直接复用，节省 runtime 依赖。
 
@@ -191,7 +328,7 @@
 
 ---
 
-### 8. macOS 签名流水线稳定性
+### 13. macOS 签名流水线稳定性
 
 **动机**：v0.5.0 之后的 git log 显示连续 13 次 release 相关 fix commit（`b5c9e58` / `f206545` / `4165b94` 等），签名 / Tauri updater / Keychain 相关问题反复出现。
 
@@ -204,12 +341,51 @@
 
 ---
 
+#### P2 — 中期（治理与可信）
+
+### 14. 代码安全扫描集成
+
+**动机**：agent 自动生成的代码可能包含安全漏洞（hardcoded secret、SQL 注入、unsafe Rust 块等），但当前没有任何静态分析集成。2026 年的企业级 coding agent 都默认集成 semgrep / gitleaks / codeql。
+
+**现状**：
+- 无任何静态分析 hook。
+- agent 输出代码直接落盘，无安全审计。
+
+**目标**：
+1. **Secret 扫描**：集成 gitleaks，每次 `file_write` 之后自动扫，命中则 warn + mask。
+2. **代码安全扫描**：集成 semgrep 规则集（security-audit + owasp-top-ten），CI 阶段执行。
+3. **依赖审计**：集成 cargo audit + npm audit，PR 阶段检查已知漏洞依赖。
+4. **结构化报告**：扫描结果写入 `.audit/` 目录，UI 展示。
+
+**风险**：低-中。扫描规则会有 false positive，需要 allowlist 机制。
+
+---
+
 ## 长期愿景
 
-- **Desktop → 全场景 IDE 化**：内置代码索引、跳转定义、错误诊断，让 `opencode` 不止是聊天框。
+### 主线一：Coding 能力不断完善
+
+- **全场景 IDE 化**：多语言 LSP 接入、代码诊断、跳转定义，让 DeepSeek Code 不止是聊天框。
 - **Multi-agent 协作**：planner / coder / reviewer 三 agent pipeline，对应不同的 `agent_routing` 入口。
-- **本地模型接入**：通过 `provider.rs` 现有的 OpenAI-compatible 抽象，桥接 Ollama / vLLM。
+- **多引擎横向比较**：支持 Claude Code / Cursor CLI / Codex 等二进制接入，在同一基准下衡量不同引擎的 coding 效果。
+- **多模型协议兼容**：支持 OpenCodeGo / 腾讯 / 阿里 / 字节的 coding plan 接入，厚适配层自动转发。
+
+### 主线二：长期记忆与自我演进平台建设
+
+- **向量记忆持续进化**：从当前 top-3 相似度检索升级为多维度记忆网络（代码语义、错误模式、项目结构），让 agent 越用越聪明。
+- **经验自动沉淀**：每次 coding 会话自动提取可复用的经验片段，无需手动触发 `memory sync`。
+- **跨项目迁移**：一个项目的修复经验自动泛化到相似项目，实现组织级知识复用。
+- **自我评估与回放**：agent 定期回顾历史成功/失败案例，自动调整策略参数。
 - **团队版网关**：Go 网关补齐 RBAC、审计日志、配额管理。
+
+### 主线三：治理与可信
+
+- **人机协作可配置**：根据风险等级自动切换「自主 / 需确认 / plan-then-execute」模式，让用户掌控权随任务敏感度递进而增强。
+- **Agent 可观测性普及**：OTel trace 成为标配，失败可归因、决策可回放、cost 可追溯。
+- **Prompt injection 防护体系化**：所有外部内容走不可信 token 隔离 + 工具白名单 + 危险命令拦截，构成多层防御。
+- **记忆治理合规化**：TTL / 项目 scope / 用户遗忘权 / 隐私过滤，匹配 GDPR / AI Act 等合规要求。
+- **代码安全扫描内建**：gitleaks / semgrep / cargo audit 集成到 agent 落盘链路，生成即审计。
+- **成本可控可预测**：模型路由 + 预算上限 + 实时成本展示，企业用户用得放心。
 
 ---
 
