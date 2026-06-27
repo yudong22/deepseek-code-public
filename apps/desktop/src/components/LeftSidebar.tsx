@@ -9,6 +9,7 @@ interface LeftSidebarProps {
   onNewConversation: () => void;
   onSelectSession: (id: string) => void;
   onSettingsOpen: () => void;
+  onHistoryOpen: () => void;
   showToast: (message: string) => void;
   projects: string[];
   activeWorkspacePath: string;
@@ -45,6 +46,7 @@ export default function LeftSidebar({
   onNewConversation,
   onSelectSession,
   onSettingsOpen,
+  onHistoryOpen,
   showToast,
   projects,
   activeWorkspacePath,
@@ -133,7 +135,7 @@ export default function LeftSidebar({
 
       {/* 静态导航 */}
       <div className="sidebar-nav">
-        <div className="nav-item" onClick={() => showToast("待开发")}>
+        <div className="nav-item" onClick={onHistoryOpen}>
           <Icons.History />
           Conversation History
         </div>

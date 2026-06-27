@@ -5,6 +5,7 @@ import "./App.css";
 
 import Toast from "@/components/Toast";
 import SettingsModal from "@/components/SettingsModal";
+import HistoryModal from "@/components/HistoryModal";
 import TitleBar from "@/components/TitleBar";
 import LeftSidebar from "@/components/LeftSidebar";
 import RightPanel from "@/components/RightPanel";
@@ -89,6 +90,8 @@ function MainDashboard() {
     navigate,
     loadSessions,
   });
+
+  const [showHistory, setShowHistory] = useState(false);
 
   // --- 3. Projects Workspace Hook ---
   const {
@@ -996,6 +999,15 @@ function MainDashboard() {
         onClearHistory={handleClearHistory}
       />
 
+      <HistoryModal
+        isOpen={showHistory}
+        sessions={sessions}
+        onClose={() => setShowHistory(false)}
+        onNavigate={(sessionId) => navigate(`/chat/s/${sessionId}`)}
+        onSessionDeleted={loadSessions}
+        showToast={showToast}
+      />
+
       <TitleBar
         isLeftSidebarOpen={isLeftSidebarOpen}
         isRightSidebarOpen={isRightSidebarOpen}
@@ -1024,6 +1036,7 @@ function MainDashboard() {
           onNewConversation={() => navigate("/")}
           onSelectSession={(sessionId) => navigate(`/chat/s/${sessionId}`)}
           onSettingsOpen={() => setIsSettingsOpen(true)}
+          onHistoryOpen={() => setShowHistory(true)}
           showToast={showToast}
           projects={projects}
           activeWorkspacePath={savedWorkspacePath}
