@@ -2,22 +2,51 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 代码风格约束
+## 开发流程（AI 必读）
 
-**本项目用 `.editorconfig` 强制空格缩进**。AI 写代码时请遵守：
+### 1. 开发前：读规范
+动手前先看相关文件现有的风格：
+- `.editorconfig` — 缩进 / 换行 / 文件末尾规则
+- `scripts/lint.sh` — CI 跑哪些 lint、忽略什么
+- 同目录已有文件 — 命名 / import / 注释风格
 
-| 文件类型 | 缩进 |
-|---|---|
-| `*.json` `*.md` `*.yml` `*.yaml` `*.ts` `*.tsx` `*.js` `*.jsx` `*.mjs` `*.cjs` `*.css` `*.html` `*.sh` | **2 空格** |
-| `*.rs` | **4 空格** |
-| `Makefile` | tab（语法要求） |
+### 2. 开发中：遵守约束
+- 缩进：**2 空格**（Rust 4 空格，Makefile tab）
+- 文件末尾：**留一个空行**
+- 行尾：**不保留尾随空格**
+- 长字符串 / 模板：避免 YAML 解析陷阱（`:` 后面要空格或换行）
 
-**违规后果**：CI `lint:tabs` step 失败，PR 不能 merge。
+### 3. 开发后：跑 lint
+**所有改动后**必须跑：
 
-工具参考：
-- `bun run lint:tabs` — 全量扫 tab 字符
-- `bun run lint` — 全量 lint（tabs + shellcheck + actionlint）
-- `bun run lint:diff` — 增量 lint（只对变更的 .sh / .yml 跑 shellcheck / actionlint）
+```bash
+bun run lint
+```
+
+**lint 包含**：
+| 检查项 | 工具 | 触发条件 |
+|---|---|---|
+| tab 字符（必须是空格） | 自研 `check-tabs.sh` 内嵌 | 任何文本文件 |
+| Shell 脚本错误（warning 级以上） | shellcheck | `*.sh` 文件 |
+| GitHub Actions 语法 | actionlint | `.github/workflows/*.yml` |
+
+**lint 失败处理**：
+- 必 fix：error 级别（shellcheck error/actionlint error）—— lint 直接 fail，CI 红
+- 建议修：warning/info 级别（当前被 ignore）—— 不 block，但应该在 PR 描述里提一下
+- 加 ignore：在 `scripts/lint.sh` 的对应 linter 命令行加 `-ignore` 模式，禁止在源文件里加 `# noqa`
+
+### 4. 提交前
+```bash
+bun run lint   # 必须 pass
+git diff       # 复核改动范围
+git status     # 确认无意外文件
+```
+
+**违规后果**：CI `Lint` step 失败，PR 不能 merge。
+
+## 未来 lint 扩展
+
+加新语言 lint 在 `scripts/lint.sh` 里加 case（注释里有模板），不要在 `package.json` 加新 script。命令统一是 `bun run lint`。
 
 ## Project Overview
 

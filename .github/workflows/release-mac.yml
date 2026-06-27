@@ -59,12 +59,11 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Lint
-        # 增量 lint：tabs + diff 内 .sh / .yml 跑 shellcheck / actionlint
+        # 全量 lint：tabs + shellcheck + actionlint
         # 工具缺失时 warning，不 block
         run: |
           brew install shellcheck actionlint
-          bun run lint:tabs
-          bun run lint:diff
+          bun run lint
 
       - name: Export macOS Signing & Notarization Env (if secrets are set)
         shell: bash
@@ -79,16 +78,16 @@ jobs:
           if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" ]; then
             echo "APPLE_CERTIFICATE_PASSWORD=${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" >> $GITHUB_ENV
           fi
-          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]]; then
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]; then
             echo "APPLE_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> $GITHUB_ENV
           fi
           if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_ID }}" ]; then
             echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
           fi
-          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_PASSWORD }}" ]]; then
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_PASSWORD }}" ]; then
             echo "APPLE_PASSWORD=${{ secrets.APPLE_PASSWORD }}" >> $GITHUB_ENV
           fi
-          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_TEAM_ID }}" ]]; then
+          if [ "${{ inputs.skip_notarize }}" != "true" ] && [ -n "${{ secrets.APPLE_TEAM_ID }}" ]; then
             echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
           fi
           if [ "${{ inputs.skip_notarize }}" == "true" ]; then

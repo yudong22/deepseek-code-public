@@ -3,6 +3,9 @@
 #
 # 目的：保护 .github/workflows/*.yml 的语法和常见错误。
 # 比 yamllint 更精准（actionlint 理解 GitHub Actions 语义）。
+#
+# ignore 规则统一在 scripts/lint.sh 的 actionlint 命令行参数里传，
+# 不在这里用 paths.ignore（避免两处配置漂移）。
 
 self-hosted-runner:
   # 标记本仓库用的是 GitHub-hosted runner
