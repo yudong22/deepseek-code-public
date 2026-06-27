@@ -58,6 +58,10 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      - name: Lint tabs
+        # .editorconfig 强制空格缩进，CI 守门防止 tab/空格混用导致 Edit 工具匹配失败
+        run: bun run lint:tabs
+
       - name: Export macOS Signing & Notarization Env (if secrets are set)
         shell: bash
         run: |

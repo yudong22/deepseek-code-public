@@ -1,0 +1,35 @@
+# EditorConfig is awesome: https://EditorConfig.org
+#
+# 目的：统一所有文本文件的缩进为「空格」，从根源上消除 tab/空格混用导致的
+#       Edit 工具匹配失败、diff 噪音、IDE 不一致等问题。
+#
+# 配套：
+# - scripts/check-tabs.sh：扫仓库 tab 字符，CI 和 pre-commit 都会跑
+# - package.json 的 lint:tabs：调用上面脚本
+# - .github/workflows/release-mac.yml：在 tauri build 之前先 lint
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+# 项目里用 2 空格缩进的文件
+[*.{json,md,yml,yaml,ts,tsx,js,jsx,mjs,cjs,css,html,sh}]
+indent_size = 2
+
+# Rust 用 4 空格
+[*.rs]
+indent_size = 4
+
+# Makefile 必须用 tab（语法要求），单独豁免
+[Makefile]
+indent_style = tab
+
+# 已存在的 74 MiB 二进制和锁文件不能改
+[*.{lock,sig,minisig,tar.gz,dmg}]
+insert_final_newline = unset
+trim_trailing_whitespace = unset
