@@ -297,6 +297,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # 保存当前 HEAD，用于最后切回
+          ORIG_REF=$(git rev-parse HEAD)
+
+          # 构建过程中 cargo build 会修改 Cargo.lock，
+          # checkout 到其他分支前需要 stash 掉本地修改
+          git stash push --include-untracked -m "CI: temp stash before updater/latest checkout"
+
           # 把 updater/latest 分支顶端 checkout 出来（保留 update.json）
           git fetch origin updater/latest
           git checkout -B updater/latest origin/updater/latest
@@ -323,7 +330,8 @@ jobs:
           git add update.json
           if git diff --cached --quiet; then
             echo "::warning::nothing to commit (signature unchanged?)"
-            git checkout --detach FETCH_HEAD
+            git checkout -f "$ORIG_REF"
+            git stash pop || true
             exit 0
           fi
           git commit -m "chore: update updater signature for $GITHUB_REF_NAME"
@@ -333,7 +341,10 @@ jobs:
           echo "update.json signature committed to updater/latest"
 
           # 切回原来的 commit（构建产物还在磁盘上，后续 step 能访问）
-          git checkout --detach FETCH_HEAD
+          git checkout -f "$ORIG_REF"
+
+          # 恢复构建过程中产生的本地修改（如 Cargo.lock）
+          git stash pop || true
 
       - name: Upload release artifacts and publish release notes
         env:
