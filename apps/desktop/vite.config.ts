@@ -15,6 +15,14 @@ export default defineConfig(async () => ({
     },
   },
 
+  // 生产构建配置
+  build: {
+    minify: "esbuild",
+    sourcemap: false,
+    target: "es2020",
+    chunkSizeWarningLimit: 1000,
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

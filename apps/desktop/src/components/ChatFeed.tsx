@@ -182,7 +182,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
       )}
 
       <div className="flex-1 overflow-y-auto min-h-0" ref={containerRef}>
-        <div className="p-4 flex flex-col gap-4 max-w-[740px] mx-auto">
+        <div className="px-5 py-4 flex flex-col gap-4 max-w-[740px] mx-auto">
         {messages.map((msg, index) => {
           const isLastMessage = index === messages.length - 1;
           const messageLiked = likes[msg.id] === "like";
@@ -217,14 +217,14 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
           return (
             <div
               key={msg.id}
-              className={`group flex flex-col gap-1 w-full max-w-[85%] ${
+              className={`group flex flex-col gap-1 w-full max-w-full ${
                 msg.role === "user" ? "self-end items-end" : "self-start items-start"
               }`}
               data-msg-id={msg.id}
               data-role={msg.role}
             >
               {msg.role === "user" ? (
-                <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-[#f5f5f7] px-3.5 py-2.5 rounded-2xl rounded-tr-sm text-[13px] max-w-full whitespace-pre-wrap leading-relaxed shadow-sm">
+                <div className="bg-surface-secondary dark:bg-surface-secondary text-label-primary dark:text-label-primary px-3.5 py-2.5 rounded-2xl rounded-tr-sm text-[13px] max-w-full whitespace-pre-wrap leading-relaxed shadow-sm">
                   {msg.content}
                 </div>
               ) : msg.role === "tool" ? (
@@ -239,7 +239,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                 </div>
               ) : (
                 <>
-                  <div className="text-zinc-800 dark:text-[#f5f5f7] text-[13px] leading-relaxed w-full whitespace-pre-wrap pr-4">
+                  <div className="text-zinc-800 dark:text-[#f5f5f7] text-[13px] leading-relaxed w-full whitespace-pre-wrap">
                     {/* 有 sections 时按到达顺序渲染，否则降级为旧格式 */}
                     {msg.sections && msg.sections.length > 0 ? (
                       <>

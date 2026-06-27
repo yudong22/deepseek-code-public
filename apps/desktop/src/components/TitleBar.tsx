@@ -56,29 +56,29 @@ export default function TitleBar({
   onRestartToUpdate,
 }: TitleBarProps) {
   return (
-    <div className="flex h-[38px] bg-transparent border-b border-[#e3e3e3] dark:border-[#2c2c2e] select-none shrink-0 z-[1000]" data-tauri-drag-region>
+    <div className="flex h-[38px] bg-transparent border-b border-border-primary select-none shrink-0 z-[1000]" data-tauri-drag-region>
       {/* 左侧控制区 */}
       <div 
-        className={`w-[260px] bg-[#f6f6f6] dark:bg-[#1c1c1e] border-r border-[#e3e3e3] dark:border-[#2c2c2e] h-full shrink-0 transition-[border-right-color] duration-200 overflow-hidden ${
+        className={`w-[260px] bg-surface-active dark:bg-surface-primary border-r border-border-primary h-full shrink-0 transition-[border-right-color] duration-200 overflow-hidden ${
           isLeftSidebarOpen ? "" : "border-r-transparent"
         }`} 
         data-tauri-drag-region
       >
         <div className="flex items-start gap-1.5 h-full pl-[80px] pt-[2px]" data-tauri-drag-region>
           <button 
-            className="bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white" 
+            className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
             onClick={onToggleLeftSidebar}
           >
             <Icons.SidebarToggle />
           </button>
           <button 
-            className="bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white" 
+            className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
             onClick={() => onNavigate(-1)}
           >
             <Icons.ChevronLeft />
           </button>
           <button 
-            className="bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white" 
+            className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
             onClick={() => onNavigate(1)}
           >
             <Icons.ChevronRight />
@@ -89,14 +89,14 @@ export default function TitleBar({
       {/* 右侧区域 */}
       <div 
         className={`relative flex-1 flex items-center justify-between px-4 pt-[2px] h-full transition-[background-color] duration-200 ${
-          isLeftSidebarOpen ? "bg-white dark:bg-[#1c1c1e]" : "bg-[#f6f6f6] dark:bg-[#1c1c1e]"
+          isLeftSidebarOpen ? "bg-surface-primary" : "bg-surface-active dark:bg-surface-primary"
         }`} 
         data-tauri-drag-region
       >
         {/* 中间部分（聊天区上方） */}
         <div className="flex-1 h-full flex items-center justify-between min-w-0 pr-4" data-tauri-drag-region>
           <div className="flex items-center gap-1.5 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" data-tauri-drag-region>
-            <span className="text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
+            <span className="text-xs font-semibold text-label-primary dark:text-label-primary truncate">
               {activeSession ? activeSession.title : isHistoryPage ? "Conversation History" : isTasksPage ? "Scheduled Tasks" : "New Conversation"}
             </span>
             {planMode && (
@@ -115,7 +115,7 @@ export default function TitleBar({
         {/* 右侧面板标题栏（在右侧边栏打开时可见） */}
         {hasActiveSession && activeSession && isRightSidebarOpen && (
           <div 
-            className="h-full border-l border-[#e3e3e3] dark:border-[#2c2c2e] flex items-center justify-between pl-3 box-border" 
+            className="h-full border-l border-border-primary flex items-center justify-between pl-3 box-border" 
             data-tauri-drag-region 
             style={{ width: rightPanelWidth, minWidth: rightPanelWidth }}
           >
@@ -138,13 +138,13 @@ export default function TitleBar({
                 return (
                   <React.Fragment key={tab.id}>
                     {index > 0 && !isActive && activeTabId !== tabs[index - 1].id && (
-                      <div className="w-[1px] h-3 bg-[#e3e3e3] dark:bg-[#2c2c2e] self-center shrink-0" />
+                      <div className="w-[1px] h-3 bg-border-primary self-center shrink-0" />
                     )}
                     <div
-                      className={`flex items-center gap-1.5 px-3.5 h-7 text-xs border-r border-[#e3e3e3] dark:border-[#2c2c2e] border-t-2 border-t-transparent cursor-pointer bg-[#f6f6f6] dark:bg-[#1c1c1e] shrink-0 hover:bg-[#efeff4] dark:hover:bg-[#252528] hover:text-[#111] dark:hover:text-white ${
-                        isActive 
-                          ? "bg-white dark:bg-[#1c1c1e] text-[#111] dark:text-white border-t-brand-blue font-medium" 
-                          : "text-[#555] dark:text-[#a0a0a5]"
+                      className={`flex items-center gap-1.5 px-3.5 h-7 text-xs border-r border-border-primary border-t-2 border-t-transparent cursor-pointer bg-surface-active dark:bg-surface-primary shrink-0 hover:bg-surface-active dark:hover:bg-[#252528] hover:text-label-primary dark:hover:text-label-inverse ${
+                        isActive
+                          ? "bg-surface-primary text-label-primary dark:text-label-inverse border-t-brand-blue font-medium"
+                          : "text-label-secondary"
                       }`}
                       onClick={() => onTabClick(tab.id)}
                     >
@@ -153,7 +153,7 @@ export default function TitleBar({
                       {tab.id !== "overview" && (
                         <span
                           onClick={(e) => onTabClose(tab.id, e)}
-                          className="ml-1 p-0.5 text-[9px] text-[#8e8e93] hover:text-[#ff3b30] hover:bg-[#e5e5ea] dark:hover:bg-[#2c2c2e] rounded-full flex items-center justify-center w-3 h-3"
+                          className="ml-1 p-0.5 text-[9px] text-label-tertiary hover:text-red-500 hover:bg-surface-hover dark:hover:bg-surface-hover rounded-full flex items-center justify-center w-3 h-3"
                         >
                           ✕
                         </span>
@@ -175,7 +175,7 @@ export default function TitleBar({
                 </button>
               )}
               <button
-                className={`bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white ${
+                className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
                   isNightMode ? "text-brand-blue" : ""
                 }`}
                 onClick={onToggleNightMode}
@@ -195,14 +195,14 @@ export default function TitleBar({
                 )}
               </button>
               <button 
-                className="bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white" 
+                className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
                 onClick={onSettingsOpen}
               >
                 <Icons.Settings />
               </button>
               <button 
-                className={`bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white ${
-                  isRightSidebarOpen ? "bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#111] dark:text-white" : ""
+                className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
+                  isRightSidebarOpen ? "bg-surface-secondary dark:bg-surface-secondary text-label-primary dark:text-label-inverse" : ""
                 }`} 
                 onClick={() => onToggleRightSidebar()}
               >
@@ -224,7 +224,7 @@ export default function TitleBar({
               </button>
             )}
             <button
-              className={`bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white ${
+              className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
                 isNightMode ? "text-brand-blue" : ""
               }`}
               onClick={onToggleNightMode}
@@ -244,7 +244,7 @@ export default function TitleBar({
               )}
             </button>
             <button 
-              className="bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white" 
+              className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
               onClick={onToggleRightSidebar}
             >
               <Icons.RightSidebarToggle />
@@ -263,7 +263,7 @@ export default function TitleBar({
               </button>
             )}
             <button
-              className={`bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white ${
+              className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
                 isNightMode ? "text-brand-blue" : ""
               }`}
               onClick={onToggleNightMode}
@@ -283,7 +283,7 @@ export default function TitleBar({
               )}
             </button>
             <button 
-              className="bg-transparent border-0 cursor-pointer text-[#555] dark:text-[#a0a0a5] flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white" 
+              className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
               onClick={onSettingsOpen}
             >
               <Icons.Settings />
