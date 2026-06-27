@@ -3,7 +3,25 @@
 //! Mirrors the `.opencode/opencode.db` schema used by the TypeScript sidecar.
 
 use rusqlite::{Connection, params};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+/// Represents a scheduled task stored in scheduled_tasks table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduledTask {
+    pub id: String,
+    pub name: String,
+    pub prompt: String,
+    pub workspace_root: String,
+    #[serde(default)]
+    pub cron_expr: String, // v0.5.8 简化：用 interval_seconds，cron 留 v0.6.0
+    pub interval_seconds: i64,
+    pub next_run_at: String,
+    pub enabled: bool,
+    pub created_at: String,
+    pub last_run_at: Option<String>,
+    pub last_status: Option<String>,
+}
 
 /// Manages the SQLite session database at `.opencode/opencode.db`.
 pub struct SessionStore {
@@ -52,6 +70,20 @@ impl SessionStore {
                 type TEXT,
                 data TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                workspace_root TEXT NOT NULL,
+                cron_expr TEXT DEFAULT '',
+                interval_seconds INTEGER NOT NULL,
+                next_run_at TEXT NOT NULL,
+                enabled INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now')),
+                last_run_at TEXT,
+                last_status TEXT
             );"
         )?;
 
@@ -102,6 +134,122 @@ impl SessionStore {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok((0, 0, 0)),
             Err(e) => Err(e),
         }
+    }
+
+    // ── Scheduled Task CRUD ──
+
+    /// List all scheduled tasks, ordered by created_at.
+    pub fn list_scheduled_tasks(&self) -> Result<Vec<ScheduledTask>, rusqlite::Error> {
+        let conn = Connection::open(&self.db_path)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, prompt, workspace_root, cron_expr, interval_seconds,
+                    next_run_at, enabled, created_at, last_run_at, last_status
+             FROM scheduled_tasks ORDER BY created_at DESC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ScheduledTask {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                prompt: row.get(2)?,
+                workspace_root: row.get(3)?,
+                cron_expr: row.get(4)?,
+                interval_seconds: row.get(5)?,
+                next_run_at: row.get(6)?,
+                enabled: row.get::<_, i32>(7)? != 0,
+                created_at: row.get(8)?,
+                last_run_at: row.get(9)?,
+                last_status: row.get(10)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Create a scheduled task.
+    pub fn create_scheduled_task(&self, task: &ScheduledTask) -> Result<(), rusqlite::Error> {
+        let conn = Connection::open(&self.db_path)?;
+        conn.execute(
+            "INSERT INTO scheduled_tasks (id, name, prompt, workspace_root, cron_expr, interval_seconds, next_run_at, enabled, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
+            params![
+                task.id, task.name, task.prompt, task.workspace_root,
+                task.cron_expr, task.interval_seconds, task.next_run_at,
+                task.enabled as i32,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Update a scheduled task.
+    pub fn update_scheduled_task(&self, task: &ScheduledTask) -> Result<(), rusqlite::Error> {
+        let conn = Connection::open(&self.db_path)?;
+        conn.execute(
+            "UPDATE scheduled_tasks SET name=?1, prompt=?2, workspace_root=?3, cron_expr=?4,
+                    interval_seconds=?5, next_run_at=?6, enabled=?7, last_run_at=?8, last_status=?9
+             WHERE id=?10",
+            params![
+                task.name, task.prompt, task.workspace_root, task.cron_expr,
+                task.interval_seconds, task.next_run_at, task.enabled as i32,
+                task.last_run_at, task.last_status, task.id,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Delete a scheduled task by id.
+    pub fn delete_scheduled_task(&self, id: &str) -> Result<(), rusqlite::Error> {
+        let conn = Connection::open(&self.db_path)?;
+        conn.execute("DELETE FROM scheduled_tasks WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Toggle enabled status of a scheduled task.
+    pub fn toggle_scheduled_task(&self, id: &str, enabled: bool) -> Result<(), rusqlite::Error> {
+        let conn = Connection::open(&self.db_path)?;
+        conn.execute(
+            "UPDATE scheduled_tasks SET enabled = ?1 WHERE id = ?2",
+            params![enabled as i32, id],
+        )?;
+        Ok(())
+    }
+
+    /// Fetch tasks that are due to run (next_run_at <= now, enabled).
+    pub fn get_due_tasks(&self) -> Result<Vec<ScheduledTask>, rusqlite::Error> {
+        let conn = Connection::open(&self.db_path)?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, prompt, workspace_root, cron_expr, interval_seconds,
+                    next_run_at, enabled, created_at, last_run_at, last_status
+             FROM scheduled_tasks
+             WHERE enabled = 1 AND next_run_at <= datetime('now')
+             ORDER BY next_run_at ASC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ScheduledTask {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                prompt: row.get(2)?,
+                workspace_root: row.get(3)?,
+                cron_expr: row.get(4)?,
+                interval_seconds: row.get(5)?,
+                next_run_at: row.get(6)?,
+                enabled: row.get::<_, i32>(7)? != 0,
+                created_at: row.get(8)?,
+                last_run_at: row.get(9)?,
+                last_status: row.get(10)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Mark a task as completed and schedule its next run.
+    pub fn complete_scheduled_task(&self, id: &str, status: &str) -> Result<(), rusqlite::Error> {
+        let conn = Connection::open(&self.db_path)?;
+        conn.execute(
+            "UPDATE scheduled_tasks SET last_run_at = datetime('now'), last_status = ?1,
+                    next_run_at = datetime('now', '+' || (SELECT interval_seconds FROM scheduled_tasks WHERE id = ?2) || ' seconds')
+             WHERE id = ?2",
+            params![status, id],
+        )?;
+        Ok(())
     }
 
     /// Clean up plan mode temporary session data.

@@ -163,6 +163,29 @@ export interface IBridge {
    * 向正在运行的 agent 发送用户输入（回答 question 工具的问题）
    */
   respondToAgent(answer: string): Promise<void>;
+
+  /**
+   * v0.5.8 定时任务 CRUD
+   */
+  listScheduledTasks(): Promise<ScheduledTask[]>;
+  createScheduledTask(task: ScheduledTask): Promise<void>;
+  updateScheduledTask(task: ScheduledTask): Promise<void>;
+  deleteScheduledTask(id: string): Promise<void>;
+  toggleScheduledTask(id: string, enabled: boolean): Promise<void>;
+}
+
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  prompt: string;
+  workspaceRoot: string;
+  cronExpr: string;
+  intervalSeconds: number;
+  nextRunAt: string;
+  enabled: boolean;
+  createdAt: string;
+  lastRunAt: string | null;
+  lastStatus: string | null;
 }
 
 export interface AgentEvent {

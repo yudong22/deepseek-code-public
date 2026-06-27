@@ -1,4 +1,4 @@
-import { IBridge, UpdateResult, UpdateStatus, Session, Message, AgentEvent } from "./types";
+import { IBridge, UpdateResult, UpdateStatus, Session, Message, AgentEvent, ScheduledTask } from "./types";
 
 const LOCAL_STORAGE_KEY = "bridge_mock_sessions";
 const LOCAL_MESSAGES_KEY = "bridge_mock_messages";
@@ -269,6 +269,38 @@ export const mockBridge: IBridge = {
   <text x="200" y="190" text-anchor="middle" font-family="system-ui,sans-serif" font-size="11" fill="#aeaeb2">${label} · Mock 预览</text>
 </svg>`;
     return `data:image/svg+xml;base64,${btoa(svg)}`;
+  },
+
+  // ── v0.5.8 Scheduled Tasks (mock: localStorage) ──
+
+  async listScheduledTasks(): Promise<ScheduledTask[]> {
+    const raw = localStorage.getItem("scheduledTasks");
+    return raw ? JSON.parse(raw) : [];
+  },
+
+  async createScheduledTask(task: ScheduledTask): Promise<void> {
+    const tasks = await this.listScheduledTasks();
+    tasks.push(task);
+    localStorage.setItem("scheduledTasks", JSON.stringify(tasks));
+  },
+
+  async updateScheduledTask(task: ScheduledTask): Promise<void> {
+    const tasks = await this.listScheduledTasks();
+    const idx = tasks.findIndex((t) => t.id === task.id);
+    if (idx >= 0) tasks[idx] = task;
+    localStorage.setItem("scheduledTasks", JSON.stringify(tasks));
+  },
+
+  async deleteScheduledTask(id: string): Promise<void> {
+    const tasks = await this.listScheduledTasks();
+    localStorage.setItem("scheduledTasks", JSON.stringify(tasks.filter((t) => t.id !== id)));
+  },
+
+  async toggleScheduledTask(id: string, enabled: boolean): Promise<void> {
+    const tasks = await this.listScheduledTasks();
+    const task = tasks.find((t) => t.id === id);
+    if (task) task.enabled = enabled;
+    localStorage.setItem("scheduledTasks", JSON.stringify(tasks));
   },
 };
 

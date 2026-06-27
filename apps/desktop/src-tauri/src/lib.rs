@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::ipc::Channel;
+use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::mpsc;
 
@@ -14,6 +15,11 @@ struct AgentState {
     answer_tx: mpsc::UnboundedSender<String>,
     /// Watch sender for cancellation — sends to unblock question handler
     cancel_tx: tokio::sync::watch::Sender<bool>,
+}
+
+/// v0.5.8: API key state shared between commands and scheduler
+struct ApiKeyState {
+    key: std::sync::Mutex<String>,
 }
 
 // ─── AgentEvent Enum (Tauri-facing, unchanged from v0.4.x) ───
@@ -389,6 +395,139 @@ fn base64_encode(data: &[u8]) -> String {
     result
 }
 
+// ─── Scheduled Task Commands (v0.5.8) ─────────────
+
+/// Helper: resolve .opencode directory from AppHandle
+fn opencode_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let app_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("无法获取 app data dir: {}", e))?;
+    Ok(app_dir.join(".opencode"))
+}
+
+#[tauri::command]
+fn list_scheduled_tasks(app: tauri::AppHandle) -> Result<Vec<sidecar_agent::session::ScheduledTask>, String> {
+    let dir = opencode_dir(&app)?;
+    let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
+    store.list_scheduled_tasks().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn create_scheduled_task(app: tauri::AppHandle, task: sidecar_agent::session::ScheduledTask) -> Result<(), String> {
+    let dir = opencode_dir(&app)?;
+    let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
+    store.init_tables().map_err(|e| e.to_string())?;
+    store.create_scheduled_task(&task).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_scheduled_task(app: tauri::AppHandle, task: sidecar_agent::session::ScheduledTask) -> Result<(), String> {
+    let dir = opencode_dir(&app)?;
+    let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
+    store.update_scheduled_task(&task).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_scheduled_task(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let dir = opencode_dir(&app)?;
+    let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
+    store.delete_scheduled_task(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn toggle_scheduled_task(app: tauri::AppHandle, id: String, enabled: bool) -> Result<(), String> {
+    let dir = opencode_dir(&app)?;
+    let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
+    store.toggle_scheduled_task(&id, enabled).map_err(|e| e.to_string())
+}
+
+// ─── Scheduler (v0.5.8) ───────────────────────────
+
+fn start_scheduler(app: tauri::AppHandle) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            interval.tick().await;
+            let dir = match opencode_dir(&app) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
+            let tasks = match store.get_due_tasks() {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            for task in tasks {
+                if !task.enabled {
+                    continue;
+                }
+                let task_id = task.id.clone();
+                let task_prompt = task.prompt.clone();
+                let _ = store.complete_scheduled_task(&task_id, "running");
+
+                // Build agent config
+                let workspace_path = std::path::PathBuf::from(&task.workspace_root);
+                if !workspace_path.exists() {
+                    let _ = store.complete_scheduled_task(&task_id, "failed: workspace not found");
+                    continue;
+                }
+
+                // Read API key from managed state
+                let api_guard = app.state::<ApiKeyState>();
+                let api_key = api_guard.key.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                if api_key.is_empty() {
+                    let _ = store.complete_scheduled_task(&task_id, "failed: no API key");
+                    continue;
+                }
+
+                let config = sidecar_agent::agent::AgentConfig {
+                    api_key,
+                    model: "deepseek-chat".to_string(),
+                    workspace_path,
+                    session_id: format!("sched_{}", task_id),
+                    agent_mode: None,
+                    system_messages: vec![],
+                };
+
+                let tools = sidecar_agent::tools::default_registry();
+                let (event_tx, mut event_rx) =
+                    tokio::sync::mpsc::unbounded_channel::<sidecar_agent::protocol::AgentEvent>();
+                let (_answer_tx, answer_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+                let cancel_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let (_cancel_tx, cancel_rx) = tokio::sync::watch::channel(false);
+
+                let app_clone = app.clone();
+                let tid = task_id.clone();
+
+                tokio::spawn(async move {
+                    let mut agent = sidecar_agent::agent::Agent::new(
+                        config,
+                        event_tx,
+                        answer_rx,
+                        cancel_flag,
+                        cancel_rx,
+                        tools,
+                    );
+                    agent.run(&task_prompt).await
+                });
+
+                // Forward events to frontend via Tauri emit
+                while let Some(evt) = event_rx.recv().await {
+                    let payload = serde_json::to_value(&evt).unwrap_or_default();
+                    let _ = app_clone.emit("scheduled-task-event", serde_json::json!({
+                        "taskId": tid,
+                        "event": payload,
+                    }));
+                }
+
+                let status = "completed";
+                let _ = store.complete_scheduled_task(&task_id, status);
+            }
+        }
+    });
+}
+
 // ─── App Entry Point ─────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -399,6 +538,12 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::default().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(ApiKeyState { key: std::sync::Mutex::new(String::new()) })
+        .setup(|app| {
+            let handle = app.handle().clone();
+            start_scheduler(handle);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             run_agent_loop,
@@ -408,7 +553,12 @@ pub fn run() {
             list_workspace_files,
             read_text_file,
             resolve_file_path,
-            read_file_base64
+            read_file_base64,
+            list_scheduled_tasks,
+            create_scheduled_task,
+            update_scheduled_task,
+            delete_scheduled_task,
+            toggle_scheduled_task,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

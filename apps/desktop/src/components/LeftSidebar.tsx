@@ -10,6 +10,7 @@ interface LeftSidebarProps {
   onSelectSession: (id: string) => void;
   onSettingsOpen: () => void;
   onHistoryOpen: () => void;
+  onTasksOpen: () => void;
   showToast: (message: string) => void;
   projects: string[];
   activeWorkspacePath: string;
@@ -47,6 +48,7 @@ export default function LeftSidebar({
   onSelectSession,
   onSettingsOpen,
   onHistoryOpen,
+  onTasksOpen,
   showToast,
   projects,
   activeWorkspacePath,
@@ -139,7 +141,7 @@ export default function LeftSidebar({
           <Icons.History />
           Conversation History
         </div>
-        <div className="nav-item" onClick={() => showToast("待开发")}>
+        <div className="nav-item" onClick={onTasksOpen}>
           <Icons.Tasks />
           Scheduled Tasks
         </div>

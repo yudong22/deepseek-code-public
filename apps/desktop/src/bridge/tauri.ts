@@ -479,5 +479,27 @@ export const tauriBridge: IBridge = {
       return "";
     }
   },
+
+  // ── v0.5.8 Scheduled Tasks ──
+
+  async listScheduledTasks(): Promise<ScheduledTask[]> {
+    return await invoke<ScheduledTask[]>("list_scheduled_tasks");
+  },
+
+  async createScheduledTask(task: ScheduledTask): Promise<void> {
+    await invoke("create_scheduled_task", { task });
+  },
+
+  async updateScheduledTask(task: ScheduledTask): Promise<void> {
+    await invoke("update_scheduled_task", { task });
+  },
+
+  async deleteScheduledTask(id: string): Promise<void> {
+    await invoke("delete_scheduled_task", { id });
+  },
+
+  async toggleScheduledTask(id: string, enabled: boolean): Promise<void> {
+    await invoke("toggle_scheduled_task", { id, enabled });
+  },
 };
 
