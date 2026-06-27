@@ -1,7 +1,7 @@
 import React from "react";
 import { Streamdown } from "streamdown";
 import Mermaid from "@/components/Mermaid";
-import { FileCode } from "@/components/Icons";
+import { FileCode, Copy } from "@/components/Icons";
 
 const ReactIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3964fe" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 align-middle">
@@ -11,6 +11,41 @@ const ReactIcon = () => (
     <circle cx="12" cy="12" r="2" fill="#3964fe" />
   </svg>
 );
+
+// 带复制按钮的代码块包装组件
+function CodeBlock({ children }: { children: React.ReactNode }) {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    const pre = e.currentTarget.closest("pre");
+    if (pre) {
+      const text = pre.textContent || "";
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(() => {});
+    }
+  };
+
+  return (
+    <div className="group relative">
+      {children}
+      <button
+        onClick={handleCopy}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-zinc-200/80 dark:bg-zinc-700/80 hover:bg-zinc-300 dark:hover:bg-zinc-600 rounded-md p-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+        title="复制代码"
+      >
+        {copied ? (
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="2 7 5.5 10.5 12 3.5" />
+          </svg>
+        ) : (
+          <Copy />
+        )}
+      </button>
+    </div>
+  );
+}
 
 const components = {
   h1: ({ children }: any) => (
@@ -44,9 +79,11 @@ const components = {
     </h6>
   ),
   pre: ({ children }: any) => (
-    <pre className="my-2.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-[#f5f5f7] dark:bg-[#18181b] overflow-x-auto max-w-full">
-      {children}
-    </pre>
+    <CodeBlock>
+      <pre className="my-2.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-[#f5f5f7] dark:bg-[#18181b] overflow-x-auto max-w-full">
+        {children}
+      </pre>
+    </CodeBlock>
   ),
   ul: ({ children }: any) => (
     <ul className="my-2 pl-5 list-disc text-zinc-800 dark:text-zinc-200 text-[13px] leading-relaxed">

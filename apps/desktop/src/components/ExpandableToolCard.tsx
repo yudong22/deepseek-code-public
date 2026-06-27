@@ -55,7 +55,7 @@ export default function ExpandableToolCard({ tc, onCancel }: ExpandableToolCardP
           {isExecuting && (
             <span className="inline-flex items-center gap-1">
               <span className="text-[11px] opacity-60 italic animate-pulse">
-                executing…
+                executing {elapsed}…
               </span>
               {onCancel && (
                 <span

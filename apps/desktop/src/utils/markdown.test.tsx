@@ -7,12 +7,16 @@ describe("Markdown Renderer Wrapper", () => {
   test("should render Streamdown component with correct props", () => {
     const markdown = "Hello world";
     const element = renderMarkdown(markdown, true);
-    
+
     expect(element).toBeDefined();
-    expect(element.type).toBe(Streamdown);
-    expect(element.props.children).toBe(markdown);
-    expect(element.props.isAnimating).toBe(true);
-    expect(element.props.caret).toBe("block");
+    expect(element.type).toBe("div");
+    // Streamdown 被包裹在 div 中，检查子元素
+    const child = element.props.children;
+    expect(child).toBeDefined();
+    expect(child.type).toBe(Streamdown);
+    expect(child.props.children).toBe(markdown);
+    expect(child.props.isAnimating).toBe(true);
+    expect(child.props.caret).toBe("block");
   });
 });
 

@@ -5,6 +5,8 @@ import "./App.css";
 
 import Toast from "@/components/Toast";
 import SettingsModal from "@/components/SettingsModal";
+import ProjectSettingsModal from "@/components/ProjectSettingsModal";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import HistoryPage from "@/components/HistoryPage";
 import TasksPage from "@/components/TasksPage";
 import TitleBar from "@/components/TitleBar";
@@ -49,12 +51,17 @@ function MainDashboard() {
 
   // 夜间模式
   const [isNightMode, setIsNightMode] = useState(false);
+  const [messageFeedback, setMessageFeedback] = useState<Record<string, "like" | "dislike" | null>>({});
+  const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
+  const [projectSettingsTarget, setProjectSettingsTarget] = useState<string | null>(null);
+  const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
 
   // 右侧面板宽度（可拖动调整）
   const [rightPanelWidth, setRightPanelWidth] = useState(320);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [planMode, setPlanMode] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
   const activeStreamingSessionRef = useRef<string | null>(null);
   const aguiAdapterRef = useRef<AGUIEventAdapter | null>(null);
   /** Debounced 保存 streaming assistant message 的 timer */
@@ -76,7 +83,7 @@ function MainDashboard() {
   }, [messages]);
 
   // --- 1. Toast Notification Hook ---
-  const { toast, showToast } = useToast();
+  const { toasts, showToast, dismissToast } = useToast();
 
   // --- 2. Settings Management Hook ---
   const {
@@ -181,6 +188,38 @@ function MainDashboard() {
     setSavedWorkspacePath,
   });
 
+  // 从项目设置页触发的删除项目（含二次确认弹框）
+  const handleDeleteProjectFromSettings = async (projectPath: string) => {
+    try {
+      const parts = projectPath.split(/[/\\]/);
+      const name = parts[parts.length - 1] || projectPath;
+      const projectSessions = sessions.filter(s => s.projectName === name);
+      const confirmed = window.confirm(
+        `确定要删除项目「${name}」吗？\n\n将同时删除该项目的 ${projectSessions.length} 个会话记录，此操作不可撤销。`
+      );
+      if (!confirmed) return;
+      await handleRemoveProject(projectPath);
+      // 删除该项目的所有会话
+      for (const s of projectSessions) {
+        await bridge.deleteSession(s.id);
+      }
+      setProjectSettingsTarget(null);
+      setIsProjectSettingsOpen(false);
+      await loadSessions();
+      showToast(`已删除项目「${name}」及其 ${projectSessions.length} 个会话`);
+    } catch (err) {
+      console.error("Failed to delete project:", err);
+      showToast("删除项目失败");
+    }
+  };
+
+  // 计算待删除项目的会话数
+  const getProjectSessionCount = (projectPath: string): number => {
+    const parts = projectPath.split(/[/\\]/);
+    const name = parts[parts.length - 1] || projectPath;
+    return sessions.filter(s => s.projectName === name).length;
+  };
+
   // --- 4. Right Panel Tabs Hook ---
   const {
     tabs,
@@ -224,6 +263,18 @@ function MainDashboard() {
         if (storedWorkspace) {
           setWorkspacePath(storedWorkspace);
           setSavedWorkspacePath(storedWorkspace);
+        }
+        const storedNightMode = await bridge.getSetting("night_mode");
+        if (storedNightMode === "1") {
+          setIsNightMode(true);
+        }
+        const storedFeedback = await bridge.getSetting("message_feedback");
+        if (storedFeedback) {
+          try {
+            setMessageFeedback(JSON.parse(storedFeedback));
+          } catch (e) {
+            console.error("Failed to parse message_feedback:", e);
+          }
         }
         const storedProjects = await bridge.getSetting("projects_list");
         if (storedProjects) {
@@ -367,8 +418,10 @@ function MainDashboard() {
     } else if (normalized === "/new") {
       navigate("/");
     } else if (normalized === "/themes") {
-      setIsNightMode((v) => !v);
-      showToast(isNightMode ? "已切换为日间模式" : "已切换为夜间模式");
+      const newMode = !isNightMode;
+      setIsNightMode(newMode);
+      bridge.saveSetting("night_mode", newMode ? "1" : "0");
+      showToast(newMode ? "已切换为夜间模式" : "已切换为日间模式");
     } else if (normalized === "/settings") {
       setIsSettingsOpen(true);
     } else if (normalized === "/models") {
@@ -553,6 +606,12 @@ function MainDashboard() {
     await bridge.cancelAgent();
   };
 
+  // --- 消息反馈持久化 ---
+  const handleFeedbackSave = async (feedback: Record<string, "like" | "dislike" | null>) => {
+    setMessageFeedback(feedback);
+    bridge.saveSetting("message_feedback", JSON.stringify(feedback)).catch(() => {});
+  };
+
   // --- 发送消息并触发 Agent 循环 ---
   async function handleSend() {
     const userText = inputText.trim();
@@ -613,6 +672,7 @@ function MainDashboard() {
     // 3. 触发 Agent 循环
     try {
       setIsGenerating(true);
+      setActiveStep(0);
       activeStreamingSessionRef.current = currentSessionId;
       const historyMsgs = await bridge.getMessages(currentSessionId);
       const planSystemPrompt = planMode ? [
@@ -724,7 +784,12 @@ function MainDashboard() {
 
       const currentAgentMode = planMode ? "plan" : undefined;
       // 初始化 AG-UI 适配器
-      aguiAdapterRef.current = new AGUIEventAdapter();
+      aguiAdapterRef.current = new AGUIEventAdapter({
+        onMessagesSnapshot: (snapshot) => {
+          // 将 AG-UI 快照持久化到 settings，为 v0.6.0 集成做准备
+          bridge.saveSetting("last_agui_snapshot", JSON.stringify(snapshot)).catch(() => {});
+        },
+      });
       console.log("[AG-UI] Adapter initialized:", {
         threadId: aguiAdapterRef.current.getThreadId(),
         runId: aguiAdapterRef.current.getRunId(),
@@ -915,6 +980,7 @@ function MainDashboard() {
           // Step 生命周期
           else if (event.type === "StepStarted") {
             currentStep += 1;
+            setActiveStep(currentStep + 1);
           } else if (event.type === "StepEnded") {
           }
           // 错误事件
@@ -1028,6 +1094,20 @@ function MainDashboard() {
             if (currentSession) {
               currentSession.lastMessage = currentContent.substring(0, 30) + (currentContent.length > 30 ? "..." : "");
               currentSession.updatedAt = new Date().toISOString();
+              // 自动生成会话标题：若当前标题为默认值或仅为用户输入截断，则用助手回复的第一句替换
+              const isDefaultTitle = currentSession.title === "New Conversation" || currentSession.title.endsWith("...");
+              if (isDefaultTitle && currentContent.trim()) {
+                // 提取助手回复的第一行有意义的文字（跳过代码块、空行）
+                const lines = currentContent.split("\n");
+                const firstMeaningfulLine = lines.find(l => {
+                  const trimmed = l.trim();
+                  return trimmed && !trimmed.startsWith("```") && !trimmed.startsWith("---") && trimmed.length > 3;
+                });
+                if (firstMeaningfulLine) {
+                  const cleanTitle = firstMeaningfulLine.replace(/^[*#>\s]+/, "").trim();
+                  currentSession.title = cleanTitle.length > 50 ? cleanTitle.substring(0, 50) + "…" : cleanTitle;
+                }
+              }
               await bridge.saveSession(currentSession);
             }
 
@@ -1049,24 +1129,43 @@ function MainDashboard() {
 
   return (
     <div className={`flex flex-col h-screen w-screen overflow-hidden bg-white dark:bg-[#1c1c1e] text-zinc-900 dark:text-zinc-100 transition-[background-color] duration-200 ${isNightMode ? "night-mode" : ""}`}>
-      <Toast visible={toast.visible} message={toast.message} />
+      <Toast toasts={toasts} onDismiss={dismissToast} />
 
       <SettingsModal
         isOpen={isSettingsOpen}
         apiKey={apiKey}
         savedApiKey={savedApiKey}
-        workspacePath={workspacePath}
         onClose={() => setIsSettingsOpen(false)}
         onApiKeyChange={setApiKey}
-        onWorkspaceChange={setWorkspacePath}
         onSave={handleSaveApiKey}
         onClear={handleClearApiKey}
-        onClearHistory={handleClearHistory}
+        onClearHistory={() => setShowClearHistoryConfirm(true)}
         updateStatus={updateStatus}
         isChecking={isCheckingUpdate}
         onCheckUpdates={() => handleCheckUpdates(false)}
       />
 
+      <ProjectSettingsModal
+        isOpen={isProjectSettingsOpen}
+        projectPath={projectSettingsTarget || ""}
+        projectName={projectSettingsTarget ? (projectSettingsTarget.split(/[/\\]/).pop() || "") : ""}
+        workspacePath={workspacePath}
+        sessionCount={projectSettingsTarget ? getProjectSessionCount(projectSettingsTarget) : 0}
+        onClose={() => { setIsProjectSettingsOpen(false); setProjectSettingsTarget(null); }}
+        onWorkspaceChange={setWorkspacePath}
+        onDeleteProject={handleDeleteProjectFromSettings}
+      />
+
+      {/* 清除历史确认弹框 */}
+      <ConfirmDialog
+        open={showClearHistoryConfirm}
+        title="确认清除历史"
+        message="确定要清除所有会话记录吗？此操作不可撤销。"
+        confirmLabel="清除"
+        danger
+        onConfirm={() => { setShowClearHistoryConfirm(false); handleClearHistory(); }}
+        onCancel={() => setShowClearHistoryConfirm(false)}
+      />
 
       <TitleBar
         isLeftSidebarOpen={isLeftSidebarOpen}
@@ -1085,7 +1184,7 @@ function MainDashboard() {
         onTabClick={setActiveTabId}
         onTabClose={closeTab}
         isNightMode={isNightMode}
-        onToggleNightMode={() => setIsNightMode((v) => !v)}
+        onToggleNightMode={() => { const nm = !isNightMode; setIsNightMode(nm); bridge.saveSetting("night_mode", nm ? "1" : "0"); }}
         rightPanelWidth={rightPanelWidth}
         isUpdateReady={isUpdateReady}
         onRestartToUpdate={handleRestartToUpdate}
@@ -1107,7 +1206,7 @@ function MainDashboard() {
           collapsedProjects={collapsedProjects}
           onToggleProjectCollapse={handleToggleProjectCollapse}
           onAddProject={handleAddProject}
-          onRemoveProject={handleRemoveProject}
+          onOpenSettingsForProject={(projectPath) => { setProjectSettingsTarget(projectPath); setIsProjectSettingsOpen(true); }}
           onSelectProject={handleSelectProject}
         />
 
@@ -1132,10 +1231,13 @@ function MainDashboard() {
                 planMode={planMode}
                 onOpenTab={openTab}
                 isGenerating={isGenerating}
+                activeStep={activeStep}
                 onCancelAgent={handleCancel}
                 readFile={(path) => bridge.readFile(path)}
                 getFileUrl={(path) => bridge.getFileUrl(path)}
                 showToast={showToast}
+                initialFeedback={messageFeedback}
+                onFeedbackSave={handleFeedbackSave}
                 onAnswerQuestion={async (answer) => {
                   // 将用户的回答作为新消息追加到对话中
                   const userMsg: Message = {
@@ -1168,6 +1270,7 @@ function MainDashboard() {
                 isModelDropdownOpen={isModelDropdownOpen}
                 isGenerating={isGenerating}
                 hasPendingQuestion={!!pendingQuestion}
+                planMode={planMode}
                 onInputChange={setInputText}
                 onSend={handleSend}
                 onCancel={handleCancel}

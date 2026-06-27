@@ -1,21 +1,68 @@
+import type { ToastItem, ToastType } from "@/hooks/useToast";
+
 interface ToastProps {
-  visible: boolean;
-  message: string;
-  onClick?: () => void;
+  toasts: ToastItem[];
+  onDismiss: (id: string) => void;
 }
 
-export default function Toast({ visible, message, onClick }: ToastProps) {
-  if (!visible) return null;
+const typeStyles: Record<ToastType, { bg: string; border: string; icon: string }> = {
+  info: {
+    bg: "bg-white dark:bg-[#2c2c2e]",
+    border: "border-zinc-200 dark:border-zinc-700",
+    icon: "ℹ️",
+  },
+  success: {
+    bg: "bg-emerald-50 dark:bg-emerald-900/30",
+    border: "border-emerald-200 dark:border-emerald-800",
+    icon: "✅",
+  },
+  error: {
+    bg: "bg-red-50 dark:bg-red-900/30",
+    border: "border-red-200 dark:border-red-800",
+    icon: "❌",
+  },
+  warning: {
+    bg: "bg-amber-50 dark:bg-amber-900/30",
+    border: "border-amber-200 dark:border-amber-800",
+    icon: "⚠️",
+  },
+};
+
+export default function Toast({ toasts, onDismiss }: ToastProps) {
+  if (toasts.length === 0) return null;
+
   return (
-    <div className="toast-container">
-      <div
-        className="toast-bubble"
-        onClick={onClick}
-        style={onClick ? { cursor: "pointer" } : undefined}
-      >
-        <span style={{ fontSize: "14px" }}>⚠️</span>
-        <span>{message}</span>
-      </div>
+    <div className="fixed bottom-4 right-4 flex flex-col-reverse gap-2 z-[9999] pointer-events-none">
+      {toasts.map((toast) => {
+        const styles = typeStyles[toast.type];
+        return (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-lg text-sm max-w-[380px] animate-[toast-in_0.2s_ease-out] ${styles.bg} ${styles.border}`}
+            role="alert"
+          >
+            <span className="text-[15px] leading-none shrink-0 mt-px">{styles.icon}</span>
+            <span className="text-zinc-800 dark:text-zinc-200 leading-snug flex-1">{toast.message}</span>
+            {toast.action && (
+              <button
+                onClick={toast.action.onClick}
+                className="text-xs font-medium text-brand-blue dark:text-deepseek-400 hover:underline shrink-0"
+              >
+                {toast.action.label}
+              </button>
+            )}
+            <button
+              onClick={() => onDismiss(toast.id)}
+              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 shrink-0 ml-1"
+              aria-label="关闭通知"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M3 3l8 8M11 3l-8 8" />
+              </svg>
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

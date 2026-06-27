@@ -16,15 +16,22 @@ interface ChatFeedProps {
   showToast?: (message: string) => void;
   /** question 工具回答后的回调，参数为用户输入的答案 */
   onAnswerQuestion?: (answer: string) => void;
+  /** 当前 Agent 步骤计数（仅在运行中大于 0） */
+  activeStep?: number;
+  /** 消息反馈持久化回调 */
+  onFeedbackSave?: (allFeedback: Record<string, "like" | "dislike" | null>) => void;
+  /** 已持久化的消息反馈 */
+  initialFeedback?: Record<string, "like" | "dislike" | null>;
 }
 
 interface ThinkingBlockProps {
   content: string;
   isGenerating: boolean;
   isLastMessage: boolean;
+  elapsed?: string;
 }
 
-function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockProps) {
+function ThinkingBlock({ content, isGenerating, isLastMessage, elapsed }: ThinkingBlockProps) {
   const isStreaming = isGenerating && isLastMessage;
   const [expanded, setExpanded] = useState(true);
 
@@ -74,8 +81,8 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
                 : lines[0]
               : "Thinking…"}
           </span>
-          <span className="text-[10px] text-zinc-400 ml-auto select-none">
-            {lines.length} lines · click to expand
+          <span className="text-[10px] text-zinc-400 ml-auto select-none shrink-0">
+            {lines.length} lines{elapsed ? ` · ${elapsed}s` : ""} · click to expand
           </span>
         </div>
       )}
@@ -83,12 +90,12 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
   );
 }
 
-export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast, onAnswerQuestion }: ChatFeedProps) {
+export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast, onAnswerQuestion, activeStep, onFeedbackSave, initialFeedback }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserAtBottomRef = useRef(true);
   const [stickyUserMsg, setStickyUserMsg] = useState<string | null>(null);
-  const [likes, setLikes] = useState<Record<string, "like" | "dislike" | null>>({});
+  const [likes, setLikes] = useState<Record<string, "like" | "dislike" | null>>(initialFeedback || {});
 
   // 滚动监听：跟踪用户是否在底部（主动向上滚动即取消自动下滚）
   useEffect(() => {
@@ -166,6 +173,14 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
         </div>
       )}
 
+      {/* 步骤进度指示器 */}
+      {isGenerating && activeStep && activeStep > 0 && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-brand-blue/5 border-b border-brand-blue/10 text-brand-blue dark:text-deepseek-400 text-xs font-medium select-none shrink-0">
+          <span className="text-sm">🔄</span>
+          <span>第 {activeStep} 步 — Agent 正在工作中…</span>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto min-h-0" ref={containerRef}>
         <div className="p-4 flex flex-col gap-4 max-w-[740px] mx-auto">
         {messages.map((msg, index) => {
@@ -174,17 +189,21 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
           const messageDisliked = likes[msg.id] === "dislike";
 
           const handleLike = () => {
-            setLikes((prev) => ({
-              ...prev,
-              [msg.id]: prev[msg.id] === "like" ? null : "like",
-            }));
+            setLikes((prev) => {
+              const nextVal = prev[msg.id] === "like" ? null : "like" as const;
+              const updated: Record<string, "like" | "dislike" | null> = { ...prev, [msg.id]: nextVal };
+              onFeedbackSave?.(updated);
+              return updated;
+            });
           };
 
           const handleDislike = () => {
-            setLikes((prev) => ({
-              ...prev,
-              [msg.id]: prev[msg.id] === "dislike" ? null : "dislike",
-            }));
+            setLikes((prev) => {
+              const nextVal = prev[msg.id] === "dislike" ? null : "dislike" as const;
+              const updated: Record<string, "like" | "dislike" | null> = { ...prev, [msg.id]: nextVal };
+              onFeedbackSave?.(updated);
+              return updated;
+            });
           };
 
           const handleCopy = () => {
@@ -235,6 +254,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                                 content={finalContent}
                                 isGenerating={!!isGenerating}
                                 isLastMessage={isLastMessage && si === msg.sections!.length - 1}
+                                elapsed={tElapsed}
                               />
                             );
                           }
@@ -315,6 +335,28 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                       </>
                     )}
                   </div>
+
+                  {/* 文件变更摘要卡片 */}
+                  {msg.role === "assistant" && msg.filesChanged && msg.filesChanged.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400 mb-1.5">
+                        <Icons.FileCode />
+                        <span>{msg.filesChanged.length} 个文件已更改</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {msg.filesChanged.map((f: { name: string; path: string }, i: number) => (
+                          <button
+                            key={i}
+                            className="text-[11px] font-mono text-brand-blue dark:text-deepseek-400 bg-brand-blue/5 dark:bg-deepseek-400/10 hover:bg-brand-blue/10 dark:hover:bg-deepseek-400/20 px-2 py-0.5 rounded-sm border border-brand-blue/10 dark:border-deepseek-400/20 cursor-pointer transition-colors"
+                            onClick={() => onOpenTab({ id: `file-${f.path}-${i}`, title: f.name, type: "tool_result", content: "" })}
+                            title={`打开 ${f.path}`}
+                          >
+                            {f.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-1.5 mt-1 text-[11px] text-[#8e8e93] h-5 w-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
                     {msg.role === "assistant" && msg.elapsed && (

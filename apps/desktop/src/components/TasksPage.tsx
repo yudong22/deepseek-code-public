@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { bridge, ScheduledTask } from "@/bridge";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 interface TasksPageProps {
   projects: string[];
@@ -34,6 +35,9 @@ export default function TasksPage({
   const [dailyTime, setDailyTime] = useState("9:00 AM");
   const [taskPrompt, setTaskPrompt] = useState("");
 
+  // 删除确认弹框
+  const [deleteTarget, setDeleteTarget] = useState<ScheduledTask | null>(null);
+
   const projectDropdownRef = useRef<HTMLDivElement>(null);
 
   // Load tasks on mount
@@ -42,7 +46,8 @@ export default function TasksPage({
       const list = await bridge.listScheduledTasks();
       setTasks(list);
     } catch (e: any) {
-      showToast(`加载任务列表失败: ${e.message}`);
+      const msg = typeof e === "string" ? e : (e?.message || String(e));
+      showToast(`加载任务列表失败: ${msg}`);
     }
   };
 
@@ -82,20 +87,29 @@ export default function TasksPage({
       await loadTasks();
       showToast(t.enabled ? "任务已禁用" : "任务已启用");
     } catch (e: any) {
-      showToast(`操作失败: ${e.message}`);
+      const msg = typeof e === "string" ? e : (e?.message || String(e));
+      showToast(`操作失败: ${msg}`);
     }
   };
 
   // Handle delete task
   const handleDelete = async (e: React.MouseEvent, t: ScheduledTask) => {
     e.stopPropagation();
-    if (!confirm(`确定删除任务「${t.name}」吗？`)) return;
+    setDeleteTarget(t);
+  };
+
+  // 执行删除（确认弹框确认后调用）
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const t = deleteTarget;
+    setDeleteTarget(null);
     try {
       await bridge.deleteScheduledTask(t.id);
       await loadTasks();
       showToast("任务已删除");
     } catch (e: any) {
-      showToast(`删除失败: ${e.message}`);
+      const msg = typeof e === "string" ? e : (e?.message || String(e));
+      showToast(`删除失败: ${msg}`);
     }
   };
 
@@ -175,7 +189,8 @@ export default function TasksPage({
       setDailyTime("9:00 AM");
       await loadTasks();
     } catch (e: any) {
-      showToast(`创建失败: ${e.message}`);
+      const msg = typeof e === "string" ? e : (e?.message || String(e));
+      showToast(`创建失败: ${msg}`);
     }
   };
 
@@ -297,6 +312,17 @@ export default function TasksPage({
           )}
         </div>
       </div>
+
+      {/* 删除确认弹框 */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="确认删除"
+        message={`确定要删除定时任务「${deleteTarget?.name || ""}」吗？此操作不可撤销。`}
+        confirmLabel="删除"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       {/* New Scheduled Task Modal Overlay */}
       {showNewTaskModal && (

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 /// Represents a scheduled task stored in scheduled_tasks table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ScheduledTask {
     pub id: String,
     pub name: String,

@@ -6,6 +6,7 @@ interface ChatInputProps {
   isModelDropdownOpen: boolean;
   isGenerating?: boolean;
   hasPendingQuestion?: boolean;
+  planMode?: boolean;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onCancel?: () => void;
@@ -21,7 +22,7 @@ interface ChatInputProps {
 
 export default function ChatInput({ hasPendingQuestion, ...props }: ChatInputProps) {
   return (
-    <div className="px-4 pb-4 pt-3 bg-white dark:bg-[#1c1c1e] border-t border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0">
+    <div className={`px-4 pb-4 pt-3 shrink-0 border-t transition-colors duration-200 ${props.planMode ? "bg-amber-50/30 dark:bg-amber-900/10 border-amber-200/60 dark:border-amber-800/30" : "bg-white dark:bg-[#1c1c1e] border-[#e3e3e3] dark:border-[#2c2c2e]"}`}>
       <div className="max-w-[740px] mx-auto">
         <ChatInputCard hasPendingQuestion={hasPendingQuestion} {...props} />
       </div>

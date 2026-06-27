@@ -1,6 +1,10 @@
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Session } from "@/bridge";
 import * as Icons from "@/components/Icons";
+
+const MIN_WIDTH = 180;
+const MAX_WIDTH = 400;
+const DEFAULT_WIDTH = 260;
 
 interface LeftSidebarProps {
   isOpen: boolean;
@@ -17,7 +21,7 @@ interface LeftSidebarProps {
   collapsedProjects: Record<string, boolean>;
   onToggleProjectCollapse: (projectName: string) => void;
   onAddProject: () => void;
-  onRemoveProject: (projectPath: string) => void;
+  onOpenSettingsForProject: (projectPath: string) => void;
   onSelectProject: (projectPath: string) => void;
 }
 
@@ -55,10 +59,50 @@ export default function LeftSidebar({
   collapsedProjects,
   onToggleProjectCollapse,
   onAddProject,
-  onRemoveProject,
+  onOpenSettingsForProject,
   onSelectProject,
 }: LeftSidebarProps) {
   const [expandedProjectsAll, setExpandedProjectsAll] = useState<Record<string, boolean>>({});
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
+
+  // --- 可拖拽调整宽度 ---
+  const isDragging = useRef(false);
+  const startX = useRef(0);
+  const startWidth = useRef(DEFAULT_WIDTH);
+
+  const handleResizeMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isOpen) return;
+      isDragging.current = true;
+      startX.current = e.clientX;
+      startWidth.current = sidebarWidth;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    },
+    [isOpen, sidebarWidth]
+  );
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = e.clientX - startX.current; // 向右拖 = 变宽
+      const newW = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth.current + delta));
+      setSidebarWidth(newW);
+    };
+    const handleMouseUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
 
   const toggleExpandAll = (projectName: string) => {
     setExpandedProjectsAll(prev => ({
@@ -129,9 +173,10 @@ export default function LeftSidebar({
   };
 
   return (
-    <aside className={`bg-[#f6f6f6] dark:bg-[#1c1c1e] border-r border-[#e3e3e3] dark:border-[#2c2c2e] flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden ${
-      isOpen ? "w-[260px]" : "w-0 border-r-transparent"
-    }`}>
+    <aside
+      className={`bg-[#f6f6f6] dark:bg-[#1c1c1e] border-r border-[#e3e3e3] dark:border-[#2c2c2e] flex flex-col h-full shrink-0 overflow-hidden relative ${isOpen ? "" : "w-0 border-r-transparent"}`}
+      style={isOpen ? { width: sidebarWidth, transition: "width 200ms" } : undefined}
+    >
       {/* 新建对话按钮 */}
       <div className="p-4 shrink-0">
         <button 
@@ -202,14 +247,14 @@ export default function LeftSidebar({
                     </span>
                   </div>
                   <button
-                    className="background-none border-none text-[#ff3b30] cursor-pointer text-xs mr-4 flex items-center p-1 rounded-sm hover:bg-red-500/10"
+                    className="background-none border-none text-zinc-400 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer text-xs mr-4 flex items-center p-1 rounded-sm hover:bg-zinc-200/50 dark:hover:bg-zinc-700/50 transition-colors"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onRemoveProject(projectPath);
+                      onOpenSettingsForProject(projectPath);
                     }}
-                    title="移除项目"
+                    title="项目设置"
                   >
-                    ✕
+                    <Icons.Settings />
                   </button>
                 </div>
                 {!isCollapsed && renderProjectSessions(name)}
@@ -277,14 +322,21 @@ export default function LeftSidebar({
       </div>
 
       <div className="p-2 border-t border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0">
-        <div 
-          className="flex items-center gap-3 px-3 h-8 text-[13px] text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors" 
+        <div
+          className="flex items-center gap-3 px-3 h-8 text-[13px] text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors"
           onClick={onSettingsOpen}
         >
           <Icons.Settings />
           Settings
         </div>
       </div>
+      {/* 拖拽调整宽度的把手 — 仅在侧边栏打开时显示 */}
+      {isOpen && (
+        <div
+          className="absolute top-0 bottom-0 right-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 transition-colors"
+          onMouseDown={handleResizeMouseDown}
+        />
+      )}
     </aside>
   );
 }

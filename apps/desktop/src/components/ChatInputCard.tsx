@@ -9,6 +9,7 @@ interface ChatInputCardProps {
   isModelDropdownOpen: boolean;
   isGenerating?: boolean;
   hasPendingQuestion?: boolean;
+  planMode?: boolean;
   onInputChange: (value: string) => void;
   onSend: () => void;
   onCancel?: () => void;
@@ -28,6 +29,7 @@ export default function ChatInputCard({
   isModelDropdownOpen,
   isGenerating,
   hasPendingQuestion,
+  planMode,
   onInputChange,
   onSend,
   onCancel,
@@ -275,7 +277,7 @@ export default function ChatInputCard({
         onChange={(e) => onInputChange(e.target.value)}
         onKeyDown={handleKeyDown}
         onClick={handleTextareaClick}
-        placeholder="Ask anything, @ to mention, / for actions"
+        placeholder={planMode ? "规划模式下提问，Agent 仅分析和规划…" : "Ask anything, @ to mention, / for actions"}
         rows={1}
       />
 
@@ -338,8 +340,9 @@ export default function ChatInputCard({
 
         <div className="flex items-center gap-2">
           <button
-            className="bg-transparent border-0 cursor-pointer text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-md transition-colors flex items-center justify-center"
-            title="Voice Input"
+            className="bg-transparent border-0 text-zinc-400/30 dark:text-zinc-600/30 p-1 rounded-md flex items-center justify-center opacity-30 cursor-not-allowed"
+            title="语音输入即将推出"
+            disabled
           >
             <Icons.Mic />
           </button>
