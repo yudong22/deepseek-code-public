@@ -450,7 +450,7 @@ fn ensure_scheduler_started(app: tauri::AppHandle) {
     use std::sync::OnceLock;
     static STARTED: OnceLock<()> = OnceLock::new();
     STARTED.get_or_init(|| {
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
             // Delay first tick to let Tauri fully initialize
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
@@ -508,7 +508,7 @@ fn ensure_scheduler_started(app: tauri::AppHandle) {
                 let app_clone = app.clone();
                 let tid = task_id.clone();
 
-                tokio::spawn(async move {
+                tauri::async_runtime::spawn(async move {
                     let mut agent = sidecar_agent::agent::Agent::new(
                         config,
                         event_tx,
