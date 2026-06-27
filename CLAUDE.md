@@ -224,7 +224,7 @@ The `openhands run <task>` command implements a full self-healing pipeline:
 - **CLI 单元测试**: 新增 19 个测试（本地记忆 CRUD、plan API mock、参数解析、多供应商配置）
 - **`--from-plan`**: `openhands run` 支持读取 `.plan.md` 作为额外 system context
 - **`--provider` / `--model`**: CLI 参数运行时覆盖默认供应商和模型
-- **Sidecar 超时延长**: 默认从 120s 改为 180s（`SIDECAR_TIMEOUT_MS`）
+- **Sidecar 超时**: 默认 300s（`SIDECAR_TIMEOUT_MS`，v0.5.7 修正错误信息）
 
 关键文件:
 - `packages/client-cli/src/cli.ts` — 主入口：login / doctor / plan（v0.4.0 新增）/ run / memory sync，含离线模式检测、多供应商配置、本地记忆库

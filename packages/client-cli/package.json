@@ -7,6 +7,6 @@
     "openhands": "./src/cli.ts"
   },
   "scripts": {
-    "test": "bun test src/openhands.test.ts src/cli.test.ts"
+    "test": "bun test src/openhands.test.ts src/cli.test.ts src/protocol.test.ts src/ui-utils.test.ts"
   }
 }

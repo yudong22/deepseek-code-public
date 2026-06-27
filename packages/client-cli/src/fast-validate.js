@@ -38,8 +38,8 @@ export async function fastValidate({ rootDir, sandboxDir } = {}) {
   
   const pipeline = config.verification_pipeline;
   if (!pipeline || Object.keys(pipeline).length === 0) {
-    console.log('ℹ️ [fast-validate] 未在 config.yaml 中定义 validation pipeline，直接跳过。');
-    return;
+    // fail-fast：静默跳过会让自愈逻辑根本跑不起来，用户以为跑通了其实没验证
+    throw new Error('未在 .agents/config.yaml 中定义 verification_pipeline，无法执行极速验证。请先配置验证流水线。');
   }
   
   // 1. 获取 Git 状态以找出修改过的文件

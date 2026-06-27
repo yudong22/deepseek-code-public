@@ -320,14 +320,14 @@ describe("fastValidate - additional edge cases", () => {
     );
   });
 
-  test("should parse and skip verification_pipeline when not defined", async () => {
+  test("should throw when verification_pipeline not defined (fail-fast)", async () => {
     const { fastValidate } = await import("./fast-validate.js");
     // YAML with no verification_pipeline
     fs.writeFileSync(path.join(testRoot, ".agents/config.yaml"), "version: 1\nproject_id: test");
-    // Should not throw, just log that pipeline is not defined
-    await fastValidate({ rootDir: testRoot, sandboxDir: testRoot });
-    // If we got here without throwing, the test passes
-    expect(true).toBe(true);
+    // v0.5.7+: fail-fast，静默跳过会让自愈逻辑根本跑不起来
+    await expect(fastValidate({ rootDir: testRoot, sandboxDir: testRoot })).rejects.toThrow(
+      "verification_pipeline"
+    );
   });
 
   test("should parse glob pattern from config", async () => {

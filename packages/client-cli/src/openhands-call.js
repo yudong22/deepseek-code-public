@@ -198,7 +198,7 @@ ${errorLog}
         `OpenCode 侧车进程超时 (${SIDECAR_TIMEOUT_MS}ms，${elapsed}s 无事件)，已强制终止。` +
         `\n  最后事件: ${lastEventType}` +
         `\n  模型: ${model}` +
-        `\n  提示: 可通过环境变量 SIDECAR_TIMEOUT_MS 调整超时时间（默认 180s）`
+        `\n  提示: 可通过环境变量 SIDECAR_TIMEOUT_MS 调整超时时间（默认 300s）`
       ));
     }, SIDECAR_TIMEOUT_MS);
 
@@ -363,41 +363,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     rulesPath,
     fixTarget,
     mode,
-    sandboxDir: process.cwd(),
-    rootDir: path.resolve(__dirname, '../../..')
-  }).then(() => {
-    process.exit(0);
-  }).catch((err) => {
-    console.error(`❌ [openhands-call] 执行失败: ${err.message}`);
-    process.exit(1);
-  });
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const args = process.argv.slice(2);
-  let agent = '';
-  let promptVal = '';
-  let rulesPath = '';
-  let fixTarget = '';
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg.startsWith('--agent=')) {
-      agent = arg.split('=')[1];
-    } else if (arg.startsWith('--prompt=')) {
-      promptVal = arg.split('=')[1];
-    } else if (arg.startsWith('--rules=')) {
-      rulesPath = arg.split('=')[1];
-    } else if (arg.startsWith('--fix-target=')) {
-      fixTarget = arg.split('=')[1];
-    }
-  }
-
-  callAgent({
-    agent,
-    promptVal,
-    rulesPath,
-    fixTarget,
     sandboxDir: process.cwd(),
     rootDir: path.resolve(__dirname, '../../..')
   }).then(() => {

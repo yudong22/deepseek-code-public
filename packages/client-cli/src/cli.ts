@@ -434,7 +434,13 @@ async function handleRun(args: string[]) {
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--task-id') {
-      taskId = args[i + 1];
+      const candidate = args[i + 1];
+      // 白名单校验：taskId 会进 `git worktree add -b ai/${taskId}`，未校验 = shell 注入
+      if (!candidate || !/^[a-z0-9-]{1,64}$/.test(candidate)) {
+        logError(`--task-id 非法：只允许 1-64 位小写字母/数字/连字符，收到 "${candidate ?? ''}"`);
+        process.exit(1);
+      }
+      taskId = candidate;
       i++;
     } else if (args[i] === '--from-plan') {
       fromPlanPath = args[i + 1];
@@ -719,7 +725,11 @@ async function handleRun(args: string[]) {
             mode: 'heal'
           });
         } catch (e: any) {
-          logError(`OpenCode 运行期间抛出异常: ${e.message}`);
+          // callAgent 自身失败也消耗自愈预算，并附带失败原因
+          // 否则 mode=heal 一直失败会无限循环到 maxHeals 但 healCount 不增长，日志误导
+          healCount++;
+          lastErrorMsg = `OpenCode 自愈运行异常: ${e.message}`;
+          logError(`[自愈失败] 第 ${healCount} 次自愈异常: ${e.message}`);
         }
       }
     }
