@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 代码风格约束
+
+**本项目用 `.editorconfig` 强制空格缩进**。AI 写代码时请遵守：
+
+| 文件类型 | 缩进 |
+|---|---|
+| `*.json` `*.md` `*.yml` `*.yaml` `*.ts` `*.tsx` `*.js` `*.jsx` `*.mjs` `*.cjs` `*.css` `*.html` `*.sh` | **2 空格** |
+| `*.rs` | **4 空格** |
+| `Makefile` | tab（语法要求） |
+
+**违规后果**：CI `lint:tabs` step 失败，PR 不能 merge。
+
+工具参考：
+- `bun run lint:tabs` — 全量扫 tab 字符
+- `bun run lint` — 全量 lint（tabs + shellcheck + actionlint）
+- `bun run lint:diff` — 增量 lint（只对变更的 .sh / .yml 跑 shellcheck / actionlint）
+
 ## Project Overview
 
 `deepseek-code` (also known as **OpenHands**) is a local AI programming assistant with a C/S (client-server) self-healing pipeline architecture. It combines:

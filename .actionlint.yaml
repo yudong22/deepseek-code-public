@@ -1,0 +1,13 @@
+# actionlint 配置文件
+# 文档：https://github.com/rhysd/actionlint/blob/main/docs/config.md
+#
+# 目的：保护 .github/workflows/*.yml 的语法和常见错误。
+# 比 yamllint 更精准（actionlint 理解 GitHub Actions 语义）。
+
+self-hosted-runner:
+  # 标记本仓库用的是 GitHub-hosted runner
+  labels: []
+  matrix: {}
+
+# 配置变量，actionlint 不会因为引用未定义变量而报错
+config-variables: null

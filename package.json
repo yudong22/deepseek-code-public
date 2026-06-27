@@ -11,6 +11,9 @@
     "build:desktop": "bun --filter @deepseek-code/desktop build",
     "build:sidecar": "bun --filter @deepseek-code/sidecar build",
     "lint:tabs": "bash scripts/check-tabs.sh",
+    "lint:diff": "bash scripts/lint-diff.sh",
+    "lint:diff:all": "bash scripts/lint-diff.sh --all",
+    "lint": "bash scripts/lint.sh",
     "test": "bun test packages/client-cli/src/openhands.test.ts packages/client-cli/src/cli.test.ts && bun test apps/desktop/src/bridge/bridge.test.ts && bun test packages/sidecar/src/index.test.ts && bun test packages/client-cli/src/ui-utils.test.ts && bun test packages/client-cli/src/protocol.test.ts && bun test apps/desktop/src/ag-ui/adapter.test.ts && bun test ./apps/desktop/src/utils/markdown.test.tsx"
   }
 }
