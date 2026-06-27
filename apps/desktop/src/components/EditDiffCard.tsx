@@ -116,8 +116,9 @@ export default function EditDiffCard({
     }
   }, [isDone, isError, argsPreview, readFile, tc]);
 
-  let statusColor = "#007aff";
-  if (isDone) statusColor = isError ? "#ff3b30" : "#34c759";
+  const statusColorClass = isDone 
+    ? (isError ? "text-red-500" : "text-green-500") 
+    : "text-brand-blue";
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -138,74 +139,73 @@ export default function EditDiffCard({
   const delCount = diffLines.filter(l => l.type === "del").length;
 
   return (
-    <div className="edit-diff-wrap">
-      <div className="edit-diff-header-row">
-        <span style={{
-          color: statusColor, fontSize: "14px", lineHeight: 1, flexShrink: 0,
-          animation: isExecuting ? "tc-pulse 1.5s ease-in-out infinite" : "none",
-        }}>•</span>
+    <div className="font-mono text-xs leading-relaxed my-0.5 color-inherit flex flex-col">
+      <div className="flex items-center flex-wrap select-none w-full gap-1">
+        <span className={`text-sm font-bold leading-none select-none mr-0.5 ${statusColorClass} ${isExecuting ? "animate-pulse" : ""}`}>
+          •
+        </span>
 
-        <span className="edit-diff-title">
-          {name}<span className="edit-diff-title-paren">(</span>
+        <span className="font-semibold flex items-center">
+          {name}<span className="opacity-50 mx-0.5">(</span>
           <span
             onClick={handleClick}
             title={argsPreview}
-            className={`edit-diff-filename${isDone && !isError ? " edit-diff-filename-link" : ""}`}
+            className={`opacity-80 ${isDone && !isError ? "cursor-pointer hover:underline text-brand-blue dark:text-deepseek-400" : ""}`}
           >{fileName}</span>
-          <span className="edit-diff-title-paren">)</span>
+          <span className="opacity-50 mx-0.5">)</span>
         </span>
 
-        <span className="edit-diff-elapsed">{elapsed}</span>
+        <span className="text-[11px] opacity-35 ml-1">{elapsed}</span>
 
         {!isDone && (
-          <span className="edit-diff-status-row">
+          <span className="inline-flex items-center gap-1">
             {isExecuting
-              ? <span className="edit-diff-executing" style={{ animation: "tc-pulse 1.5s ease-in-out infinite" }}>executing…</span>
-              : <span className="edit-diff-editing">editing…</span>
+              ? <span className="text-[11px] opacity-60 italic animate-pulse">executing…</span>
+              : <span className="text-[11px] opacity-50 italic">editing…</span>
             }
             {onCancel && (
               <span
                 onClick={(e) => { e.stopPropagation(); onCancel(); }}
-                className="edit-diff-cancel"
+                className="cursor-pointer text-xs opacity-50 px-1 py-0.5 rounded-sm hover:bg-black/10 transition-colors"
               >✕</span>
             )}
           </span>
         )}
 
-        {isDone && isError && <span className="edit-diff-failed">failed</span>}
+        {isDone && isError && <span className="text-red-500 font-bold ml-1.5">failed</span>}
 
         {isDone && !isError && (addCount > 0 || delCount > 0) && (
-          <span className="edit-diff-counts">
-            {addCount > 0 && <span className="edit-diff-count-add">+{addCount}</span>}
-            {addCount > 0 && delCount > 0 && <span className="edit-diff-count-sep">/</span>}
-            {delCount > 0 && <span className="edit-diff-count-del">-{delCount}</span>}
+          <span className="inline-flex items-center gap-0.5 text-[10px] ml-1.5">
+            {addCount > 0 && <span className="text-green-500 font-bold">+{addCount}</span>}
+            {addCount > 0 && delCount > 0 && <span className="opacity-30">/</span>}
+            {delCount > 0 && <span className="text-red-500 font-bold">-{delCount}</span>}
           </span>
         )}
       </div>
 
       {isDone && diffLines.length > 0 && (
-        <div className="edit-diff-block">
+        <div className="mt-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-[#f9f9fb] dark:bg-[#18181b] overflow-hidden flex flex-col font-mono text-[11px] leading-relaxed max-h-96 overflow-y-auto">
           {diffLines.map((line, i) => {
             const isSep = line.type === "ctx" && line.lineNumber === undefined;
             const isAdd = line.type === "add";
             const isDel = line.type === "del";
             const lineNum = line.lineNumber !== undefined ? line.lineNumber : "";
 
-            let rowClass = "edit-diff-row";
-            if (isSep) rowClass += " edit-diff-sep";
-            else if (isAdd) rowClass += " edit-diff-add";
-            else if (isDel) rowClass += " edit-diff-del";
-            else rowClass += " edit-diff-ctx";
+            let rowClass = "flex items-stretch";
+            if (isSep) rowClass += " h-[1px] bg-zinc-200 dark:bg-zinc-800 my-0.5";
+            else if (isAdd) rowClass += " bg-green-500/10 dark:bg-green-500/5 text-green-700 dark:text-green-400";
+            else if (isDel) rowClass += " bg-red-500/10 dark:bg-red-500/5 text-red-700 dark:text-red-400";
+            else rowClass += " text-zinc-700 dark:text-zinc-300";
 
             return (
               <div key={i} className={rowClass}>
                 {!isSep && (
                   <>
-                    <span className="edit-diff-lnum">{lineNum}</span>
-                    <span className={`edit-diff-pf${isAdd ? " edit-diff-pf-add" : isDel ? " edit-diff-pf-del" : ""}`}>
+                    <span className="py-0.5 px-2 text-right text-zinc-400 dark:text-zinc-600 bg-zinc-50 dark:bg-[#161618] border-r border-[#e3e3e3] dark:border-[#202022] min-w-[32px] select-none">{lineNum}</span>
+                    <span className={`py-0.5 px-1.5 select-none font-bold shrink-0 align-middle ${isAdd ? "text-green-500" : isDel ? "text-red-500" : ""}`}>
                       {isAdd ? "+" : isDel ? "−" : " "}
                     </span>
-                    <pre className="edit-diff-code">{line.text}</pre>
+                    <pre className="py-0.5 px-2 overflow-x-auto m-0 flex-1 whitespace-pre">{line.text}</pre>
                   </>
                 )}
               </div>

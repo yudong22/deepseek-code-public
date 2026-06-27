@@ -89,7 +89,7 @@ export default function LeftSidebar({
     const projectSessions = sessions.filter(s => s.projectName === projectName);
     if (projectSessions.length === 0) {
       return (
-        <div style={{ padding: "6px 12px 6px 28px", fontSize: "11px", color: "#8e8e93", fontStyle: "italic" }}>
+        <div className="pl-7 pr-3 py-1.5 text-[13px] text-[#8e8e93] italic">
           暂无历史会话
         </div>
       );
@@ -99,24 +99,27 @@ export default function LeftSidebar({
     const visibleSessions = showAll ? projectSessions : projectSessions.slice(0, 5);
 
     return (
-      <div className="folder-sessions">
+      <div className="pl-4 flex flex-col gap-0.5">
         {visibleSessions.map((s) => (
           <div
             key={s.id}
-            className={`session-link ${activeSessionId === s.id ? "active" : ""}`}
+            className={`flex items-center justify-between px-3 h-7 text-[13px] rounded-md cursor-pointer select-none transition-colors ${
+              activeSessionId === s.id 
+                ? "bg-[#efeff4] dark:bg-[#2c2c2e] text-[#111] dark:text-white font-medium" 
+                : "text-[#555] dark:text-[#a0a0a5] hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white"
+            }`}
             onClick={() => onSelectSession(s.id)}
           >
-            <span className="session-title-text" style={{ fontWeight: "normal" }}>
+            <span className="truncate flex-1 pr-2 font-normal">
               {s.title}
             </span>
-            <span className="session-time">{getSessionTimeLabel(s.updatedAt)}</span>
+            <span className="text-[12px] text-[#8e8e93] shrink-0">{getSessionTimeLabel(s.updatedAt)}</span>
           </div>
         ))}
         {projectSessions.length > 5 && !showAll && (
           <div
-            className="session-link see-all-btn"
+            className="flex items-center h-7 text-brand-blue dark:text-deepseek-400 font-medium text-[13px] pl-3 cursor-pointer"
             onClick={() => toggleExpandAll(projectName)}
-            style={{ color: "#007aff", fontWeight: "500", fontSize: "11px", paddingLeft: "12px", display: "flex", alignItems: "center" }}
           >
             See all ({projectSessions.length})
           </div>
@@ -126,50 +129,64 @@ export default function LeftSidebar({
   };
 
   return (
-    <aside className={`left-sidebar ${isOpen ? "" : "collapsed"}`}>
+    <aside className={`bg-[#f6f6f6] dark:bg-[#1c1c1e] border-r border-[#e3e3e3] dark:border-[#2c2c2e] flex flex-col h-full shrink-0 transition-all duration-200 overflow-hidden ${
+      isOpen ? "w-[260px]" : "w-0 border-r-transparent"
+    }`}>
       {/* 新建对话按钮 */}
-      <div className="new-conv-btn-container">
-        <button className="new-conv-btn" onClick={onNewConversation}>
+      <div className="p-4 shrink-0">
+        <button 
+          className="w-full h-9 flex items-center justify-center gap-2 bg-[#ebebeb] hover:bg-[#e0e0e0] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] text-[#333] dark:text-[#d0d0d0] rounded-md text-[13px] font-medium cursor-pointer select-none transition-colors border-0" 
+          onClick={onNewConversation}
+        >
           <Icons.Plus />
           New Conversation
         </button>
       </div>
 
       {/* 静态导航 */}
-      <div className="sidebar-nav">
-        <div className="nav-item" onClick={onHistoryOpen}>
+      <div className="px-2 py-1 flex flex-col gap-0.5 shrink-0">
+        <div 
+          className="flex items-center gap-3 px-3 h-8 text-[13px] text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors" 
+          onClick={onHistoryOpen}
+        >
           <Icons.History />
           Conversation History
         </div>
-        <div className="nav-item" onClick={onTasksOpen}>
+        <div 
+          className="flex items-center gap-3 px-3 h-8 text-[13px] text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors" 
+          onClick={onTasksOpen}
+        >
           <Icons.Tasks />
           Scheduled Tasks
         </div>
       </div>
 
       {/* 可滚动区域 */}
-      <div className="sidebar-scroll">
-        <div className="section-title" style={{ cursor: "default" }}>
+      <div className="flex-1 overflow-y-auto px-2 py-2 flex flex-col gap-1">
+        <div className="flex items-center justify-between px-3 py-1.5 text-[12px] font-bold text-[#8e8e93] tracking-wider uppercase select-none">
           <span>Projects</span>
-          <div className="section-title-tools">
+          <div className="flex items-center gap-2 text-[#8e8e93]">
             <Icons.Filter />
-            <div style={{ cursor: "pointer", display: "flex", alignItems: "center" }} onClick={onAddProject} title="导入项目文件夹">
+            <div className="cursor-pointer flex items-center" onClick={onAddProject} title="导入项目文件夹">
               <Icons.FolderPlus />
             </div>
           </div>
         </div>
 
-        <div className="projects-list" style={{ padding: "4px 0" }}>
+        <div className="flex flex-col gap-0.5 py-1">
           {projects.map((projectPath) => {
             const name = getProjectNameFromPath(projectPath);
             const isCollapsed = !!collapsedProjects[name];
             const isActive = activeWorkspacePath === projectPath;
             return (
-              <div key={projectPath} className="folder-item">
-                <div className="folder-header-wrapper" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div key={projectPath} className="flex flex-col gap-0.5">
+                <div className="flex items-center justify-between">
                   <div
-                    className={`folder-header ${isActive ? "active" : ""}`}
-                    style={{ flex: 1, display: "flex", alignItems: "center", gap: "6px", paddingLeft: "12px" }}
+                    className={`flex-1 flex items-center gap-1.5 px-3 h-8 text-[13px] rounded-md cursor-pointer select-none transition-colors ${
+                      isActive 
+                        ? "bg-[#efeff4] dark:bg-[#2c2c2e] text-[#111] dark:text-white font-medium" 
+                        : "text-[#555] dark:text-[#a0a0a5] hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white"
+                    }`}
                     onClick={() => {
                       if (isActive) {
                         onToggleProjectCollapse(name);
@@ -180,27 +197,17 @@ export default function LeftSidebar({
                     title={`点击切换到工作区: ${projectPath}`}
                   >
                     {isCollapsed ? <Icons.Folder /> : <Icons.FolderOpen />}
-                    <span className="folder-title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "160px" }}>
+                    <span className="overflow-hidden text-ellipsis whitespace-nowrap max-w-[160px]">
                       {name}
                     </span>
                   </div>
                   <button
-                    className="remove-project-btn"
+                    className="background-none border-none text-[#ff3b30] cursor-pointer text-xs mr-4 flex items-center p-1 rounded-sm hover:bg-red-500/10"
                     onClick={(e) => {
                       e.stopPropagation();
                       onRemoveProject(projectPath);
                     }}
                     title="移除项目"
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#ff3b30",
-                      cursor: "pointer",
-                      fontSize: "13px",
-                      marginRight: "16px",
-                      display: "flex",
-                      alignItems: "center"
-                    }}
                   >
                     ✕
                   </button>
@@ -213,11 +220,10 @@ export default function LeftSidebar({
           {missingProjectNames.map((name) => {
             const isCollapsed = !!collapsedProjects[name];
             return (
-              <div key={name} className="folder-item missing-project">
-                <div className="folder-header-wrapper" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div key={name} className="flex flex-col gap-0.5 opacity-65">
+                <div className="flex items-center justify-between">
                   <div
-                    className="folder-header"
-                    style={{ flex: 1, display: "flex", alignItems: "center", gap: "6px", opacity: 0.65, paddingLeft: "12px" }}
+                    className="flex-1 flex items-center gap-1.5 px-3 h-8 text-xs text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors"
                     onClick={() => {
                       onToggleProjectCollapse(name);
                       showToast(`项目 "${name}" 未导入，请点击右上角 "+" 选择该文件夹以重新绑定。`);
@@ -225,8 +231,8 @@ export default function LeftSidebar({
                     title="未导入/找不到物理文件夹，点击以重新关联"
                   >
                     {isCollapsed ? <Icons.Folder /> : <Icons.FolderOpen />}
-                    <span className="folder-title" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "140px" }}>
-                      {name} <span style={{ fontSize: "10px", color: "#8e8e93" }}>(未导入)</span>
+                    <span className="overflow-hidden text-ellipsis whitespace-nowrap max-w-[140px]">
+                      {name} <span className="text-[12px] text-[#8e8e93]">(未导入)</span>
                     </span>
                   </div>
                 </div>
@@ -236,29 +242,33 @@ export default function LeftSidebar({
           })}
 
           {projects.length === 0 && missingProjectNames.length === 0 && (
-            <div style={{ padding: "8px 16px", fontSize: "11px", color: "#8a8a8f", textAlign: "left" }}>
+            <div className="px-4 py-2 text-[13px] text-[#8a8a8f] text-left">
               点击右上角图标导入项目文件夹
             </div>
           )}
         </div>
 
-        <div className="conversations-section" style={{ marginTop: "12px" }}>
-          <div className="conversations-title">Conversations</div>
-          <div className="conversations-list">
+        <div className="flex flex-col gap-1 mt-3">
+          <div className="px-3 py-1.5 text-[12px] font-bold text-[#8e8e93] tracking-wider uppercase select-none">Conversations</div>
+          <div className="flex flex-col gap-0.5">
             {generalSessions.map((s) => (
               <div
                 key={s.id}
-                className={`session-link ${activeSessionId === s.id ? "active" : ""}`}
+                className={`flex items-center justify-between px-3 h-7 text-[13px] rounded-md cursor-pointer select-none transition-colors ${
+                  activeSessionId === s.id 
+                    ? "bg-[#efeff4] dark:bg-[#2c2c2e] text-[#111] dark:text-white font-medium" 
+                    : "text-[#555] dark:text-[#a0a0a5] hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white"
+                }`}
                 onClick={() => onSelectSession(s.id)}
               >
-                <span className="session-title-text" style={{ fontWeight: "normal" }}>
+                <span className="truncate flex-1 pr-2 font-normal">
                   {s.title}
                 </span>
-                <span className="session-time">{getSessionTimeLabel(s.updatedAt)}</span>
+                <span className="text-[12px] text-[#8e8e93] shrink-0">{getSessionTimeLabel(s.updatedAt)}</span>
               </div>
             ))}
             {generalSessions.length === 0 && (
-              <div style={{ padding: "8px 12px", fontSize: "11px", color: "#8a8a8f" }}>
+              <div className="px-3 py-2 text-[13px] text-[#8a8a8f]">
                 暂无普通历史会话
               </div>
             )}
@@ -266,8 +276,11 @@ export default function LeftSidebar({
         </div>
       </div>
 
-      <div className="sidebar-footer">
-        <div className="nav-item" onClick={onSettingsOpen}>
+      <div className="p-2 border-t border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0">
+        <div 
+          className="flex items-center gap-3 px-3 h-8 text-[13px] text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors" 
+          onClick={onSettingsOpen}
+        >
           <Icons.Settings />
           Settings
         </div>

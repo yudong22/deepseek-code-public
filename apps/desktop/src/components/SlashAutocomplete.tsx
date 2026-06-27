@@ -73,7 +73,7 @@ export default function SlashAutocomplete({
             cursor: "pointer",
             borderRadius: "4px",
             color: idx === selectedIndex ? "#fff" : "inherit",
-            background: idx === selectedIndex ? "#007aff" : "transparent",
+            background: idx === selectedIndex ? "var(--dsw-static-deepseek-500)" : "transparent",
           }}
         >
           <span style={{ fontSize: "13px", flexShrink: 0 }}>{cmd.icon}</span>

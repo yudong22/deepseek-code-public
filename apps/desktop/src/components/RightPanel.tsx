@@ -73,7 +73,7 @@ export default function RightPanel({
     };
   }, [onWidthChange]);
 
-  const nightClass = isNightMode ? "night-mode" : "";
+  const panelStyles = isOpen ? { width } : undefined;
 
   // 1. Overview — show latest assistant markdown
   if (activeTab.type === "overview") {
@@ -93,19 +93,18 @@ export default function RightPanel({
 
     return (
       <aside
-        className={`right-panel ${isOpen ? "" : "collapsed"} ${nightClass}`}
-        style={isOpen ? { width } : undefined}
+        className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+          isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
+        }`}
+        style={panelStyles}
       >
-        <div className="right-panel-resize-handle" onMouseDown={handleMouseDown} />
+        <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
         {rightPanelMarkdownContent ? (
-          <div
-            className="right-panel-markdown"
-            style={{ height: "100%", boxSizing: "border-box", overflow: "auto" }}
-          >
+          <div className="p-5 text-zinc-800 dark:text-[#f5f5f7] leading-relaxed overflow-y-auto h-full box-border">
             {renderMarkdown(rightPanelMarkdownContent)}
           </div>
         ) : (
-          <div className="right-panel-empty" style={{ height: "100%" }}>
+          <div className="flex flex-col items-center justify-center gap-3 text-zinc-400 dark:text-zinc-500 text-xs text-center h-full">
             <svg
               width="24"
               height="24"
@@ -115,7 +114,7 @@ export default function RightPanel({
               strokeWidth="1.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ opacity: 0.5 }}
+              className="opacity-50"
             >
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
@@ -141,30 +140,27 @@ export default function RightPanel({
   if (isImage) {
     return (
       <aside
-        className={`right-panel ${isOpen ? "" : "collapsed"} ${nightClass}`}
-        style={isOpen ? { width } : undefined}
+        className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+          isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
+        }`}
+        style={panelStyles}
       >
-        <div className="right-panel-resize-handle" onMouseDown={handleMouseDown} />
-        <div className="rp-file-header">
-          <span className="rp-file-icon">🖼️</span>
-          <span className="rp-file-name">{activeTab.title}</span>
-          <span className="rp-file-lang">{activeTab.language || "image"}</span>
+        <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
+        <div className="flex items-center gap-1.5 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0 text-xs text-zinc-500 select-none">
+          <span className="text-sm">🖼️</span>
+          <span className="font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[200px]">{activeTab.title}</span>
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">{activeTab.language || "image"}</span>
         </div>
-        <div className="rp-file-body" style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: isNightMode ? "#1c1c1e" : "#f5f5f7",
-          overflow: "auto",
-        }}>
+        <div 
+          className="flex-1 overflow-auto flex items-center justify-center p-4"
+          style={{
+            background: isNightMode ? "#1c1c1e" : "#f5f5f7",
+          }}
+        >
           <img
             src={activeTab.content}
             alt={activeTab.title}
-            style={{
-              maxWidth: "100%",
-              maxHeight: "100%",
-              objectFit: "contain",
-            }}
+            className="max-w-full max-h-full object-contain"
           />
         </div>
       </aside>
@@ -178,7 +174,6 @@ export default function RightPanel({
         isOpen={isOpen}
         activeTab={activeTab}
         width={width}
-        nightClass={nightClass}
         handleMouseDown={handleMouseDown}
       />
     );
@@ -188,96 +183,27 @@ export default function RightPanel({
   if (isBash) {
     return (
       <aside
-        className={`right-panel ${isOpen ? "" : "collapsed"} ${nightClass}`}
-        style={isOpen ? { width } : undefined}
+        className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+          isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
+        }`}
+        style={panelStyles}
       >
-        <div className="right-panel-resize-handle" onMouseDown={handleMouseDown} />
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            height: "100%",
-            padding: "16px",
-            boxSizing: "border-box",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              background: "#18181b",
-              borderRadius: "8px",
-              border: "1px solid #27272a",
-              height: "100%",
-              overflow: "hidden",
-              boxShadow: "0 4px 20px rgba(0, 0, 0, 0.15)",
-            }}
-          >
+        <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
+        <div className="flex flex-col h-full p-4 box-border">
+          <div className="flex flex-col bg-[#18181b] rounded-lg border border-[#27272a] h-full overflow-hidden shadow-xl">
             {/* 终端标题栏 */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                padding: "10px 14px",
-                background: "#202023",
-                borderBottom: "1px solid #27272a",
-                userSelect: "none",
-              }}
-            >
-              <div style={{ display: "flex", gap: "6px", marginRight: "16px" }}>
-                <span
-                  style={{
-                    width: "10px",
-                    height: "10px",
-                    borderRadius: "50%",
-                    background: "#ff5f56",
-                  }}
-                />
-                <span
-                  style={{
-                    width: "10px",
-                    height: "10px",
-                    borderRadius: "50%",
-                    background: "#ffbd2e",
-                  }}
-                />
-                <span
-                  style={{
-                    width: "10px",
-                    height: "10px",
-                    borderRadius: "50%",
-                    background: "#27c93f",
-                  }}
-                />
+            <div className="flex items-center px-3.5 py-2.5 bg-[#202023] border-b border-[#27272a] select-none">
+              <div className="flex gap-1.5 mr-4">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[#27c93f]" />
               </div>
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: "#a1a1aa",
-                  fontFamily: "system-ui, -apple-system, sans-serif",
-                  fontWeight: 500,
-                  margin: "0 auto",
-                  transform: "translateX(-24px)",
-                }}
-              >
+              <span className="text-[11px] color-[#a1a1aa] font-medium mx-auto -translate-x-6">
                 {activeTab.title} (bash)
               </span>
             </div>
             {/* 终端内容区 */}
-            <pre
-              style={{
-                margin: 0,
-                padding: "16px",
-                overflow: "auto",
-                flex: 1,
-                fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-                fontSize: "12px",
-                lineHeight: "1.6",
-                color: "#e4e4e7",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
-              }}
-            >
+            <pre className="m-0 p-4 overflow-auto flex-1 font-mono text-[12px] leading-relaxed text-[#e4e4e7] whitespace-pre-wrap break-all">
               <code>{activeTab.content}</code>
             </pre>
           </div>
@@ -286,13 +212,12 @@ export default function RightPanel({
     );
   }
 
-  // 5. Regular source file — light themed, matching tool area style
+  // 5. Regular source file
   return (
     <FilePanel
       isOpen={isOpen}
       activeTab={activeTab}
       width={width}
-      nightClass={nightClass}
       handleMouseDown={handleMouseDown}
     />
   );
@@ -304,13 +229,11 @@ function MarkdownPanel({
   isOpen,
   activeTab,
   width,
-  nightClass,
   handleMouseDown,
 }: {
   isOpen: boolean;
   activeTab: Tab;
   width: number;
-  nightClass: string;
   handleMouseDown: (e: React.MouseEvent) => void;
 }) {
   const [activeInnerTab, setActiveInnerTab] = useState<"preview" | "source">("preview");
@@ -321,28 +244,38 @@ function MarkdownPanel({
 
   return (
     <aside
-      className={`right-panel ${isOpen ? "" : "collapsed"} ${nightClass}`}
+      className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+        isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
+      }`}
       style={isOpen ? { width } : undefined}
     >
-      <div className="right-panel-resize-handle" onMouseDown={handleMouseDown} />
+      <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
 
       {/* 文件名头部 */}
-      <div className="rp-file-header">
-        <span className="rp-file-icon">📄</span>
-        <span className="rp-file-name">{activeTab.title}</span>
-        <span className="rp-file-lang">md</span>
+      <div className="flex items-center gap-1.5 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0 text-xs text-zinc-500 select-none">
+        <span className="text-sm">📄</span>
+        <span className="font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[200px]">{activeTab.title}</span>
+        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">md</span>
       </div>
 
       {/* 内部 Tab 栏：Preview / Source */}
-      <div className="rp-inner-tabs">
+      <div className="flex items-center gap-1 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0">
         <button
-          className={`rp-inner-tab ${activeInnerTab === "preview" ? "active" : ""}`}
+          className={`px-3 h-6 rounded-md text-xs font-semibold cursor-pointer border-0 bg-transparent transition-colors ${
+            activeInnerTab === "preview" 
+              ? "bg-white dark:bg-[#2c2c2e] text-[#111] dark:text-white shadow-sm" 
+              : "text-zinc-500 hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e]"
+          }`}
           onClick={() => setActiveInnerTab("preview")}
         >
           Preview
         </button>
         <button
-          className={`rp-inner-tab ${activeInnerTab === "source" ? "active" : ""}`}
+          className={`px-3 h-6 rounded-md text-xs font-semibold cursor-pointer border-0 bg-transparent transition-colors ${
+            activeInnerTab === "source" 
+              ? "bg-white dark:bg-[#2c2c2e] text-[#111] dark:text-white shadow-sm" 
+              : "text-zinc-500 hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e]"
+          }`}
           onClick={() => setActiveInnerTab("source")}
         >
           Source
@@ -350,23 +283,20 @@ function MarkdownPanel({
       </div>
 
       {/* 内容区 */}
-      <div className="rp-file-body">
+      <div className="flex-1 overflow-hidden flex flex-col relative">
         {activeInnerTab === "source" ? (
-          <div className="rp-source-view">
-            <div className="rp-line-numbers">
+          <div className="flex-1 overflow-auto flex items-stretch font-mono text-[11px] leading-relaxed bg-[#f9f9fb] dark:bg-[#18181b]">
+            <div className="py-3 px-2 text-right text-zinc-450 dark:text-zinc-650 bg-zinc-50 dark:bg-[#161618] border-r border-[#e3e3e3] dark:border-[#202022] min-w-[32px] select-none">
               {codeLines.map((_, idx) => (
                 <div key={idx}>{idx + 1}</div>
               ))}
             </div>
-            <pre className="rp-code-content">
+            <pre className="py-3 px-4 overflow-x-auto text-zinc-800 dark:text-[#e4e4e7] flex-1 m-0">
               <code>{activeTab.content}</code>
             </pre>
           </div>
         ) : (
-          <div
-            className="right-panel-markdown"
-            style={{ flex: 1, overflow: "auto" }}
-          >
+          <div className="p-5 text-zinc-800 dark:text-[#f5f5f7] leading-relaxed overflow-y-auto flex-1">
             {renderMarkdown(activeTab.content)}
           </div>
         )}
@@ -375,19 +305,17 @@ function MarkdownPanel({
   );
 }
 
-// ─── Regular file panel (light-themed) ───────────────────────────────────────
+// ─── Regular file panel ──────────────────────────────────────────────────────
 
 function FilePanel({
   isOpen,
   activeTab,
   width,
-  nightClass,
   handleMouseDown,
 }: {
   isOpen: boolean;
   activeTab: Tab;
   width: number;
-  nightClass: string;
   handleMouseDown: (e: React.MouseEvent) => void;
 }) {
   const codeLines = activeTab.content.split("\n");
@@ -397,23 +325,25 @@ function FilePanel({
 
   return (
     <aside
-      className={`right-panel ${isOpen ? "" : "collapsed"} ${nightClass}`}
+      className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+        isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
+      }`}
       style={isOpen ? { width } : undefined}
     >
-      <div className="right-panel-resize-handle" onMouseDown={handleMouseDown} />
-      <div className="rp-file-header">
-        <span className="rp-file-icon">📄</span>
-        <span className="rp-file-name">{activeTab.title}</span>
-        <span className="rp-file-lang">{activeTab.language || "text"}</span>
+      <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
+      <div className="flex items-center gap-1.5 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0 text-xs text-zinc-500 select-none">
+        <span className="text-sm">📄</span>
+        <span className="font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[200px]">{activeTab.title}</span>
+        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">{activeTab.language || "text"}</span>
       </div>
-      <div className="rp-file-body">
-        <div className="rp-source-view">
-          <div className="rp-line-numbers">
+      <div className="flex-1 overflow-hidden flex flex-col relative">
+        <div className="flex-1 overflow-auto flex items-stretch font-mono text-[11px] leading-relaxed bg-[#f9f9fb] dark:bg-[#18181b]">
+          <div className="py-3 px-2 text-right text-zinc-450 dark:text-zinc-650 bg-zinc-50 dark:bg-[#161618] border-r border-[#e3e3e3] dark:border-[#202022] min-w-[32px] select-none">
             {codeLines.map((_, idx) => (
               <div key={idx}>{idx + 1}</div>
             ))}
           </div>
-          <pre className="rp-code-content">
+          <pre className="py-3 px-4 overflow-x-auto text-zinc-800 dark:text-[#e4e4e7] flex-1 m-0">
             <code>{activeTab.content}</code>
           </pre>
         </div>

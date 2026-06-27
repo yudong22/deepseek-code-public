@@ -83,12 +83,7 @@ export function ToolCallGroup({
   getFileUrl,
 }: ToolCallGroupProps) {
   return (
-    <div className="tc-group-terminal" style={{
-      display: "flex",
-      flexDirection: "column",
-      gap: "4px",
-      margin: "8px 0",
-    }}>
+    <div className="flex flex-col gap-1 my-2">
       {toolCalls.map((tc, idx) => {
         const stableKey = tc.call_id || `tc-${idx}`;
         return (

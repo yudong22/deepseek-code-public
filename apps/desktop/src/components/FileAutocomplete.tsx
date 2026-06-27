@@ -55,7 +55,7 @@ export default function FileAutocomplete({
             cursor: "pointer",
             borderRadius: "4px",
             color: idx === selectedIndex ? "#fff" : "inherit",
-            background: idx === selectedIndex ? "#007aff" : "transparent",
+            background: idx === selectedIndex ? "var(--dsw-static-deepseek-500)" : "transparent",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",

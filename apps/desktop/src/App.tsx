@@ -103,6 +103,67 @@ function MainDashboard() {
     loadSessions,
   });
 
+  // --- Updater State (v0.5.9: Auto background updater) ---
+  const [updateStatus, setUpdateStatus] = useState<{
+    type: "info" | "success" | "error";
+    message: string;
+  } | null>(null);
+  const [isUpdateReady, setIsUpdateReady] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  const handleCheckUpdates = async (isStartup = false) => {
+    setIsCheckingUpdate(true);
+    setUpdateStatus({ type: "info", message: "正在检查更新..." });
+    try {
+      const result = await bridge.checkForUpdates();
+      if (!result.hasUpdate) {
+        setUpdateStatus({ type: "info", message: "您的应用已是最新版本。" });
+        return;
+      }
+      const version = result.version || "unknown";
+      setUpdateStatus({ type: "info", message: `发现新版本 v${version}，正在下载更新...` });
+      
+      if (isStartup) {
+        showToast(`📦 发现新版本 v${version}，正在后台下载更新...`);
+      }
+
+      await bridge.installUpdate((status) => {
+        if (status.status === "downloading" && status.progress !== undefined) {
+          setUpdateStatus({
+            type: "info",
+            message: `📦 更新下载中 ${status.progress}%`,
+          });
+        } else if (status.status === "downloaded") {
+          setUpdateStatus({
+            type: "success",
+            message: `v${version} 已下载完成，随时可重启应用以完成更新。`,
+          });
+          setIsUpdateReady(true);
+          showToast(`📦 新版本 v${version} 已下载完成，点击右上角"重启后安装"即可升级。`);
+        } else if (status.status === "error") {
+          setUpdateStatus({
+            type: "error",
+            message: `更新失败: ${status.error || "未知错误"}`,
+          });
+        }
+      });
+    } catch (err) {
+      setUpdateStatus({ type: "error", message: `检查更新失败: ${String(err)}` });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleRestartToUpdate = async () => {
+    try {
+      setUpdateStatus({ type: "success", message: "正在重启应用以应用更新..." });
+      await bridge.installDownloadedUpdate();
+    } catch (err) {
+      setUpdateStatus({ type: "error", message: `重启失败: ${String(err)}` });
+      showToast(`重启失败: ${String(err)}`);
+    }
+  };
+
 
   // --- 3. Projects Workspace Hook ---
   const {
@@ -176,15 +237,8 @@ function MainDashboard() {
         console.error("Database initialization failed:", err);
       }
 
-      // 静默检查更新（v0.5.2: 不再自动下载/安装，仅提示用户前往设置手动触发）
-      try {
-        const updateResult = await bridge.checkForUpdates();
-        if (updateResult.hasUpdate) {
-          showToast(`📦 发现新版本 v${updateResult.version}，前往"设置"→"检查更新"以升级。`);
-        }
-      } catch (_e) {
-        // 静默失败，不影响正常启动
-      }
+      // v0.5.9: 发现新版本后，默认后台更新，不弹对话框，直接下载
+      handleCheckUpdates(true).catch(() => {});
     }
     init();
   }, [setApiKey, setSavedApiKey, setWorkspacePath, setSavedWorkspacePath, setProjects]);
@@ -994,7 +1048,7 @@ function MainDashboard() {
   const activeSession = sessions.find((s) => s.id === id);
 
   return (
-    <div className={`app-container${isNightMode ? " night-mode" : ""}`}>
+    <div className={`flex flex-col h-screen w-screen overflow-hidden bg-white dark:bg-[#1c1c1e] text-zinc-900 dark:text-zinc-100 transition-[background-color] duration-200 ${isNightMode ? "night-mode" : ""}`}>
       <Toast visible={toast.visible} message={toast.message} />
 
       <SettingsModal
@@ -1008,6 +1062,9 @@ function MainDashboard() {
         onSave={handleSaveApiKey}
         onClear={handleClearApiKey}
         onClearHistory={handleClearHistory}
+        updateStatus={updateStatus}
+        isChecking={isCheckingUpdate}
+        onCheckUpdates={() => handleCheckUpdates(false)}
       />
 
 
@@ -1030,9 +1087,11 @@ function MainDashboard() {
         isNightMode={isNightMode}
         onToggleNightMode={() => setIsNightMode((v) => !v)}
         rightPanelWidth={rightPanelWidth}
+        isUpdateReady={isUpdateReady}
+        onRestartToUpdate={handleRestartToUpdate}
       />
 
-      <div className="main-layout">
+      <div className="flex flex-1 h-[calc(100vh-38px)] overflow-hidden items-stretch relative">
         <LeftSidebar
           isOpen={isLeftSidebarOpen}
           sessions={sessions}
@@ -1052,7 +1111,7 @@ function MainDashboard() {
           onSelectProject={handleSelectProject}
         />
 
-        <main className="middle-panel">
+        <main className="flex-1 h-full min-w-0 bg-white dark:bg-[#1c1c1e] flex flex-col items-stretch transition-[background-color] duration-200 relative">
           {isHistoryPage ? (
             <HistoryPage
               sessions={sessions}

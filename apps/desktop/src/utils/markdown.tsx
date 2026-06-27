@@ -1,222 +1,149 @@
 import React from "react";
+import { Streamdown } from "streamdown";
 import Mermaid from "@/components/Mermaid";
 import { FileCode } from "@/components/Icons";
 
 const ReactIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#007aff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, verticalAlign: "middle" }}>
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3964fe" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 align-middle">
     <ellipse cx="12" cy="12" rx="11" ry="4.2" transform="rotate(30 12 12)" />
     <ellipse cx="12" cy="12" rx="11" ry="4.2" transform="rotate(90 12 12)" />
     <ellipse cx="12" cy="12" rx="11" ry="4.2" transform="rotate(150 12 12)" />
-    <circle cx="12" cy="12" r="2" fill="#007aff" />
+    <circle cx="12" cy="12" r="2" fill="#3964fe" />
   </svg>
 );
 
-/** 渲染完整的 Markdown 文本 */
-export function renderMarkdown(text: string) {
-  const lines = text.split("\n");
-  const elements: React.ReactNode[] = [];
-  let inCodeBlock = false;
-  let codeBlockContent: string[] = [];
-  let codeBlockLang = "";
-
-  // 表格状态
-  let inTable = false;
-  let tableHeaders: string[] = [];
-  let tableRows: string[][] = [];
-  let tableAlignments: ("left" | "center" | "right")[] = [];
-
-  const pushTable = (keyIndex: number) => {
-    if (tableHeaders.length === 0) return;
-    elements.push(
-      <div key={`table-${keyIndex}`} className="markdown-table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              {tableHeaders.map((header, hIdx) => (
-                <th 
-                  key={hIdx} 
-                  style={{ 
-                    textAlign: tableAlignments[hIdx] || "left"
-                  }}
-                >
-                  {parseInlineMarkdown(header)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {tableRows.map((row, rIdx) => (
-              <tr key={rIdx}>
-                {row.map((cell, cIdx) => (
-                  <td 
-                    key={cIdx} 
-                    style={{ 
-                      textAlign: tableAlignments[cIdx] || "left"
-                    }}
-                  >
-                    {parseInlineMarkdown(cell)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+const components = {
+  h1: ({ children }: any) => (
+    <h1 className="text-2xl font-bold tracking-tight mt-6 mb-4 text-zinc-900 dark:text-zinc-100 leading-tight">
+      {children}
+    </h1>
+  ),
+  h2: ({ children }: any) => (
+    <h2 className="text-[17px] font-bold tracking-tight mt-5 mb-3 text-zinc-900 dark:text-zinc-100 leading-tight">
+      {children}
+    </h2>
+  ),
+  h3: ({ children }: any) => (
+    <h3 className="text-[15px] font-bold mt-4 mb-2.5 text-zinc-900 dark:text-zinc-100 leading-tight">
+      {children}
+    </h3>
+  ),
+  h4: ({ children }: any) => (
+    <h4 className="text-sm font-semibold mt-3.5 mb-2 text-zinc-800 dark:text-zinc-200 leading-snug">
+      {children}
+    </h4>
+  ),
+  h5: ({ children }: any) => (
+    <h5 className="text-sm font-semibold mt-3 mb-1.5 text-zinc-800 dark:text-zinc-200 leading-snug">
+      {children}
+    </h5>
+  ),
+  h6: ({ children }: any) => (
+    <h6 className="text-sm font-semibold mt-2.5 mb-1.5 text-zinc-800 dark:text-zinc-200 leading-snug">
+      {children}
+    </h6>
+  ),
+  pre: ({ children }: any) => (
+    <pre className="my-2.5 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-[#f5f5f7] dark:bg-[#18181b] overflow-x-auto max-w-full">
+      {children}
+    </pre>
+  ),
+  ul: ({ children }: any) => (
+    <ul className="my-2 pl-5 list-disc text-zinc-800 dark:text-zinc-200 text-[13px] leading-relaxed">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }: any) => (
+    <ol className="my-2 pl-5 list-decimal text-zinc-800 dark:text-zinc-200 text-[13px] leading-relaxed">
+      {children}
+    </ol>
+  ),
+  p: ({ children }: any) => (
+    <p className="mb-3 leading-relaxed text-[#1d1d1f] dark:text-[#e3e3e8] text-[13px]">
+      {children}
+    </p>
+  ),
+  a: ({ href, children }: any) => {
+    if (href?.startsWith("file://")) {
+      const title = children ? String(children) : (href.split("/").pop() || "");
+      const isReactFile = title.endsWith(".tsx") || title.endsWith(".jsx") || title.endsWith(".ts") || title.endsWith(".js");
+      return (
+        <a 
+          href={href} 
+          className="inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] px-1 rounded-sm border border-zinc-200 dark:border-zinc-800"
+        >
+          {isReactFile ? <ReactIcon /> : <span className="text-brand-blue dark:text-deepseek-400 inline-flex items-center"><FileCode /></span>}
+          <span className="no-underline">{title}</span>
+        </a>
+      );
+    }
+    return <a href={href} className="text-brand-blue hover:underline">{children}</a>;
+  },
+  code: ({ className, children }: any) => {
+    const match = /language-(\w+)/.exec(className || "");
+    const lang = match ? match[1] : "";
+    if (lang === "mermaid") {
+      return <Mermaid chart={String(children).trim()} />;
+    }
+    const isBlock = !!className || String(children).includes("\n");
+    if (isBlock) {
+      return (
+        <code className={`${className || ""} bg-transparent p-0 border-0 text-xs text-zinc-800 dark:text-[#f5f5f7] font-mono whitespace-pre`}>
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code className={`${className || ""} bg-deepseek-50 dark:bg-deepseek-900/30 px-1 py-0.5 rounded-sm font-mono text-[11px] border border-deepseek-200/60 dark:border-deepseek-800/80 text-deepseek-500 dark:text-deepseek-300 break-all`}>
+        {children}
+      </code>
     );
-    // 重置
-    inTable = false;
-    tableHeaders = [];
-    tableRows = [];
-    tableAlignments = [];
-  };
+  },
+  blockquote: ({ children }: any) => (
+    <blockquote className="border-l-[3px] border-zinc-300 dark:border-zinc-600 pl-3 my-2 not-italic text-zinc-600 dark:text-zinc-400">
+      {children}
+    </blockquote>
+  ),
+  hr: () => null,
+  table: ({ children }: any) => (
+    <div className="overflow-x-auto my-3 border border-zinc-200 dark:border-zinc-800 rounded-md">
+      <table className="w-full text-left border-collapse text-sm">
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }: any) => (
+    <thead className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border-b border-zinc-200 dark:border-zinc-800 font-semibold text-zinc-700 dark:text-zinc-300">
+      {children}
+    </thead>
+  ),
+  th: ({ children, style }: any) => (
+    <th className="p-2.5 border-b border-zinc-200 dark:border-zinc-800 text-sm font-semibold" style={style}>
+      <span className="block max-w-[160px] whitespace-nowrap overflow-hidden text-ellipsis">{children}</span>
+    </th>
+  ),
+  td: ({ children, style }: any) => (
+    <td className="p-2.5 border-b border-zinc-200 dark:border-zinc-800 text-sm text-zinc-800 dark:text-[#f5f5f7] break-words" style={style}>
+      {children}
+    </td>
+  ),
+  tr: ({ children }: any) => (
+    <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 odd:bg-white even:bg-zinc-50/20 dark:odd:bg-transparent dark:even:bg-zinc-800/10">
+      {children}
+    </tr>
+  )
+};
 
-  // 列表状态
-  let currentListType: "ul" | "ol" | null = null;
-  let currentListItems: React.ReactNode[] = [];
-
-  const pushList = (keyIndex: number) => {
-    if (!currentListType) return;
-    if (currentListType === "ul") {
-      elements.push(
-        <ul key={`ul-${keyIndex}`} style={{ margin: "4px 0 6px 20px" }}>
-          {currentListItems}
-        </ul>
-      );
-    } else if (currentListType === "ol") {
-      elements.push(
-        <ol key={`ol-${keyIndex}`} style={{ margin: "4px 0 6px 20px" }}>
-          {currentListItems}
-        </ol>
-      );
-    }
-    // 重置
-    currentListType = null;
-    currentListItems = [];
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // 代码块
-    if (line.startsWith("```")) {
-      if (inTable) pushTable(i);
-      if (currentListType) pushList(i);
-      if (inCodeBlock) {
-        // 代码块结束
-        if (codeBlockLang === "mermaid") {
-          elements.push(
-            <Mermaid key={`mermaid-${i}`} chart={codeBlockContent.join("\n")} />
-          );
-        } else {
-          elements.push(
-            <pre key={`code-${i}`}>
-              <code className={codeBlockLang}>{codeBlockContent.join("\n")}</code>
-            </pre>
-          );
-        }
-        codeBlockContent = [];
-        inCodeBlock = false;
-      } else {
-        // 代码块开始
-        inCodeBlock = true;
-        codeBlockLang = line.replace("```", "").trim();
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeBlockContent.push(line);
-      continue;
-    }
-
-    // 空行
-    if (line.trim() === "") {
-      if (inTable) pushTable(i);
-      if (currentListType) pushList(i);
-      continue;
-    }
-
-    // Markdown 表格解析
-    const isTableRow = line.trim().startsWith("|") && line.trim().endsWith("|");
-    if (isTableRow) {
-      if (currentListType) pushList(i);
-      if (!inTable) {
-        // 检查下一行是否是分隔符行
-        const nextLine = lines[i + 1];
-        const isSeparator = nextLine && nextLine.trim().startsWith("|") && /^[|\s:-]+$/.test(nextLine.trim());
-        if (isSeparator) {
-          tableHeaders = line.split("|").map(s => s.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-          const sepParts = nextLine.split("|").map(s => s.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-          tableAlignments = sepParts.map(p => {
-            if (p.startsWith(":") && p.endsWith(":")) return "center";
-            if (p.endsWith(":")) return "right";
-            return "left";
-          });
-          inTable = true;
-          i++; // 跳过分隔符行
-          continue;
-        }
-      } else {
-        const rowCells = line.split("|").map(s => s.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-        tableRows.push(rowCells);
-        continue;
-      }
-    }
-
-    // 如果当前行不是表格行，但我们正处于表格状态中，先输出之前的表格
-    if (!isTableRow && inTable) {
-      pushTable(i);
-    }
-
-    // 标题
-    if (line.startsWith("### ")) {
-      if (currentListType) pushList(i);
-      elements.push(<h3 key={`h3-${i}`} style={{ marginTop: "14px", marginBottom: "6px", fontSize: "14px", fontWeight: "600" }}>{parseInlineMarkdown(line.slice(4))}</h3>);
-      continue;
-    }
-
-    // 无序列表
-    if (line.startsWith("- ")) {
-      if (currentListType === "ol") pushList(i);
-      if (!currentListType) {
-        currentListType = "ul";
-      }
-      currentListItems.push(
-        <li key={`li-${i}`}>{parseInlineMarkdown(line.slice(2))}</li>
-      );
-      continue;
-    }
-
-    // 有序列表
-    const numMatch = line.match(/^(\d+)\.\s(.*)/);
-    if (numMatch) {
-      if (currentListType === "ul") pushList(i);
-      if (!currentListType) {
-        currentListType = "ol";
-      }
-      currentListItems.push(
-        <li key={`li-${i}`}>{parseInlineMarkdown(numMatch[2])}</li>
-      );
-      continue;
-    }
-
-    // 纯文本 / 段落
-    if (currentListType) pushList(i);
-    elements.push(<p key={`p-${i}`} style={{ marginBottom: "10px" }}>{parseInlineMarkdown(line)}</p>);
-  }
-
-  // 循环结束，检查是否还有未输出的表格或列表
-  if (inTable) {
-    pushTable(lines.length);
-  }
-  if (currentListType) {
-    pushList(lines.length);
-  }
-
-  return elements;
+export function renderMarkdown(text: string, isAnimating: boolean = false) {
+  return (
+    <div className="min-w-0 w-full overflow-hidden">
+      <Streamdown isAnimating={isAnimating} caret="block" components={components}>
+        {text}
+      </Streamdown>
+    </div>
+  );
 }
 
-/** 解析行内 Markdown 格式（粗体、行内代码、文件链接） */
 export function parseInlineMarkdown(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
   const tokenRegex = /(\*\*.*?\*\*|`.*?`|\[.*?\]\(file:\/\/.*?\))/g;
@@ -237,21 +164,10 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
           <a 
             key={index} 
             href={path} 
-            className="inline-file-link"
-            style={{ 
-              display: "inline-flex", 
-              alignItems: "center", 
-              gap: "4px", 
-              margin: "0 2px",
-              color: "inherit",
-              textDecoration: "none",
-              fontFamily: "Consolas, Monaco, monospace",
-              fontWeight: "600",
-              verticalAlign: "middle"
-            }}
+            className="inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] px-1 rounded-sm border border-zinc-200 dark:border-zinc-800"
           >
-            {isReactFile ? <ReactIcon /> : <span style={{ color: "#007aff", display: "inline-flex", alignItems: "center" }}><FileCode /></span>}
-            <span className="file-name-text" style={{ textDecoration: "none" }}>{title}</span>
+            {isReactFile ? <ReactIcon /> : <span className="text-brand-blue dark:text-deepseek-400 inline-flex items-center"><FileCode /></span>}
+            <span className="no-underline">{title}</span>
           </a>
         );
       } else {

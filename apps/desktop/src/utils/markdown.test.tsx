@@ -1,57 +1,55 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
-import { renderMarkdown } from "./markdown";
+import { renderMarkdown, parseInlineMarkdown } from "./markdown";
+import { Streamdown } from "streamdown";
 
-describe("Markdown Parser - Lists", () => {
-  test("should render consecutive ordered list items in a single ol", () => {
-    const markdown = "1. First item\n2. Second item\n3. Third item";
-    const elements = renderMarkdown(markdown);
+describe("Markdown Renderer Wrapper", () => {
+  test("should render Streamdown component with correct props", () => {
+    const markdown = "Hello world";
+    const element = renderMarkdown(markdown, true);
     
-    // elements should contain exactly one ol
-    expect(elements.length).toBe(1);
+    expect(element).toBeDefined();
+    expect(element.type).toBe(Streamdown);
+    expect(element.props.children).toBe(markdown);
+    expect(element.props.isAnimating).toBe(true);
+    expect(element.props.caret).toBe("block");
+  });
+});
+
+describe("Inline Markdown Parser", () => {
+  test("should parse bold text", () => {
+    const parts = parseInlineMarkdown("hello **bold** world");
+    expect(parts.length).toBe(3);
+    expect(parts[0]).toBe("hello ");
     
-    const ol = elements[0] as React.ReactElement;
-    expect(ol.type).toBe("ol");
-    expect(ol.props.start).toBeUndefined(); // starts at 1 by default
+    const boldPart = parts[1] as React.ReactElement;
+    expect(boldPart.type).toBe("strong");
+    expect(boldPart.props.children).toBe("bold");
     
-    const children = React.Children.toArray(ol.props.children);
-    expect(children.length).toBe(3);
-    
-    const firstLi = children[0] as React.ReactElement;
-    expect(firstLi.type).toBe("li");
+    expect(parts[2]).toBe(" world");
   });
 
-  test("should start from 1 even if raw markdown starts from non-1 (no continued numbering)", () => {
-    const markdown = "5. First item\n6. Second item";
-    const elements = renderMarkdown(markdown);
+  test("should parse inline code", () => {
+    const parts = parseInlineMarkdown("hello `code` world");
+    expect(parts.length).toBe(3);
     
-    expect(elements.length).toBe(1);
-    const ol = elements[0] as React.ReactElement;
-    expect(ol.type).toBe("ol");
-    expect(ol.props.start).toBeUndefined(); // starts at 1 by default
+    const codePart = parts[1] as React.ReactElement;
+    expect(codePart.type).toBe("code");
+    expect(codePart.props.children).toBe("code");
   });
 
-  test("should render consecutive unordered list items in a single ul", () => {
-    const markdown = "- Apple\n- Banana\n- Cherry";
-    const elements = renderMarkdown(markdown);
+  test("should parse file links", () => {
+    const parts = parseInlineMarkdown("check [App.tsx](file:///path/to/App.tsx)");
+    expect(parts.length).toBe(3);
+    expect(parts[0]).toBe("check ");
     
-    expect(elements.length).toBe(1);
-    const ul = elements[0] as React.ReactElement;
-    expect(ul.type).toBe("ul");
+    const linkPart = parts[1] as React.ReactElement;
+    expect(linkPart.type).toBe("a");
+    expect(linkPart.props.href).toBe("file:///path/to/App.tsx");
     
-    const children = React.Children.toArray(ul.props.children);
-    expect(children.length).toBe(3);
-  });
-
-  test("should split lists when interrupted by paragraph and restart numbering at 1", () => {
-    const markdown = "1. Item 1\nSome text\n2. Item 2";
-    const elements = renderMarkdown(markdown);
+    const children = React.Children.toArray(linkPart.props.children);
+    expect(children.length).toBe(2);
     
-    // Expect: ol, p, ol
-    expect(elements.length).toBe(3);
-    expect((elements[0] as React.ReactElement).type).toBe("ol");
-    expect((elements[1] as React.ReactElement).type).toBe("p");
-    expect((elements[2] as React.ReactElement).type).toBe("ol");
-    expect((elements[2] as React.ReactElement).props.start).toBeUndefined(); // starts at 1 by default
+    expect(parts[2]).toBe("");
   });
 });

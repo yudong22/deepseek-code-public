@@ -43,38 +43,38 @@ function ThinkingBlock({ content, isGenerating, isLastMessage }: ThinkingBlockPr
 
   return (
     <div
-      className="thinking-block"
+      className="py-1 my-2 text-[12px] font-mono text-[#8a8a8f] cursor-pointer select-none leading-relaxed overflow-hidden w-full"
       onClick={() => setExpanded((v) => !v)}
     >
       {expanded ? (
         /* 展开：每行显示 ∴ 前缀 */
-        <div className="thinking-lines">
+        <div className="flex flex-col gap-0.5">
           {lines.map((line, i) => (
-            <div key={i} className="thinking-line">
-              <span className="thinking-prefix">∴</span>
-              <span className="thinking-text">{line}</span>
+            <div key={i} className="flex items-start gap-2">
+              <span className="text-[10px] text-zinc-400 select-none">∴</span>
+              <span className="text-zinc-500 dark:text-zinc-500 flex-1 whitespace-pre-wrap break-all">{line}</span>
             </div>
           ))}
           {/* 流式输入中的闪烁光标 */}
           {isStreaming && (
-            <div className="thinking-line">
-              <span className="thinking-prefix">∴</span>
-              <span className="thinking-cursor" />
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] text-zinc-400 select-none">∴</span>
+              <span className="w-1.5 h-3.5 bg-[#8e8e93] animate-[blink-caret_1s_step-end_infinite] self-center" />
             </div>
           )}
         </div>
       ) : (
         /* 折叠：单行摘要 */
-        <div className="thinking-line thinking-collapsed">
-          <span className="thinking-prefix">∴</span>
-          <span className="thinking-summary">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-zinc-400 select-none">∴</span>
+          <span className="truncate max-w-[400px] text-zinc-400 dark:text-zinc-600">
             {lines[0]
               ? lines[0].length > 60
                 ? lines[0].slice(0, 60) + "…"
                 : lines[0]
               : "Thinking…"}
           </span>
-          <span className="thinking-meta">
+          <span className="text-[10px] text-zinc-400 ml-auto select-none">
             {lines.length} lines · click to expand
           </span>
         </div>
@@ -149,24 +149,25 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
     : null;
 
   return (
-    <div className="chat-feed-container">
+    <div className="relative flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#1c1c1e]">
       {/* 置顶 user 消息（悬浮定位，不占滚动容器空间，消除抖动） */}
       {stickyMsg && (
-        <div className="sticky-user-bar">
-          <span className="sticky-user-bar-icon">💬</span>
-          <span className="sticky-user-bar-text">{stickyMsg.content}</span>
+        <div className="absolute top-0 left-0 right-0 z-50 h-10 px-4 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-md border-b border-[#e3e3e3] dark:border-[#2c2c2e] flex items-center gap-2 shadow-sm text-xs font-semibold text-zinc-800 dark:text-zinc-200 select-none">
+          <span className="text-sm">💬</span>
+          <span className="truncate flex-1">{stickyMsg.content}</span>
         </div>
       )}
 
       {/* 规划模式横幅 */}
       {planMode && (
-        <div className="plan-mode-banner">
-          <span className="plan-mode-banner-icon">📋</span>
+        <div className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-xs font-medium select-none shrink-0">
+          <span className="text-sm">📋</span>
           <span>规划模式 — Agent 仅执行读取和分析，不会修改文件</span>
         </div>
       )}
 
-      <div className="chat-messages-feed" ref={containerRef}>
+      <div className="flex-1 overflow-y-auto min-h-0" ref={containerRef}>
+        <div className="p-4 flex flex-col gap-4 max-w-[740px] mx-auto">
         {messages.map((msg, index) => {
           const isLastMessage = index === messages.length - 1;
           const messageLiked = likes[msg.id] === "like";
@@ -197,49 +198,29 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
           return (
             <div
               key={msg.id}
-              className={`message-wrapper ${msg.role}`}
+              className={`group flex flex-col gap-1 w-full max-w-[85%] ${
+                msg.role === "user" ? "self-end items-end" : "self-start items-start"
+              }`}
               data-msg-id={msg.id}
               data-role={msg.role}
             >
               {msg.role === "user" ? (
-                <div className="message-bubble-user">
+                <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-[#f5f5f7] px-3.5 py-2.5 rounded-2xl rounded-tr-sm text-[13px] max-w-full whitespace-pre-wrap leading-relaxed shadow-sm">
                   {msg.content}
                 </div>
               ) : msg.role === "tool" ? (
                 /* tool 角色消息（旧格式兼容，基本不使用） */
-                <div className="message-tool-log" style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  padding: "8px 12px",
-                  margin: "6px 0",
-                  fontSize: "12px",
-                  color: "#8a8a8f",
-                  background: "rgba(0, 0, 0, 0.02)",
-                  borderRadius: "6px",
-                  borderLeft: "2px solid #8e8e93"
-                }}>
-                  <span style={{ fontSize: "14px" }}>⚙️</span>
+                <div className="flex items-center gap-2 p-2 my-1.5 text-xs text-[#8a8a8f] bg-black/2 dark:bg-white/2 rounded-md border-l-2 border-[#8e8e93] w-full">
+                  <span className="text-sm">⚙️</span>
                   <span><strong>工具执行完成</strong></span>
-                  <details style={{ marginLeft: "auto", cursor: "pointer" }}>
-                    <summary style={{ outline: "none", color: "#007aff", fontSize: "11px" }}>查看输出</summary>
-                    <pre style={{
-                      marginTop: "6px",
-                      background: "#f8f8f8",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      fontSize: "11px",
-                      color: "#333",
-                      maxHeight: "200px",
-                      overflow: "auto",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-all"
-                    }}>{msg.content}</pre>
+                  <details className="ml-auto cursor-pointer">
+                    <summary className="outline-none text-brand-blue text-[11px]">查看输出</summary>
+                    <pre className="mt-1.5 bg-[#f8f8f8] dark:bg-[#2c2c2e] p-2 rounded-md text-[11px] text-[#333] dark:text-[#f5f5f7] max-h-[200px] overflow-auto whitespace-pre-wrap break-all">{msg.content}</pre>
                   </details>
                 </div>
               ) : (
                 <>
-                  <div className="message-body">
+                  <div className="text-zinc-800 dark:text-[#f5f5f7] text-[13px] leading-relaxed w-full whitespace-pre-wrap pr-4">
                     {/* 有 sections 时按到达顺序渲染，否则降级为旧格式 */}
                     {msg.sections && msg.sections.length > 0 ? (
                       <>
@@ -273,7 +254,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                               );
                             }
                             return (
-                              <div key={si} className="message-tool-calls-list">
+                              <div key={si} className="my-1 w-full">
                                 <ToolCallGroup
                                   toolCalls={sec.toolCalls}
                                   messageId={msg.id}
@@ -286,7 +267,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                             );
                           }
                           if (sec.type === "text") {
-                            return <div key={si}>{renderMarkdown(sec.content || "")}</div>;
+                            return <div key={si}>{renderMarkdown(sec.content || "", isLastMessage && isGenerating)}</div>;
                           }
                           return null;
                         })}
@@ -299,15 +280,15 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                           (!msg.reasoning_content) &&
                           (!msg.toolCalls || msg.toolCalls.length === 0) &&
                           !msg.content && (
-                          <div className="thinking-block agent-loading">
-                            <div className="thinking-line">
-                              <span className="thinking-prefix">∴</span>
-                              <span className="thinking-text agent-loading-text">正在分析你的需求</span>
-                              <span className="thinking-cursor" />
+                          <div className="py-1 my-2 text-[12px] font-mono text-[#8a8a8f] w-full flex flex-col gap-0.5">
+                            <div className="flex items-start gap-2">
+                              <span className="text-[10px] text-zinc-400 select-none">∴</span>
+                              <span className="text-zinc-500 dark:text-zinc-500 font-semibold">正在分析你的需求</span>
+                              <span className="w-1.5 h-3.5 bg-[#8e8e93] animate-[blink-caret_1s_step-end_infinite] self-center" />
                             </div>
-                            <div className="thinking-line agent-loading-sub">
-                              <span className="thinking-prefix"> </span>
-                              <span className="thinking-text agent-loading-hint">模型响应需要一些时间，请稍候…</span>
+                            <div className="flex items-start gap-2 text-[10px] text-zinc-500">
+                              <span className="text-[10px] text-zinc-400 select-none"> </span>
+                              <span className="text-zinc-400 font-normal">模型响应需要一些时间，请稍候…</span>
                             </div>
                           </div>
                         )}
@@ -319,7 +300,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                           />
                         )}
                         {msg.toolCalls && msg.toolCalls.length > 0 && (
-                          <div className="message-tool-calls-list">
+                          <div className="my-1 w-full">
                             <ToolCallGroup
                               toolCalls={msg.toolCalls}
                               messageId={msg.id}
@@ -330,19 +311,19 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                             />
                           </div>
                         )}
-                        {renderMarkdown(msg.content)}
+                        {renderMarkdown(msg.content, isLastMessage && isGenerating)}
                       </>
                     )}
                   </div>
 
-                  <div className="message-footer">
+                  <div className="flex items-center gap-1.5 mt-1 text-[11px] text-[#8e8e93] h-5 w-full opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
                     {msg.role === "assistant" && msg.elapsed && (
-                      <span className="message-elapsed" style={{ marginRight: "12px", opacity: 0.75, fontSize: "11px" }}>
+                      <span className="mr-3 text-zinc-500">
                         运行时间: {msg.elapsed}s
                       </span>
                     )}
                     {!(isLastMessage && isGenerating) && (
-                      <span className="message-time" style={{ marginRight: "auto", fontSize: "11px" }}>
+                      <span className="mr-auto text-zinc-400">
                         {new Date(msg.completedAt || msg.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     )}
@@ -351,21 +332,25 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                     {!(isLastMessage && isGenerating) && (
                       <>
                         <button 
-                          className="message-action-icon"
+                          className="bg-transparent border-0 cursor-pointer text-[#8e8e93] hover:text-[#555] dark:hover:text-white p-1 rounded-md flex items-center justify-center transition-colors"
                           onClick={handleCopy}
                           title="复制消息"
                         >
                           <Icons.Copy />
                         </button>
                         <button 
-                          className={`message-action-icon${messageLiked ? " liked" : ""}`}
+                          className={`bg-transparent border-0 cursor-pointer text-[#8e8e93] p-1 rounded-md flex items-center justify-center transition-colors ${
+                            messageLiked ? "text-blue-500 hover:text-blue-600" : "hover:text-[#555] dark:hover:text-white"
+                          }`}
                           onClick={handleLike}
                           title="点赞"
                         >
                           <Icons.Like />
                         </button>
                         <button 
-                          className={`message-action-icon${messageDisliked ? " disliked" : ""}`}
+                          className={`bg-transparent border-0 cursor-pointer text-[#8e8e93] p-1 rounded-md flex items-center justify-center transition-colors ${
+                            messageDisliked ? "text-red-500 hover:text-red-600" : "hover:text-[#555] dark:hover:text-white"
+                          }`}
                           onClick={handleDislike}
                           title="点踩"
                         >
@@ -380,6 +365,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
           );
         })}
         <div ref={messagesEndRef} />
+        </div>
       </div>
     </div>
   );

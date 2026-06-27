@@ -105,13 +105,14 @@ export default function HistoryPage({
   }, [sessions, query, filterProject]);
 
   return (
-    <div className="history-page-container">
-      <div className="history-page-content">
-        <h2 className="history-page-title">Conversation History</h2>
+    <div className="flex-1 bg-white dark:bg-[#1c1c1e] overflow-y-auto w-full">
+      <div className="max-w-[740px] mx-auto px-6 py-8 flex flex-col gap-6">
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Conversation History</h1>
 
-        <div className="history-search-row">
-          <div className="history-search-wrapper">
-            <span className="history-search-icon">
+        {/* Search + Filter */}
+        <div className="flex items-center gap-3 w-full">
+          <div className="relative flex-1 flex items-center">
+            <span className="absolute left-3.5 flex items-center pointer-events-none">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8" />
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -122,16 +123,20 @@ export default function HistoryPage({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search conversations..."
-              className="history-search-input"
+              className="w-full h-9 pl-9 pr-4 bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-full text-[13px] outline-none text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-500 transition-colors focus:border-zinc-400 dark:focus:border-zinc-500"
             />
           </div>
 
-          <div style={{ position: "relative" }} ref={dropdownRef}>
+          <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-              className="history-filter-btn"
+              className={`h-9 px-4 border rounded-full text-[13px] font-medium flex items-center gap-2 cursor-pointer transition-colors ${
+                filterProject
+                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent"
+                  : "bg-white dark:bg-[#2c2c2e] text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-[#3a3a3c]"
+              }`}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="4" y1="21" x2="4" y2="14" />
                 <line x1="4" y1="10" x2="4" y2="3" />
                 <line x1="12" y1="21" x2="12" y2="12" />
@@ -146,30 +151,26 @@ export default function HistoryPage({
             </button>
 
             {isFilterDropdownOpen && (
-              <div className="history-filter-dropdown">
+              <div className="absolute top-full right-0 mt-1 bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg z-50 py-1 w-52 flex flex-col overflow-hidden">
                 <div
-                  className={`history-filter-item ${filterProject === null ? "active" : ""}`}
-                  onClick={() => {
-                    setFilterProject(null);
-                    setIsFilterDropdownOpen(false);
-                  }}
+                  className={`px-3.5 py-2 text-[13px] cursor-pointer flex items-center justify-between transition-colors ${
+                    filterProject === null ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-[#3a3a3c]"
+                  }`}
+                  onClick={() => { setFilterProject(null); setIsFilterDropdownOpen(false); }}
                 >
                   All Projects
-                  {filterProject === null && <span>✓</span>}
+                  {filterProject === null && <span className="text-brand-blue">✓</span>}
                 </div>
                 {uniqueProjects.map((p) => (
                   <div
                     key={p}
-                    className={`history-filter-item ${filterProject === p ? "active" : ""}`}
-                    onClick={() => {
-                      setFilterProject(p);
-                      setIsFilterDropdownOpen(false);
-                    }}
+                    className={`px-3.5 py-2 text-[13px] cursor-pointer flex items-center justify-between transition-colors ${
+                      filterProject === p ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-[#3a3a3c]"
+                    }`}
+                    onClick={() => { setFilterProject(p); setIsFilterDropdownOpen(false); }}
                   >
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: "8px" }}>
-                      {p}
-                    </span>
-                    {filterProject === p && <span>✓</span>}
+                    <span className="overflow-hidden text-ellipsis whitespace-nowrap mr-2">{p}</span>
+                    {filterProject === p && <span className="text-brand-blue">✓</span>}
                   </div>
                 ))}
               </div>
@@ -177,21 +178,25 @@ export default function HistoryPage({
           </div>
         </div>
 
-        <div className="history-section-header">All Conversations</div>
+        {/* Section header */}
+        <div className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 tracking-widest uppercase select-none">
+          All Conversations
+        </div>
 
-        <div className="history-list">
+        {/* List */}
+        <div className="flex flex-col">
           {filtered.length === 0 ? (
-            <div style={{ padding: "32px", textAlign: "center", color: "#8e8e93", fontSize: "14px" }}>
+            <div className="py-12 text-center text-[13px] text-zinc-400 dark:text-zinc-500">
               {query.trim() || filterProject ? "No matching conversations" : "No conversation history"}
             </div>
           ) : (
             filtered.map((s) => (
               <div
                 key={s.id}
-                className="history-item"
+                className="group flex items-center justify-between py-3.5 border-b border-zinc-100 dark:border-zinc-800/70 hover:bg-zinc-50 dark:hover:bg-[#2c2c2e]/60 cursor-pointer select-none transition-colors rounded-sm -mx-2 px-2"
                 onClick={() => onNavigate(s.id)}
               >
-                <div className="history-item-left">
+                <div className="flex-1 min-w-0 flex flex-col gap-0.5">
                   {editingId === s.id ? (
                     <input
                       type="text"
@@ -204,32 +209,31 @@ export default function HistoryPage({
                       }}
                       onBlur={() => handleRename(s)}
                       autoFocus
-                      className="history-edit-input"
+                      className="h-7 px-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-brand-blue dark:border-deepseek-400 rounded-md text-[13px] text-zinc-800 dark:text-[#f5f5f7] outline-none w-full max-w-[400px]"
                     />
                   ) : (
                     <>
-                      <div className="history-item-title" title={s.title}>
+                      <div className="text-[14px] font-semibold text-zinc-900 dark:text-[#f5f5f7] truncate" title={s.title}>
                         {s.title || "(Untitled Conversation)"}
                       </div>
-                      <div className="history-item-subtitle">
+                      <div className="text-[12px] text-zinc-400 dark:text-zinc-500">
                         {s.projectName || "Outside of Project"}
                       </div>
                     </>
                   )}
                 </div>
 
-                <div className="history-item-right" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-2 shrink-0 ml-6" onClick={(e) => e.stopPropagation()}>
                   {editingId !== s.id && (
                     <>
-                      <span className="history-item-time">{getSessionTimeLabel(s.updatedAt)}</span>
-                      <div className="history-item-actions">
+                      <span className="text-[13px] text-zinc-400 dark:text-zinc-500 group-hover:hidden tabular-nums">
+                        {getSessionTimeLabel(s.updatedAt)}
+                      </span>
+                      <div className="hidden group-hover:flex items-center gap-0.5">
                         <button
                           title="Rename"
-                          onClick={() => {
-                            setEditingId(s.id);
-                            setEditTitle(s.title);
-                          }}
-                          className="history-action-btn"
+                          onClick={() => { setEditingId(s.id); setEditTitle(s.title); }}
+                          className="bg-transparent border-0 cursor-pointer text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 p-1.5 rounded-md transition-colors"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M12 20h9" />
@@ -239,7 +243,7 @@ export default function HistoryPage({
                         <button
                           title="Delete"
                           onClick={(e) => handleDelete(e, s.id, s.title || "(Untitled)")}
-                          className="history-action-btn delete"
+                          className="bg-transparent border-0 cursor-pointer text-zinc-400 hover:text-red-500 p-1.5 rounded-md transition-colors"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="3 6 5 6 21 6" />

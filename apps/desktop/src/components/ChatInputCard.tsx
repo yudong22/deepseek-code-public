@@ -267,10 +267,10 @@ export default function ChatInputCard({
   };
 
   return (
-    <div className="chat-input-card">
+    <div className="relative flex flex-col bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-xl w-full transition-all duration-200 shadow-sm focus-within:border-zinc-400 dark:focus-within:border-zinc-500">
       <textarea
         ref={textareaRef}
-        className="chat-input-textarea"
+        className="w-full bg-transparent border-0 outline-none text-[13px] text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-500 resize-none max-h-48 overflow-y-auto px-4 pt-3 pb-2"
         value={inputText}
         onChange={(e) => onInputChange(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -296,29 +296,37 @@ export default function ChatInputCard({
         onDismiss={() => setShowFileAutocomplete(false)}
       />
 
-      <div className="chat-input-toolbar">
-        <div className="chat-input-toolbar-left">
-          <button className="chat-input-action-btn" onClick={handlePlusClick} title="Add Context">
+      <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+        <div className="flex items-center gap-1.5">
+          <button
+            className="bg-transparent border-0 cursor-pointer text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-md transition-colors flex items-center justify-center"
+            onClick={handlePlusClick}
+            title="Add Context"
+          >
             <Icons.Plus />
           </button>
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-            <button 
-              className="chat-input-model-btn" 
+            <button
+              className="flex items-center gap-1 bg-transparent hover:bg-zinc-100 dark:hover:bg-[#3a3a3c] text-[12px] font-medium text-zinc-500 dark:text-zinc-400 px-2 py-1 rounded-md transition-colors border-0 cursor-pointer"
               onClick={(e) => { e.stopPropagation(); onToggleModelDropdown(); }}
             >
               <span>{selectedModel}</span>
               <Icons.ChevronDown />
             </button>
             {isModelDropdownOpen && (
-              <div className="model-dropdown bottom-aligned">
+              <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 py-1 w-44 flex flex-col overflow-hidden">
                 <div
-                  className={`model-dropdown-item ${selectedModel === "deepseek-v4-flash" ? "active" : ""}`}
+                  className={`px-3 py-1.5 text-[13px] hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c] cursor-pointer transition-colors ${
+                    selectedModel === "deepseek-v4-flash" ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300"
+                  }`}
                   onClick={() => onSelectModel("deepseek-v4-flash")}
                 >
                   deepseek-v4-flash
                 </div>
                 <div
-                  className={`model-dropdown-item ${selectedModel === "deepseek-v4-pro" ? "active" : ""}`}
+                  className={`px-3 py-1.5 text-[13px] hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c] cursor-pointer transition-colors ${
+                    selectedModel === "deepseek-v4-pro" ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300"
+                  }`}
                   onClick={() => onSelectModel("deepseek-v4-pro")}
                 >
                   deepseek-v4-pro
@@ -327,17 +335,28 @@ export default function ChatInputCard({
             )}
           </div>
         </div>
-        
-        <div className="chat-input-toolbar-right">
-          <button className="chat-input-mic-btn" title="Voice Input">
+
+        <div className="flex items-center gap-2">
+          <button
+            className="bg-transparent border-0 cursor-pointer text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-md transition-colors flex items-center justify-center"
+            title="Voice Input"
+          >
             <Icons.Mic />
           </button>
           {isGenerating && !hasPendingQuestion ? (
-            <button className="chat-input-send-btn cancelling" onClick={onCancel} title="Stop">
+            <button
+              className="w-7 h-7 flex items-center justify-center bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-600 dark:text-zinc-300 rounded-full cursor-pointer border-0 transition-colors"
+              onClick={onCancel}
+              title="Stop"
+            >
               <Icons.Stop />
             </button>
           ) : inputText.trim() || hasPendingQuestion ? (
-            <button className="chat-input-send-btn" onClick={onSend} title="Send">
+            <button
+              className="w-7 h-7 flex items-center justify-center bg-zinc-800 dark:bg-zinc-200 hover:bg-zinc-700 dark:hover:bg-white text-white dark:text-zinc-900 rounded-full cursor-pointer border-0 transition-colors"
+              onClick={onSend}
+              title="Send"
+            >
               <Icons.ArrowRight />
             </button>
           ) : null}

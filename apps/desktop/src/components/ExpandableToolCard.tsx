@@ -28,8 +28,9 @@ export default function ExpandableToolCard({ tc, onCancel }: ExpandableToolCardP
     if (isDone) setExpanded(false);
   }, [isDone]);
 
-  let statusColor = "#007aff";
-  if (isDone) statusColor = isError ? "#ff3b30" : "#34c759";
+  const statusColorClass = isDone 
+    ? (isError ? "text-red-500" : "text-green-500") 
+    : "text-brand-blue";
 
   const formatOutput = (text: string) => {
     if (!text) return "";
@@ -39,46 +40,28 @@ export default function ExpandableToolCard({ tc, onCancel }: ExpandableToolCardP
   };
 
   return (
-    <div style={{
-      fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-      fontSize: "12px",
-      lineHeight: "1.6",
-      margin: "2px 0",
-      color: "inherit",
-      display: "flex",
-      flexDirection: "column",
-    }}>
+    <div className="font-mono text-xs leading-relaxed my-0.5 color-inherit flex flex-col">
       <div
         onClick={() => setExpanded(v => !v)}
-        style={{ display: "flex", alignItems: "center", cursor: "pointer", userSelect: "none", width: "100%" }}
+        className="flex items-center cursor-pointer select-none w-full"
       >
-        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "4px", flex: 1 }}>
-          <span style={{
-            color: statusColor,
-            marginRight: "2px",
-            fontSize: "14px",
-            lineHeight: 1,
-            userSelect: "none",
-            animation: isExecuting ? "tc-pulse 1.5s ease-in-out infinite" : "none"
-          }}>•</span>
-          <span style={{ fontWeight: "bold", opacity: 0.8 }}>{name}</span>
-          <span style={{ opacity: 0.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>({argsPreview})</span>
-          <span style={{ fontSize: "11px", opacity: 0.35, marginLeft: "4px" }}>{elapsed}</span>
+        <div className="flex items-center flex-wrap gap-1 flex-1">
+          <span className={`text-sm font-bold leading-none select-none mr-0.5 ${statusColorClass} ${isExecuting ? "animate-pulse" : ""}`}>
+            •
+          </span>
+          <span className="font-bold opacity-80">{name}</span>
+          <span className="opacity-60 whitespace-pre-wrap break-all">({argsPreview})</span>
+          <span className="text-[11px] opacity-35 ml-1">{elapsed}</span>
           {isExecuting && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-              <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>
+            <span className="inline-flex items-center gap-1">
+              <span className="text-[11px] opacity-60 italic animate-pulse">
                 executing…
               </span>
               {onCancel && (
                 <span
                   onClick={(e) => { e.stopPropagation(); onCancel(); }}
                   title="Cancel"
-                  style={{
-                    cursor: "pointer", fontSize: "12px", opacity: 0.5, lineHeight: 1,
-                    padding: "1px 4px", borderRadius: "3px",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  className="cursor-pointer text-xs opacity-50 px-1 py-0.5 rounded-sm hover:bg-black/10 transition-colors"
                 >
                   ✕
                 </span>
@@ -86,44 +69,25 @@ export default function ExpandableToolCard({ tc, onCancel }: ExpandableToolCardP
             </span>
           )}
         </div>
-        <span style={{ fontSize: "10px", opacity: 0.4, width: "12px", textAlign: "center", marginLeft: "10px", marginRight: "4px" }}>
+        <span className="text-[10px] opacity-40 w-3 text-center ml-2.5 mr-1">
           {expanded ? "▼" : "▶"}
         </span>
       </div>
 
       {expanded && isDone && content && (
-        <pre style={{
-          margin: "2px 0 0 0",
-          fontFamily: "inherit",
-          fontSize: "inherit",
-          lineHeight: "inherit",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-all",
-          color: "inherit",
-          opacity: 0.8,
-          maxHeight: "320px",
-          overflowY: "auto",
-          background: "transparent",
-          border: "none",
-          paddingLeft: 0,
-        }}>
+        <pre className="m-0 mt-0.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all color-inherit opacity-80 max-h-80 overflow-y-auto bg-transparent border-none p-0">
           {formatOutput(content)}
         </pre>
       )}
 
       {expanded && !isDone && (
-        <div style={{ margin: "2px 0 0 0", opacity: 0.6 }}>
+        <div className="mt-0.5 opacity-60">
           <span>  └ 正在执行中…
             {onCancel && (
               <span
                 onClick={(e) => { e.stopPropagation(); onCancel(); }}
                 title="Cancel"
-                style={{
-                  cursor: "pointer", marginLeft: "8px", fontSize: "12px", opacity: 0.6,
-                  padding: "1px 4px", borderRadius: "3px",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                className="cursor-pointer ml-2 text-xs opacity-60 px-1 py-0.5 rounded-sm hover:bg-black/10 transition-colors"
               >
                 [Cancel]
               </span>

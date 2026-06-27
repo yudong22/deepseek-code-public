@@ -36,8 +36,9 @@ export default function FileToolCard({
   const argsPreview = getArgsPreview(tc);
   const fileName = fileBaseName(argsPreview);
 
-  let statusColor = "#007aff";
-  if (isDone) statusColor = isError ? "#ff3b30" : "#34c759";
+  const statusColorClass = isDone 
+    ? (isError ? "text-red-500" : "text-green-500") 
+    : "text-brand-blue";
 
   const actionLabel: Record<string, string> = {
     read: "reading",
@@ -106,56 +107,35 @@ export default function FileToolCard({
   };
 
   return (
-    <div style={{
-      fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-      fontSize: "12px",
-      lineHeight: "1.8",
-      margin: "2px 0",
-      color: "inherit",
-      display: "flex",
-      alignItems: "center",
-      gap: "5px",
-      flexWrap: "wrap",
-    }}>
-      <span style={{
-        color: statusColor,
-        fontSize: "14px",
-        lineHeight: 1,
-        userSelect: "none",
-        flexShrink: 0,
-        animation: isExecuting ? "tc-pulse 1.5s ease-in-out infinite" : "none"
-      }}>•</span>
+    <div className="font-mono text-xs leading-loose my-0.5 color-inherit flex items-center gap-1.5 flex-wrap">
+      <span className={`text-sm font-bold leading-none select-none shrink-0 ${statusColorClass} ${isExecuting ? "animate-pulse" : ""}`}>
+        •
+      </span>
 
-      <span style={{ fontWeight: "bold", flexShrink: 0, opacity: 0.8 }}>{name}</span>
+      <span className="font-bold shrink-0 opacity-80">{name}</span>
 
       <span
         onClick={handleClick}
         title={argsPreview}
-        style={{
-          color: isDone && !isError ? "#007aff" : "inherit",
-          cursor: isDone && !isError ? "pointer" : "default",
-          textDecoration: isDone && !isError ? "underline" : "none",
-          opacity: isDone ? 1 : 0.55,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-          maxWidth: "260px",
-          flexShrink: 1,
-        }}
+        className={`truncate max-w-[260px] shrink ${
+          isDone && !isError 
+            ? "text-brand-blue dark:text-deepseek-400 cursor-pointer underline opacity-100" 
+            : "opacity-55 cursor-default no-underline"
+        }`}
       >
         {fileName}
       </span>
 
-      <span style={{ fontSize: "11px", opacity: 0.35, flexShrink: 0 }}>{elapsed}</span>
+      <span className="text-[11px] opacity-35 shrink-0">{elapsed}</span>
 
       {!isDone && (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+        <span className="inline-flex items-center gap-1.5 shrink-0">
           {isExecuting ? (
-            <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", animation: "tc-pulse 1.5s ease-in-out infinite" }}>
+            <span className="text-[11px] opacity-60 italic animate-pulse">
               executing…
             </span>
           ) : (
-            <span style={{ fontSize: "11px", opacity: 0.45, fontStyle: "italic" }}>
+            <span className="text-[11px] opacity-45 italic">
               {actionLabel[name] ?? "running"}…
             </span>
           )}
@@ -163,12 +143,7 @@ export default function FileToolCard({
             <span
               onClick={(e) => { e.stopPropagation(); onCancel(); }}
               title="Cancel"
-              style={{
-                cursor: "pointer", fontSize: "12px", opacity: 0.5, lineHeight: 1,
-                padding: "1px 4px", borderRadius: "3px",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              className="cursor-pointer text-xs opacity-50 px-1 py-0.5 rounded-sm hover:bg-black/10 transition-colors"
             >
               ✕
             </span>
@@ -176,7 +151,7 @@ export default function FileToolCard({
         </span>
       )}
       {isDone && isError && (
-        <span style={{ fontSize: "11px", color: "#ff3b30", flexShrink: 0 }}>failed</span>
+        <span className="text-[11px] text-red-500 shrink-0 font-bold">failed</span>
       )}
     </div>
   );

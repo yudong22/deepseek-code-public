@@ -47,44 +47,29 @@ export default function TodoListCard({ tc, onCancel }: TodoListCardProps) {
     in_progress: "◐",
     completed: "●",
   };
-  const statusColor: Record<string, string> = {
-    pending: "#8e8e93",
-    in_progress: "#007aff",
-    completed: "#34c759",
+  const statusColorClass: Record<string, string> = {
+    pending: "text-zinc-400 dark:text-zinc-500",
+    in_progress: "text-brand-blue",
+    completed: "text-green-500",
   };
 
-  let headerColor = "#007aff";
-  if (isDone) headerColor = totalCount > 0 && doneCount === totalCount ? "#34c759" : "#007aff";
+  const isAllDone = totalCount > 0 && doneCount === totalCount;
+  const headerColorClass = isDone && isAllDone ? "text-green-500" : "text-brand-blue";
 
   return (
-    <div style={{
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      fontSize: "12px",
-      margin: "4px 0",
-      padding: "8px 12px",
-      background: "rgba(0, 122, 255, 0.04)",
-      borderRadius: "8px",
-      borderLeft: "3px solid #007aff",
-    }}>
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        marginBottom: items.length > 0 ? "6px" : "0",
-        fontWeight: 600,
-        color: headerColor,
-      }}>
+    <div className="text-xs my-1 px-3 py-2 bg-brand-blue/5 dark:bg-brand-blue/10 rounded-lg border-l-3 border-brand-blue font-sans">
+      <div className={`flex items-center gap-2 font-semibold ${items.length > 0 ? "mb-1.5" : "mb-0"} ${headerColorClass}`}>
         <span>TODOs</span>
         {totalCount > 0 && (
-          <span style={{ fontSize: "11px", opacity: 0.5, fontWeight: 400 }}>
+          <span className="text-[11px] opacity-50 font-normal">
             {doneCount}/{totalCount}
           </span>
         )}
-        <span style={{ fontSize: "11px", opacity: 0.35, fontWeight: 400, marginLeft: "4px" }}>
+        <span className="text-[11px] opacity-35 font-normal ml-1">
           {elapsed}
         </span>
         {isExecuting && (
-          <span style={{ fontSize: "11px", opacity: 0.6, fontStyle: "italic", fontWeight: 400 }}>
+          <span className="text-[11px] opacity-60 font-normal italic">
             writing…
           </span>
         )}
@@ -92,12 +77,7 @@ export default function TodoListCard({ tc, onCancel }: TodoListCardProps) {
           <span
             onClick={(e) => { e.stopPropagation(); onCancel(); }}
             title="Cancel"
-            style={{
-              cursor: "pointer", fontSize: "12px", opacity: 0.5, lineHeight: 1,
-              marginLeft: "auto", padding: "1px 4px", borderRadius: "3px",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            className="cursor-pointer text-xs opacity-50 ml-auto px-1 py-0.5 rounded-sm hover:bg-black/10 transition-colors"
           >
             ✕
           </span>
@@ -105,30 +85,23 @@ export default function TodoListCard({ tc, onCancel }: TodoListCardProps) {
       </div>
 
       {items.map((item, idx) => (
-        <div key={idx} style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: "6px",
-          padding: "3px 0",
-          color: item.status === "completed" ? "#8e8e93" : "inherit",
-          textDecoration: item.status === "completed" ? "line-through" : "none",
-        }}>
-          <span style={{
-            color: statusColor[item.status] || "#8e8e93",
-            flexShrink: 0,
-            marginTop: "1px",
-            fontSize: "13px",
-          }}>
+        <div 
+          key={idx} 
+          className={`flex items-start gap-1.5 py-0.5 ${
+            item.status === "completed" ? "text-zinc-400 dark:text-zinc-500 line-through" : "text-zinc-800 dark:text-[#f5f5f7]"
+          }`}
+        >
+          <span className={`text-sm shrink-0 mt-0.5 ${statusColorClass[item.status] || "text-zinc-400"}`}>
             {statusIcon[item.status] || "○"}
           </span>
-          <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+          <span className="whitespace-pre-wrap break-all">
             {item.text}
           </span>
         </div>
       ))}
 
       {!isDone && items.length === 0 && (
-        <div style={{ opacity: 0.5, fontSize: "11px" }}>
+        <div className="opacity-50 text-[11px] text-zinc-500">
           <span>正在生成待办列表…</span>
         </div>
       )}

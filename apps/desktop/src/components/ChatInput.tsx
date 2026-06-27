@@ -21,8 +21,10 @@ interface ChatInputProps {
 
 export default function ChatInput({ hasPendingQuestion, ...props }: ChatInputProps) {
   return (
-    <div className="active-chat-input-container">
-      <ChatInputCard hasPendingQuestion={hasPendingQuestion} {...props} />
+    <div className="px-4 pb-4 pt-3 bg-white dark:bg-[#1c1c1e] border-t border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0">
+      <div className="max-w-[740px] mx-auto">
+        <ChatInputCard hasPendingQuestion={hasPendingQuestion} {...props} />
+      </div>
     </div>
   );
 }
