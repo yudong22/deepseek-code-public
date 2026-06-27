@@ -408,6 +408,7 @@ fn opencode_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 
 #[tauri::command]
 fn list_scheduled_tasks(app: tauri::AppHandle) -> Result<Vec<sidecar_agent::session::ScheduledTask>, String> {
+    ensure_scheduler_started(app.clone());
     let dir = opencode_dir(&app)?;
     let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
     store.list_scheduled_tasks().map_err(|e| e.to_string())
@@ -444,20 +445,27 @@ fn toggle_scheduled_task(app: tauri::AppHandle, id: String, enabled: bool) -> Re
 
 // ─── Scheduler (v0.5.8) ───────────────────────────
 
-fn start_scheduler(app: tauri::AppHandle) {
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
-        loop {
-            interval.tick().await;
-            let dir = match opencode_dir(&app) {
-                Ok(d) => d,
-                Err(_) => continue,
-            };
-            let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
-            let tasks = match store.get_due_tasks() {
-                Ok(t) => t,
-                Err(_) => continue,
-            };
+/// Lazily start the scheduler on first access (avoids setup-stage panics).
+fn ensure_scheduler_started(app: tauri::AppHandle) {
+    use std::sync::OnceLock;
+    static STARTED: OnceLock<()> = OnceLock::new();
+    STARTED.get_or_init(|| {
+        tokio::spawn(async move {
+            // Delay first tick to let Tauri fully initialize
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                let dir = match opencode_dir(&app) {
+                    Ok(d) => d,
+                    Err(e) => { eprintln!("[scheduler] opencode_dir error: {e}"); continue; }
+                };
+                let store = sidecar_agent::session::SessionStore::new(dir, "scheduler");
+                let _ = store.init_tables();
+                let tasks = match store.get_due_tasks() {
+                    Ok(t) => t,
+                    Err(e) => { eprintln!("[scheduler] get_due_tasks error: {e}"); continue; }
+                };
             for task in tasks {
                 if !task.enabled {
                     continue;
@@ -524,7 +532,8 @@ fn start_scheduler(app: tauri::AppHandle) {
                 let status = "completed";
                 let _ = store.complete_scheduled_task(&task_id, status);
             }
-        }
+            } // end loop
+        });
     });
 }
 
@@ -539,11 +548,6 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(ApiKeyState { key: std::sync::Mutex::new(String::new()) })
-        .setup(|app| {
-            let handle = app.handle().clone();
-            start_scheduler(handle);
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             greet,
             run_agent_loop,
