@@ -1,11 +1,11 @@
 {
-  "version": "0.5.5",
+  "version": "0.5.6",
   "notes": "### 🚀 新功能；- feat: 清理 TS sidecar 死代码并重构更新流程",
-  "pub_date": "2026-06-26T18:15:40Z",
+  "pub_date": "2026-06-27T08:30:52Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.5/deepseek-code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSUEhROWhKSk4xbW1DQ2p3VTZKck1zUXFTeFFyVHVRdElqS0ZqYmt2NzAycEhzd0l5Tmw4TUhsRmtBYW1odklyaXlwdU5NUWRNblBHUUc5T1JmVHdRa3MwR0RBelVaMVFnPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNDk3NzM5CWZpbGU6ZGVlcHNlZWstY29kZS5hcHAudGFyLmd6CkNzWDcvaVgwSnJ6Wjc5NVZPOEVNYzZHaHhmemk3MmJGQVdnaVUrSlNWZE9EK2FmNGRCZXg1ZVNOK0NOZHFtVjhwTXhPWHczbkdhWlNxa1BzZkxpc0NRPT0K"
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.5.6/deepseek-code_aarch64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSUEhROWhKSk4xbW9CL1Myb1dVUHhPMFRBamVpeWF2SkZnK2JHY0g0L0VTQ3J4dU40SHNZS2k0OHZaeXBkYVJTVlZ3NlkxY2N6R1dzN1BvaHViVENPSDlYaUhHZWNWMHd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNTQ5MDUxCWZpbGU6ZGVlcHNlZWstY29kZS5hcHAudGFyLmd6ClRNUmVWRlh0SUY5TW9qZStBaFp3TUQraG9va2c0clpaUW8xUVh6TE5MbjNSc3JDdHhXczZBQlk2d1JLbHlmZUlqdGNubmZJdEo1N0kyK2NITGNTeEFnPT0K"
     }
   }
 }
