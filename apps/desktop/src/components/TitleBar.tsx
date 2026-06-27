@@ -16,6 +16,8 @@ interface TitleBarProps {
   activeSession: Session | undefined;
   hasActiveSession: boolean;
   planMode?: boolean;
+  isHistoryPage?: boolean;
+  isTasksPage?: boolean;
   tabs: Tab[];
   activeTabId: string;
   onToggleLeftSidebar: () => void;
@@ -24,7 +26,6 @@ interface TitleBarProps {
   onSettingsOpen: () => void;
   onTabClick: (tabId: string) => void;
   onTabClose: (tabId: string, e: React.MouseEvent) => void;
-  showToast: (message: string) => void;
   isNightMode: boolean;
   onToggleNightMode: () => void;
   rightPanelWidth: number;
@@ -36,6 +37,8 @@ export default function TitleBar({
   activeSession,
   hasActiveSession,
   planMode,
+  isHistoryPage,
+  isTasksPage,
   tabs,
   activeTabId,
   onToggleLeftSidebar,
@@ -44,7 +47,6 @@ export default function TitleBar({
   onSettingsOpen,
   onTabClick,
   onTabClose,
-  showToast,
   isNightMode,
   onToggleNightMode,
   rightPanelWidth,
@@ -71,7 +73,9 @@ export default function TitleBar({
         {/* 中间部分（聊天区上方） */}
         <div className="titlebar-middle" data-tauri-drag-region>
           <div className="titlebar-breadcrumbs" data-tauri-drag-region style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            <span className="titlebar-breadcrumb-session">{activeSession ? activeSession.title : "New Conversation"}</span>
+            <span className="titlebar-breadcrumb-session">
+              {activeSession ? activeSession.title : isHistoryPage ? "Conversation History" : isTasksPage ? "Scheduled Tasks" : "New Conversation"}
+            </span>
             {planMode && (
               <span className="plan-mode-badge" title="规划模式 — 只读分析">
                 📋 Plan
@@ -79,12 +83,6 @@ export default function TitleBar({
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", height: "100%" }}>
-            {hasActiveSession && activeSession && (
-              <button className="titlebar-btn titlebar-ide-btn" onClick={() => showToast("待开发")}>
-                <Icons.IDE />
-                Open IDE
-              </button>
-            )}
           </div>
         </div>
 
@@ -192,10 +190,6 @@ export default function TitleBar({
 
         {!hasActiveSession && (
           <div className="titlebar-actions" style={{ marginLeft: "auto", paddingRight: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <button className="titlebar-btn titlebar-ide-btn" onClick={() => showToast("待开发")} style={{ marginRight: "4px" }}>
-              <Icons.IDE />
-              Open IDE
-            </button>
             <button
               className={`titlebar-btn${isNightMode ? " active" : ""}`}
               onClick={onToggleNightMode}

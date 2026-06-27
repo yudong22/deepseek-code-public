@@ -126,6 +126,16 @@ else
   WARNINGS=$((WARNINGS + 1))
 fi
 
+# ---------- 4. typescript（tsc --noEmit）----------
+echo ""
+echo "🔍 [typescript] checking types in apps/desktop..."
+if ! (cd apps/desktop && bun x tsc --noEmit); then
+  echo "❌ [typescript] failed"
+  FAILED=1
+else
+  echo "✅ [typescript] passed"
+fi
+
 # ---------- 未来扩展区 ----------
 # 加 markdownlint：
 # if command -v markdownlint-cli2 >/dev/null 2>&1; then

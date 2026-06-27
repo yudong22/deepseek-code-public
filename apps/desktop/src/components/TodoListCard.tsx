@@ -1,4 +1,3 @@
-import React from "react";
 import { ToolCallData, useElapsed } from "./toolUtils";
 
 interface TodoItem {

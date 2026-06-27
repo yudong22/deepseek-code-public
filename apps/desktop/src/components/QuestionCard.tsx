@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { bridge } from "@/bridge";
 
 interface QuestionOption {
@@ -34,7 +34,7 @@ function parseAnswerFromResult(result?: string): string | null {
   }
 }
 
-export default function QuestionCard({ args, callId, onAnswered, result }: QuestionCardProps) {
+export default function QuestionCard({ args, callId: _callId, onAnswered, result }: QuestionCardProps) {
   const savedAnswer = parseAnswerFromResult(result);
   const [selectedOption, setSelectedOption] = useState<string | null>(
     savedAnswer && args ? guessSelectedOption(args, savedAnswer) : null
@@ -60,7 +60,12 @@ function guessSelectedOption(args: string, answer: string): string | null {
     questionData = JSON.parse(args);
   } catch {}
 
-  const question = questionData.questions?.[0] || {};
+  interface QuestionItem {
+    question: string;
+    header?: string;
+    options?: QuestionOption[];
+  }
+  const question: Partial<QuestionItem> = questionData.questions?.[0] || {};
   const questionText = questionData.question || question.question || "Agent 需要你确认";
   const header = question.header || "";
   const options = question.options || [];

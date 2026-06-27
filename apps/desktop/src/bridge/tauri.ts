@@ -3,7 +3,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { check, Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { IBridge, UpdateResult, UpdateStatus, Session, Message, AgentEvent } from "./types";
+import { IBridge, UpdateResult, UpdateStatus, Session, Message, AgentEvent, ScheduledTask } from "./types";
 import { version as appVersion } from "../../package.json";
 
 let dbInstance: Database | null = null;

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from "react";
-import { HashRouter, Routes, Route, useNavigate, useParams } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { HashRouter, Routes, Route, useNavigate, useParams, useLocation } from "react-router-dom";
 import { bridge, Session, Message } from "@/bridge";
 import "./App.css";
 
 import Toast from "@/components/Toast";
 import SettingsModal from "@/components/SettingsModal";
-import HistoryModal from "@/components/HistoryModal";
-import ScheduledTasksModal from "@/components/ScheduledTasksModal";
+import HistoryPage from "@/components/HistoryPage";
+import TasksPage from "@/components/TasksPage";
 import TitleBar from "@/components/TitleBar";
 import LeftSidebar from "@/components/LeftSidebar";
 import RightPanel from "@/components/RightPanel";
@@ -17,14 +17,25 @@ import EmptyState from "@/components/EmptyState";
 import { useToast } from "@/hooks/useToast";
 import { useSettings } from "@/hooks/useSettings";
 import { useProjects } from "@/hooks/useProjects";
-import { useRightPanelTabs, Tab } from "@/hooks/useRightPanelTabs";
+import { useRightPanelTabs } from "@/hooks/useRightPanelTabs";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { AGUIEventAdapter } from "@/ag-ui";
 
 // --- 主面板组件，管理所有状态与业务逻辑 ---
 function MainDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
+  const isHistoryPage = location.pathname === "/history";
+  const isTasksPage = location.pathname === "/tasks";
+
+  const customNavigate = (path: string | number) => {
+    if (typeof path === "number") {
+      navigate(path);
+    } else {
+      navigate(path);
+    }
+  };
 
   const [sessions, setSessions] = useState<Session[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -88,26 +99,23 @@ function MainDashboard() {
     handleClearHistory,
   } = useSettings({
     showToast,
-    navigate,
+    navigate: customNavigate,
     loadSessions,
   });
 
-  const [showHistory, setShowHistory] = useState(false);
-  const [showScheduledTasks, setShowScheduledTasks] = useState(false);
 
   // --- 3. Projects Workspace Hook ---
   const {
     projects,
     setProjects,
     collapsedProjects,
-    setCollapsedProjects,
     handleToggleProjectCollapse,
     handleAddProject,
     handleRemoveProject,
     handleSelectProject,
   } = useProjects({
     showToast,
-    navigate,
+    navigate: customNavigate,
     setWorkspacePath,
     setSavedWorkspacePath,
   });
@@ -137,7 +145,7 @@ function MainDashboard() {
     setActiveTabId,
     messages,
     showToast,
-    navigate,
+    navigate: customNavigate,
   });
 
   // --- 初始化：加载数据库、会话、API Key、工作区路径 ---
@@ -277,6 +285,7 @@ function MainDashboard() {
       const helpMsg: Message = {
         id: `local-help-${Date.now()}`,
         sessionId,
+        role: "assistant",
         content: [
           "### 💡 可用命令 (Slash Commands)",
           "",
@@ -1001,20 +1010,6 @@ function MainDashboard() {
         onClearHistory={handleClearHistory}
       />
 
-      <HistoryModal
-        isOpen={showHistory}
-        sessions={sessions}
-        onClose={() => setShowHistory(false)}
-        onNavigate={(sessionId) => navigate(`/chat/s/${sessionId}`)}
-        onSessionDeleted={loadSessions}
-        showToast={showToast}
-      />
-
-      <ScheduledTasksModal
-        isOpen={showScheduledTasks}
-        onClose={() => setShowScheduledTasks(false)}
-        showToast={showToast}
-      />
 
       <TitleBar
         isLeftSidebarOpen={isLeftSidebarOpen}
@@ -1022,6 +1017,8 @@ function MainDashboard() {
         activeSession={activeSession}
         hasActiveSession={!!id && !!activeSession}
         planMode={planMode}
+        isHistoryPage={isHistoryPage}
+        isTasksPage={isTasksPage}
         tabs={tabs}
         activeTabId={activeTabId}
         onToggleLeftSidebar={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
@@ -1030,7 +1027,6 @@ function MainDashboard() {
         onSettingsOpen={() => setIsSettingsOpen(true)}
         onTabClick={setActiveTabId}
         onTabClose={closeTab}
-        showToast={showToast}
         isNightMode={isNightMode}
         onToggleNightMode={() => setIsNightMode((v) => !v)}
         rightPanelWidth={rightPanelWidth}
@@ -1044,8 +1040,8 @@ function MainDashboard() {
           onNewConversation={() => navigate("/")}
           onSelectSession={(sessionId) => navigate(`/chat/s/${sessionId}`)}
           onSettingsOpen={() => setIsSettingsOpen(true)}
-          onHistoryOpen={() => setShowHistory(true)}
-          onTasksOpen={() => setShowScheduledTasks(true)}
+          onHistoryOpen={() => navigate("/history")}
+          onTasksOpen={() => navigate("/tasks")}
           showToast={showToast}
           projects={projects}
           activeWorkspacePath={savedWorkspacePath}
@@ -1057,7 +1053,20 @@ function MainDashboard() {
         />
 
         <main className="middle-panel">
-          {id && activeSession ? (
+          {isHistoryPage ? (
+            <HistoryPage
+              sessions={sessions}
+              onNavigate={(sessionId) => navigate(`/chat/s/${sessionId}`)}
+              onSessionDeleted={loadSessions}
+              showToast={showToast}
+            />
+          ) : isTasksPage ? (
+            <TasksPage
+              projects={projects}
+              activeWorkspacePath={savedWorkspacePath || ""}
+              showToast={showToast}
+            />
+          ) : id && activeSession ? (
             <>
               <ChatFeed
                 messages={messages}
@@ -1072,7 +1081,7 @@ function MainDashboard() {
                   // 将用户的回答作为新消息追加到对话中
                   const userMsg: Message = {
                     id: `msg-user-${Date.now()}`,
-                    sessionId: currentSessionId!,
+                    sessionId: id!,
                     role: "user",
                     content: answer,
                     createdAt: new Date().toISOString(),
@@ -1224,6 +1233,8 @@ function App() {
       <Routes>
         <Route path="/" element={<MainDashboard />} />
         <Route path="/chat/s/:id" element={<MainDashboard />} />
+        <Route path="/history" element={<MainDashboard />} />
+        <Route path="/tasks" element={<MainDashboard />} />
       </Routes>
     </HashRouter>
   );

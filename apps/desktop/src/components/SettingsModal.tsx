@@ -2,17 +2,6 @@ import React, { useState, useEffect } from "react";
 import { bridge } from "@/bridge";
 import { version as appVersion } from "../../package.json";
 
-/** 在外部浏览器打开 URL（Tauri 和浏览器双环境兼容）*/
-async function openExternalUrl(url: string) {
-  try {
-    // Tauri 环境：使用 tauri-plugin-opener
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-  } catch {
-    // 浏览器环境：回退到 window.open
-    window.open(url, "_blank");
-  }
-}
 
 interface SettingsModalProps {
   isOpen: boolean;

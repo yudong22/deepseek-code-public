@@ -1,4 +1,3 @@
-import React from "react";
 import ChatInputCard from "./ChatInputCard";
 
 interface ChatInputProps {

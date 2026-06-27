@@ -341,14 +341,14 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                         运行时间: {msg.elapsed}s
                       </span>
                     )}
-                    {(msg.role === "user" || !(isLastMessage && isGenerating)) && (
+                    {!(isLastMessage && isGenerating) && (
                       <span className="message-time" style={{ marginRight: "auto", fontSize: "11px" }}>
                         {new Date(msg.completedAt || msg.createdAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     )}
                     
                     {/* Copy, Like, Dislike buttons (only show if completed) */}
-                    {(msg.role === "user" || !(isLastMessage && isGenerating)) && (
+                    {!(isLastMessage && isGenerating) && (
                       <>
                         <button 
                           className="message-action-icon"
