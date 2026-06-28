@@ -2,7 +2,7 @@
 //!
 //! Design follows Claude Code's Agent tool pattern (see docs/subagent.md):
 //! - Built-in agents: general-purpose, explore, code-reviewer
-//! - Custom agents: loaded from `.claude/agents/*.md` (frontmatter + markdown body)
+//! - Custom agents: loaded from `.deepseek-code/agents/*.md` (frontmatter + markdown body)
 //! - Tool permission filtering: `tools` / `disallowedTools` per agent definition
 //! - Each sub-agent has its own system prompt, tool pool, and step budget
 //!
@@ -34,7 +34,7 @@ pub enum PermissionMode {
 /// Definition of a sub-agent type.
 ///
 /// Mirrors Claude Code's AgentDefinition. Built-in agents are defined in code;
-/// custom agents are loaded from `.claude/agents/*.md` files.
+/// custom agents are loaded from `.deepseek-code/agents/*.md` files.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentDefinition {
     /// Unique identifier — the model references this via `subagent_type`
@@ -180,7 +180,7 @@ fn builtin_definitions() -> Vec<AgentDefinition> {
 
 // ─── Custom Agent Loading ──────────────────────────────────────────
 
-/// Load custom agent definitions from `.claude/agents/*.md` files.
+/// Load custom agent definitions from `.deepseek-code/agents/*.md` files.
 ///
 /// File format:
 /// ```markdown
@@ -393,7 +393,7 @@ impl Tool for SubAgentTool {
          - general-purpose: Full-access coding agent for general tasks\n\
          - explore: Read-only search agent for code exploration\n\
          - code-reviewer: Read-only review agent for correctness & security\n\
-         Custom agents defined in .claude/agents/*.md are also available.\n\
+         Custom agents defined in .deepseek-code/agents/*.md are also available.\n\
          The sub-agent runs its own tool loop and returns its final text output."
     }
 
@@ -403,7 +403,7 @@ impl Tool for SubAgentTool {
             "properties": {
                 "subagent_type": {
                     "type": "string",
-                    "description": "The type of sub-agent to use: 'general-purpose', 'explore', 'code-reviewer', or a custom agent name from .claude/agents/",
+                    "description": "The type of sub-agent to use: 'general-purpose', 'explore', 'code-reviewer', or a custom agent name from .deepseek-code/agents/",
                     "enum": ["general-purpose", "explore", "code-reviewer"]
                 },
                 "prompt": {
