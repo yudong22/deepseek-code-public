@@ -279,6 +279,10 @@ impl WebSearchTool {
 
         let html = fetch_result.map_err(|e| format!("DDG fetch failed: {}", e))?;
 
+        // Debug: include first 300 chars of raw HTML in result for troubleshooting
+        let debug_html = html.chars().take(300).collect::<String>();
+        let debug_info = format!("[DDG raw({}b): {}]", html.len(), debug_html);
+
         // Parse DDG results — class-agnostic approach.
         // Extract any <a> tag with an external http(s) URL and non-empty text.
         // Filter out navigation/internal links by checking the URL structure.
@@ -340,6 +344,11 @@ impl WebSearchTool {
             }));
 
             if results.len() >= max_results { break; }
+        }
+
+        // If no results found, include debug HTML in error
+        if results.is_empty() {
+            return Err(format!("DDG returned no parseable results. {}", debug_info));
         }
 
         Ok(results)
