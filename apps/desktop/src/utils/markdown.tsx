@@ -4,6 +4,19 @@ import { code as shikiCodePlugin, type ThemeInput } from "@streamdown/code";
 import { mermaid as mermaidPlugin } from "@streamdown/mermaid";
 import { FileCode } from "@/components/Icons";
 
+/** Open an external URL in the system browser.
+ *  Uses Tauri opener when available (desktop app), falls back to window.open (web mode). */
+async function openExternalUrl(url: string) {
+  try {
+    // Tauri v2: @tauri-apps/plugin-opener opens in system default browser
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+  } catch {
+    // Web mode / mock: window.open with _blank
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 /** v0.5.14 修复代码高亮 + Mermaid 渲染
  *  - 之前没传 plugins.code / plugins.mermaid，Streamdown 退化到 raw fallback（无高亮/Mermaid）
  *  - 现在传入 @streamdown/code + @streamdown/mermaid 官方插件，所有支持的语言都正常高亮 + Mermaid 自动渲染 */
@@ -134,16 +147,14 @@ const buildComponents = (onPreviewFile?: PreviewFile, sourceFilePath?: string) =
   a: ({ href, children }: any) => {
     const linkPath = toLinkPath(href);
     if (!linkPath) {
-      // External link (http/https): open in system browser
+      // External link (http/https): open in system browser via Tauri opener
       return (
         <a
           href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-brand-blue hover:underline"
+          className="text-brand-blue hover:underline cursor-pointer"
           onClick={(e: React.MouseEvent) => {
             e.preventDefault();
-            window.open(href, "_blank", "noopener,noreferrer");
+            openExternalUrl(href);
           }}
         >
           {children}
