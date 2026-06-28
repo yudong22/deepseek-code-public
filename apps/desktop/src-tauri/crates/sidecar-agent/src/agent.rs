@@ -120,6 +120,25 @@ impl Agent {
         // Write system messages to .opencode/system.md
         self.write_system_md()?;
 
+        // ── WebSearch citation prompt (Claude Code pattern) ──
+        // Injected once at session start so the LLM knows it must cite sources.
+        // Matches Claude Code's prompt() method on WebSearchTool.
+        let date_str = crate::tools::websearch::current_month_year();
+        self.messages.push(ChatMessage {
+            role: "system".to_string(),
+            content: Some(format!(
+                "You have access to a websearch tool for retrieving current information. \
+                 The current date is {date}.\n\
+                 CRITICAL REQUIREMENT: When you use websearch results in your answer, \
+                 you MUST include a \"Sources:\" section at the end with markdown \
+                 hyperlinks: [Source Title](URL). Never present search results \
+                 without citing the original URLs.",
+                date = date_str
+            )),
+            tool_call_id: None,
+            tool_calls: None,
+        });
+
         // Initialize session storage
         let store = SessionStore::new(
             self.config.workspace_path.join(".opencode"),

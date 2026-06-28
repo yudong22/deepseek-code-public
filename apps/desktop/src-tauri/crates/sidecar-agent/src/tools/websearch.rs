@@ -15,9 +15,10 @@ use std::time::Duration;
 
 pub struct WebSearchTool;
 
-/// Minimal date helper — returns "(month year)" for the system prompt.
+/// Minimal date helper — returns "2026年6月" for the system prompt.
+/// Public so agent.rs can inject the date into the websearch citation prompt.
 /// Avoids pulling in chrono just for one string.
-fn current_month_year() -> String {
+pub fn current_month_year() -> String {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
