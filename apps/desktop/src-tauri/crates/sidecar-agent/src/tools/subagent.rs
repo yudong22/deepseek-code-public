@@ -14,10 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
-
-// Sub-agent calls LLM via async reqwest inside spawn_blocking,
-// so we use Handle::block_on to bridge sync→async safely.
-use tokio::runtime::Handle;
+use std::sync::mpsc;
 
 // ─── Agent Definition ──────────────────────────────────────────────
 
@@ -483,13 +480,33 @@ impl Tool for SubAgentTool {
             definition.model.clone()
         };
 
-        // Run sub-agent loop
-        let result = run_subagent_loop(
-            messages,
-            ctx,
-            &definition,
-            model,
-        );
+        // Run sub-agent loop on a dedicated OS thread.
+        // The tool execute() runs on a tokio worker — we can't block_on or
+        // use reqwest::blocking on that thread. Spawn a real OS thread instead.
+        let workspace = ctx.workspace_path.clone();
+        let session_id = ctx.session_id.clone();
+        let provider = ctx.provider_config.clone();
+        let cancel = ctx.cancel_flag.clone();
+        let def_clone = definition.clone();
+        let (tx, rx) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let result = run_subagent_loop(
+                messages,
+                &workspace,
+                &session_id,
+                &provider,
+                &cancel,
+                &def_clone,
+                model,
+            );
+            let _ = tx.send(result);
+        });
+
+        let result = match rx.recv() {
+            Ok(r) => r,
+            Err(_) => Err("Sub-agent thread panicked".to_string()),
+        };
 
         match result {
             Ok(text_output) => ToolResult::success(serde_json::json!({
@@ -509,7 +526,10 @@ const DEFAULT_MAX_CONTINUATIONS: usize = 3;
 
 fn run_subagent_loop(
     mut messages: Vec<crate::provider::ChatMessage>,
-    ctx: &ToolContext,
+    workspace_path: &std::path::Path,
+    session_id: &str,
+    provider_config: &crate::provider::ProviderConfig,
+    cancel_flag: &std::sync::Arc<std::sync::atomic::AtomicBool>,
     definition: &AgentDefinition,
     model: String,
 ) -> Result<String, String> {
@@ -523,17 +543,17 @@ fn run_subagent_loop(
     let registry = filter_tools_for_agent(&full_registry, definition);
     let tool_defs: Vec<crate::provider::ToolDef> = registry.definitions();
 
-    let api_url = ctx.provider_config.endpoint_url.clone();
-    let api_key = ctx.provider_config.api_key.clone();
+    let api_url = provider_config.endpoint_url.clone();
+    let api_key = provider_config.api_key.clone();
 
     while step < max_steps {
-        if ctx.cancel_flag.load(Ordering::Relaxed) {
+        if cancel_flag.load(Ordering::Relaxed) {
             return Err("cancelled".to_string());
         }
 
         step += 1;
 
-        // Call LLM (async reqwest via block_on — we're inside spawn_blocking)
+        // Call LLM (reqwest::blocking — safe because we're on a dedicated OS thread)
         let request_body = serde_json::json!({
             "model": model,
             "messages": messages,
@@ -541,24 +561,18 @@ fn run_subagent_loop(
             "stream": true,
         });
 
-        let api_url_clone = api_url.clone();
-        let api_key_clone = api_key.clone();
-        let body = Handle::current()
-            .block_on(async {
-                let client = reqwest::Client::new();
-                let response = client
-                    .post(&api_url_clone)
-                    .header("Authorization", format!("Bearer {}", api_key_clone))
-                    .header("Content-Type", "application/json")
-                    .json(&request_body)
-                    .send()
-                    .await
-                    .map_err(|e| format!("LLM request failed: {}", e))?;
-                response
-                    .text()
-                    .await
-                    .map_err(|e| format!("response read failed: {}", e))
-            })?;
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .post(&api_url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .map_err(|e| format!("LLM request failed: {}", e))?;
+
+        let body = response
+            .text()
+            .map_err(|e| format!("response read failed: {}", e))?;
 
         let (content, tool_calls) = parse_sse_response(&body)?;
 
@@ -626,11 +640,11 @@ fn run_subagent_loop(
             let args: Value = serde_json::from_str(&tc.args).unwrap_or(Value::Null);
 
             let tool_ctx = ToolContext {
-                workspace_path: ctx.workspace_path.clone(),
-                session_id: format!("{}-sub", ctx.session_id),
+                workspace_path: workspace_path.to_path_buf(),
+                session_id: format!("{}-sub", session_id),
                 call_id: tc.id.clone(),
-                cancel_flag: ctx.cancel_flag.clone(),
-                provider_config: ctx.provider_config.clone(),
+                cancel_flag: cancel_flag.clone(),
+                provider_config: provider_config.clone(),
             };
 
             let result = tool.execute(args, &tool_ctx);
