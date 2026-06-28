@@ -219,30 +219,18 @@ impl Tool for WebSearchTool {
             .unwrap_or(8)
             .min(8) as usize;
 
-        // ── Phase 1: DuckDuckGo Lite (real search, no hallucinations) ──
+        // ── DuckDuckGo Lite (real search, no LLM hallucinations) ──
         // DDG returns real scraped results — URLs actually exist.
-        let provider = &ctx.provider_config;
-        let start = std::time::Instant::now();
-        let ddg_result = self.do_ddg_search(query, &allowed_domains, &blocked_domains, max_results);
-        let _duration_ms = start.elapsed().as_millis() as u64;
+        // Provider search (enable_search) temporarily disabled — causes 404 hallucinated URLs.
+        let ddg_result = match self.do_ddg_search(query, &allowed_domains, &blocked_domains, max_results) {
+            Ok(r) => r,
+            Err(e) => return ToolResult::error(format!("Search failed: {}", e)),
+        }; // TODO(v0.6.1): re-enable provider fallback when DeepSeek search stabilizes
 
-        let (results, note): (Vec<Value>, Option<String>) = match ddg_result {
-            Ok(r) if !r.is_empty() => (r, None),
-            ddg_outcome => {
-                let ddg_err = ddg_outcome.as_ref().err().map(|e| e.as_str()).unwrap_or("no results");
-                // Fall back to provider search
-                match self.do_provider_search(query, &allowed_domains, &blocked_domains, max_results, provider) {
-                    Ok(r) if !r.is_empty() => (r, Some(format!("DDG: {} — using provider results", ddg_err))),
-                    Ok(_) => (vec![], Some(format!("DDG: {} — provider also returned no results", ddg_err))),
-                    Err(pe) => (vec![], Some(format!("DDG: {} — provider: {}", ddg_err, pe))),
-                }
-            }
-        };
-
-        let display_results: Vec<Value> = results.into_iter().take(max_results).collect();
+        let display_results: Vec<Value> = ddg_result.into_iter().take(max_results).collect();
 
         // ── Format output (Claude Code style) ──
-        let formatted = format_search_output(query, &display_results, note.as_deref());
+        let formatted = format_search_output(query, &display_results, None);
 
         ToolResult::success(serde_json::json!({
             "message": formatted
