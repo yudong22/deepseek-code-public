@@ -196,6 +196,7 @@ export interface AgentEvent {
         "ToolResult" |
         "StepStarted" | "StepEnded" |
         "Usage" |
+        "PolicyConfirm" | "TodoUpdated" |
         "Finished" | "Error";
   payload: any;
 }
