@@ -313,38 +313,37 @@ impl Tool for WebSearchTool {
         // ── Phase 2: Parse and format results ──
         // Matches Claude Code's mapToolResultToToolResultBlockParam:
         // results → formatted output → REMINDER about citing sources.
-        let mut results = extract_search_results(&content);
-        // Enforce max_results (default 8, aligned with Claude Code's max_uses: 8)
-        results.truncate(max_results);
+        let results = extract_search_results(&content);
+        let display_results: Vec<_> = results.into_iter().take(max_results).collect();
 
-        // Build the tool result message that the LLM will see.
-        // Claude Code format: "Web search results for query: \"...\"\n\nLinks: [...]"
-        // + REMINDER: "You MUST include the sources above..."
-        let mut formatted = format!("Web search results for query: \"{}\"\n\n", query);
-        if results.is_empty() {
-            formatted.push_str("No results found.\n");
+        // ── Claude Code format: clean text, no JSON duplication ──
+        // mapToolResultToToolResultBlockParam returns a flat string:
+        // "Web search results for query: \"...\"\n\nLinks: [...]\n\nREMINDER: ..."
+        let formatted = if display_results.is_empty() {
+            format!(
+                "Web search results for query: \"{}\"\n\nNo results found.\n\n\
+                 REMINDER: You MUST cite any sources you reference using markdown \
+                 hyperlinks, e.g. [Source Title](URL).",
+                query
+            )
         } else {
-            formatted.push_str(&format!("Found {} results:\n\n", results.len()));
-            for (i, r) in results.iter().enumerate() {
-                let title = r["title"].as_str().unwrap_or("");
-                let url = r["url"].as_str().unwrap_or("");
-                formatted.push_str(&format!("{}. {} — {}\n", i + 1, title, url));
-            }
-        }
+            let links: Vec<String> = display_results.iter().map(|r| {
+                let t = r["title"].as_str().unwrap_or("");
+                let u = r["url"].as_str().unwrap_or("");
+                format!("{{\"title\":\"{}\",\"url\":\"{}\"}}", t, u)
+            }).collect();
+            format!(
+                "Web search results for query: \"{}\"\n\n\
+                 Links: [{}]\n\n\
+                 REMINDER: You MUST cite the sources above in your response to the \
+                 user using markdown hyperlinks, e.g. [Source Title](URL).",
+                query,
+                links.join(", ")
+            )
+        };
 
-        formatted.push_str(
-            "\nREMINDER: You MUST cite the sources above in your response to the \
-             user using markdown hyperlinks, e.g. [Source Title](URL)."
-        );
-
-        // Return BOTH structured results AND the formatted message with REMINDER.
-        // `build_tool_success_result` wraps this in {result: ...}, so the LLM sees
-        // the "message" field as plain text + "results" as structured data.
         ToolResult::success(serde_json::json!({
-            "message": formatted,
-            "query": query,
-            "results": results,
-            "duration_ms": duration_ms
+            "message": formatted
         }))
     }
 }
@@ -459,26 +458,31 @@ impl WebSearchTool {
             if results.len() >= max_results { break; }
         }
 
-        let mut formatted = format!("Web search results for query: \"{}\"\n\n", query);
-        if results.is_empty() {
-            formatted.push_str("No results found.\n");
+        let formatted = if results.is_empty() {
+            format!(
+                "Web search results for query: \"{}\"\n\nNo results found.\n\n\
+                 REMINDER: You MUST cite any sources you reference using markdown \
+                 hyperlinks, e.g. [Source Title](URL).",
+                query
+            )
         } else {
-            formatted.push_str(&format!("Found {} results:\n\n", results.len()));
-            for (i, r) in results.iter().enumerate() {
-                let title = r["title"].as_str().unwrap_or("");
-                let url = r["url"].as_str().unwrap_or("");
-                formatted.push_str(&format!("{}. {} — {}\n", i + 1, title, url));
-            }
-        }
-        formatted.push_str(
-            "\nREMINDER: You MUST cite the sources above in your response to the \
-             user using markdown hyperlinks, e.g. [Source Title](URL)."
-        );
+            let links: Vec<String> = results.iter().map(|r| {
+                let t = r["title"].as_str().unwrap_or("");
+                let u = r["url"].as_str().unwrap_or("");
+                format!("{{\"title\":\"{}\",\"url\":\"{}\"}}", t, u)
+            }).collect();
+            format!(
+                "Web search results for query: \"{}\"\n\n\
+                 Links: [{}]\n\n\
+                 REMINDER: You MUST cite the sources above in your response to the \
+                 user using markdown hyperlinks, e.g. [Source Title](URL).",
+                query,
+                links.join(", ")
+            )
+        };
 
         ToolResult::success(serde_json::json!({
             "message": formatted,
-            "query": query,
-            "results": results,
             "note": format!("Provider search unavailable: {}", provider_error)
         }))
     }
