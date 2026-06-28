@@ -143,7 +143,7 @@ html, body {
  * 使得折行后的内容保持在行号右侧的内容区，不会出现在行号底下。 */
 .sd-panel-code [data-streamdown="code-block-body"] code > span {
   position: relative;
-  padding-left: 2.25rem;
+  padding-left: 2rem;
 }
 .sd-panel-code [data-streamdown="code-block-body"] code > span::before {
   position: absolute !important;
@@ -153,7 +153,7 @@ html, body {
   width: 2.25rem !important;
   margin-right: 0 !important;
   text-align: right !important;
-  padding-right: 0.5rem;
+  padding-right: 0.75rem;
   box-sizing: border-box;
   font-size: 10px !important;
   color: var(--color-label-tertiary, #8e8e93) !important;
