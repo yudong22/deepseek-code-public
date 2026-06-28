@@ -15,34 +15,42 @@ use std::time::Duration;
 
 pub struct WebSearchTool;
 
-/// Parse search results from the provider's streaming response.
-/// DeepSeek and other providers embed search results as citations in the text
-/// or as structured `search_results` in the response.
+/// Parse search results from the provider's response.
+/// Supports multiple formats used by different LLM providers.
 fn extract_search_results(text: &str) -> Vec<Value> {
     let mut results = Vec::new();
-
-    // Pattern 1: Markdown links with citation style: `[title](url)` after a heading
-    let re_md_link = regex::Regex::new(r"\[([^\]]+)\]\((https?://[^\)]+)\)").unwrap();
     let mut seen_urls = std::collections::HashSet::new();
 
+    // Pattern 1: Markdown link style  `[title](url)`
+    let re_md_link = regex::Regex::new(r"\[([^\]]+)\]\((https?://[^\)]+)\)").unwrap();
     for cap in re_md_link.captures_iter(text) {
         let title = cap.get(1).map(|m| m.as_str()).unwrap_or("").trim().to_string();
         let url = cap.get(2).map(|m| m.as_str()).unwrap_or("").trim().to_string();
+        if title.is_empty() || url.is_empty() || !seen_urls.insert(url.clone()) { continue; }
+        if title.len() <= 3 && title.chars().all(|c| c.is_ascii_digit()) { continue; }
+        results.push(serde_json::json!({ "title": title, "url": url, "snippet": "" }));
+    }
 
-        if !title.is_empty() && !url.is_empty() && seen_urls.insert(url.clone()) {
-            // Skip footnote/ref-style markers
-            if title.len() <= 3 && title.chars().all(|c| c.is_ascii_digit()) {
-                continue;
-            }
-            results.push(serde_json::json!({
-                "title": title,
-                "url": url,
-                "snippet": ""
-            }));
+    // Pattern 2: Bullet-list style (DeepSeek, others)
+    //   "- Title text https://example.com"
+    //   "1. Title text https://example.com"
+    //   "- [Title](https://example.com)"
+    // Captures title text BEFORE the URL on the same line.
+    if results.is_empty() {
+        let re_bullet = regex::Regex::new(
+            r"(?m)^[-\d]+[.)]\s+(.*?)\s+(https?://[^\s]+)$"
+        ).unwrap();
+        for cap in re_bullet.captures_iter(text) {
+            let title = cap.get(1).map(|m| m.as_str()).unwrap_or("").trim().to_string();
+            let url = cap.get(2).map(|m| m.as_str()).unwrap_or("").trim().to_string();
+            // Strip trailing period/punctuation that got included in the title
+            let title = title.trim_end_matches('.').trim_end_matches('>').trim().to_string();
+            if title.is_empty() || url.is_empty() || !seen_urls.insert(url.clone()) { continue; }
+            results.push(serde_json::json!({ "title": title, "url": url, "snippet": "" }));
         }
     }
 
-    // Pattern 2: YAML/JSON-style search_results block (some providers return structured data)
+    // Pattern 3: JSON-style search_results block (structured API responses)
     if results.is_empty() {
         let re_json_block = regex::Regex::new(r#""results"\s*:\s*\[([\s\S]*?)\]"#).unwrap();
         if let Some(cap) = re_json_block.captures(text) {
@@ -52,13 +60,27 @@ fn extract_search_results(text: &str) -> Vec<Value> {
                 let title = entry_cap.get(1).map(|m| m.as_str()).unwrap_or("");
                 let url = entry_cap.get(2).map(|m| m.as_str()).unwrap_or("");
                 if seen_urls.insert(url.to_string()) {
-                    results.push(serde_json::json!({
-                        "title": title,
-                        "url": url,
-                        "snippet": ""
-                    }));
+                    results.push(serde_json::json!({ "title": title, "url": url, "snippet": "" }));
                 }
             }
+        }
+    }
+
+    // Pattern 4: Last resort — extract any http(s):// URL with surrounding context
+    if results.is_empty() {
+        let re_url = regex::Regex::new(r"(.{0,80}?)\s*(https?://[^\s<>]+)").unwrap();
+        for cap in re_url.captures_iter(text) {
+            let prefix = cap.get(1).map(|m| m.as_str()).unwrap_or("").trim().to_string();
+            let url = cap.get(2).map(|m| m.as_str()).unwrap_or("").trim().to_string();
+            if url.is_empty() || !seen_urls.insert(url.clone()) { continue; }
+            // Use preceding text as title, clean up bullet/number markers
+            let title = prefix
+                .trim_start_matches(|c: char| c == '-' || c == '*' || c == '•' || c.is_ascii_digit())
+                .trim_start_matches('.')
+                .trim()
+                .to_string();
+            if title.len() < 2 { continue; }
+            results.push(serde_json::json!({ "title": title, "url": url, "snippet": "" }));
         }
     }
 
@@ -399,6 +421,19 @@ Summary..."#;
         assert_eq!(results.len(), 1, "should extract exactly 1 real link");
         assert_eq!(results[0]["url"], "https://blog.rust-lang.org/");
         assert_eq!(results[0]["title"], "Rust Blog");
+    }
+
+    #[test]
+    fn test_bullet_list_format_deepseek() {
+        // Exact format from DeepSeek's search response
+        let text = r#"- 红烧茄子的家常做法 - 下厨房 https://www.xiachufang.com/recipe/100050164/
+- 家常红烧茄子 - 豆果美食 https://www.douguo.com/cookbook/123456.html
+- 红烧茄子（超简单家常版） - 美食天下 https://www.meishitianxia.com/recipe/23621.html"#;
+        let results = extract_search_results(text);
+        assert_eq!(results.len(), 3, "should extract all 3 bullet-list items");
+        assert_eq!(results[0]["title"], "红烧茄子的家常做法 - 下厨房");
+        assert_eq!(results[0]["url"], "https://www.xiachufang.com/recipe/100050164/");
+        assert_eq!(results[1]["title"], "家常红烧茄子 - 豆果美食");
     }
 
     #[test]
