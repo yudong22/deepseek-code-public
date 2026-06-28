@@ -1080,12 +1080,12 @@ function MainDashboard() {
       {/* 危险命令安全确认弹窗 */}
       <ConfirmDialog
         open={pendingPolicyConfirm !== null}
-        title="⚠️ 危险操作确认"
+        title="危险操作确认"
         message={pendingPolicyConfirm
-          ? `Agent 正要执行以下危险命令:\n\n${pendingPolicyConfirm.command}\n\n匹配规则: ${pendingPolicyConfirm.pattern}\n严重度: ${pendingPolicyConfirm.severity}`
+          ? `Agent 尝试执行一条被安全策略拦截的命令。请确认是否允许执行。`
           : ""}
-        confirmLabel="Allow"
-        cancelLabel="Cancel"
+        confirmLabel="允许执行"
+        cancelLabel="取消"
         danger
         onConfirm={() => {
           if (pendingPolicyConfirm) {
@@ -1099,7 +1099,22 @@ function MainDashboard() {
             setPendingPolicyConfirm(null);
           }
         }}
-      />
+      >
+        {/* 高亮显示危险命令 */}
+        <div className="bg-zinc-900 dark:bg-black rounded-lg p-3.5 font-mono text-[12px] text-red-400 leading-relaxed overflow-x-auto select-all">
+          $ {pendingPolicyConfirm?.command}
+        </div>
+        <div className="flex items-center gap-3 mt-2 text-[12px] text-zinc-500 dark:text-zinc-400">
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+            拦截规则: {pendingPolicyConfirm?.pattern}
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+            严重度: {pendingPolicyConfirm?.severity}
+          </span>
+        </div>
+      </ConfirmDialog>
     </AppShell>
   );
 }
