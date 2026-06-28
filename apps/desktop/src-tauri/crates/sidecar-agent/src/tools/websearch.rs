@@ -322,6 +322,12 @@ impl WebSearchTool {
             }
         }
 
+        // Include raw API response in error for debugging
+        if results.is_empty() {
+            let raw = serde_json::to_string(&json).unwrap_or_default();
+            return Err(format!("DDG API returned no results. Raw: {}", &raw[..raw.len().min(500)]));
+        }
+
         Ok(results)
     }
 
