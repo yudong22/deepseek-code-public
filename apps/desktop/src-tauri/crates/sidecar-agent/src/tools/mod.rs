@@ -91,9 +91,15 @@ impl ToolRegistry {
         Self { tools: vec![] }
     }
 
-    /// Register a tool.
+    /// Register a tool from a `Box<dyn Tool>`.
     pub fn register(&mut self, tool: Box<dyn Tool>) {
         self.tools.push(Arc::from(tool));
+    }
+
+    /// Register a tool from an existing `Arc<dyn Tool>`.
+    /// Used when filtering/cloning registries (e.g., SubAgent tool permissions).
+    pub fn register_from_arc(&mut self, tool: Arc<dyn Tool>) {
+        self.tools.push(tool);
     }
 
     /// Find a tool by name. Returns an `Arc` so the caller can move it into

@@ -115,7 +115,7 @@ apps/desktop/src-tauri/
                 ├── grep.rs        # 只读 — 可并行（支持 context、file_types 参数）
                 ├── glob.rs        # 只读 — 可并行（ignore crate）
                 ├── question.rs    # 交互式 Q&A — 串行
-                ├── subagent.rs    # [v0.6.1] 写入 — Claude Code / Antigravity 子代理
+                ├── subagent.rs    # [v0.6.1] 子代理工具 — 内置 general-purpose/explore/code-reviewer + 自定义代理 (.claude/agents/*.md)
                 ├── todowrite.rs   # 写入 — session todo 列表 + TodoUpdated 事件
                 ├── webfetch.rs    # 只读 — HTTP(S) 拉取，SSRF 检查，html2md 转换
                 └── websearch.rs   # 只读 — DuckDuckGo HTML 搜索 + 过滤
