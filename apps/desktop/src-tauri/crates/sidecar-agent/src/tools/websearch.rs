@@ -403,9 +403,6 @@ impl WebSearchTool {
         let re_link = regex::Regex::new(
             r#"<a[^>]*href="([^"]+)"[^>]*class="result-link"[^>]*>([^<]+)</a>"#
         ).unwrap();
-        let re_snippet = regex::Regex::new(
-            r#"<span[^>]*class="result-snippet"[^>]*>([\s\S]*?)</span>"#
-        ).unwrap();
 
         let mut results = Vec::new();
         for cap in re_link.captures_iter(&html) {
