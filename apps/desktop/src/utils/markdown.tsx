@@ -51,7 +51,7 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
     // streamdown 内置 CodeBlock 已包含复制按钮 + 高亮，直接透传
     // 但需要包裹在 group 中以便外部样式控制
     return (
-      <div className="group relative my-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-[#f5f5f7] dark:bg-[#18181b] overflow-x-auto max-w-full">
+      <div className="group relative my-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-[#f5f5f7] dark:bg-surface-primary overflow-x-auto max-w-full">
         {children}
       </div>
     );
@@ -88,7 +88,7 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
         <a
           href={href}
           onClick={handleClick}
-          className="inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] px-1 rounded-sm border border-zinc-200 dark:border-zinc-800 cursor-pointer"
+          className="inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-surface-secondary hover:bg-surface-hover px-1 rounded-sm border border-zinc-200 dark:border-zinc-800 cursor-pointer"
         >
           {isReactFile ? <ReactIcon /> : <span className="text-brand-blue dark:text-deepseek-400 inline-flex items-center"><FileCode /></span>}
           <span className="no-underline">{title}</span>
@@ -129,7 +129,7 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
     </div>
   ),
   thead: ({ children }: any) => (
-    <thead className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border-b border-zinc-200 dark:border-zinc-800 font-semibold text-zinc-700 dark:text-zinc-300">
+    <thead className="bg-surface-secondary border-b border-zinc-200 dark:border-zinc-800 font-semibold text-zinc-700 dark:text-zinc-300">
       {children}
     </thead>
   ),
@@ -139,7 +139,7 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
     </th>
   ),
   td: ({ children, style }: any) => (
-    <td className="p-2.5 border-b border-zinc-200 dark:border-zinc-800 text-sm text-zinc-800 dark:text-[#f5f5f7] break-words" style={style}>
+    <td className="p-2.5 border-b border-zinc-200 dark:border-zinc-800 text-sm text-zinc-800 dark:text-label-primary break-words" style={style}>
       {children}
     </td>
   ),
@@ -219,7 +219,7 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
           <a 
             key={index} 
             href={path} 
-            className="inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] px-1 rounded-sm border border-zinc-200 dark:border-zinc-800"
+            className="inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-surface-secondary hover:bg-surface-hover px-1 rounded-sm border border-zinc-200 dark:border-zinc-800"
           >
             {isReactFile ? <ReactIcon /> : <span className="text-brand-blue dark:text-deepseek-400 inline-flex items-center"><FileCode /></span>}
             <span className="no-underline">{title}</span>

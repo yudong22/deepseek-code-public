@@ -88,7 +88,7 @@ export default function TodoListCard({ tc, onCancel }: TodoListCardProps) {
         <div 
           key={idx} 
           className={`flex items-start gap-1.5 py-0.5 ${
-            item.status === "completed" ? "text-zinc-400 dark:text-zinc-500 line-through" : "text-zinc-800 dark:text-[#f5f5f7]"
+            item.status === "completed" ? "text-zinc-400 dark:text-zinc-500 line-through" : "text-zinc-800 dark:text-label-primary"
           }`}
         >
           <span className={`text-sm shrink-0 mt-0.5 ${statusColorClass[item.status] || "text-zinc-400"}`}>

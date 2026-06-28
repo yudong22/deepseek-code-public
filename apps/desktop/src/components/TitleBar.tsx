@@ -153,7 +153,7 @@ export default function TitleBar({
                       {tab.id !== "overview" && (
                         <span
                           onClick={(e) => onTabClose(tab.id, e)}
-                          className="ml-1 p-0.5 text-[9px] text-label-tertiary hover:text-red-500 hover:bg-surface-hover dark:hover:bg-surface-hover rounded-full flex items-center justify-center w-3 h-3"
+                          className="ml-1 p-0.5 text-[9px] text-label-tertiary hover:text-red-500 hover:bg-surface-hover rounded-full flex items-center justify-center w-3 h-3"
                         >
                           ✕
                         </span>

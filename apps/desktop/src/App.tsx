@@ -3,10 +3,7 @@ import { HashRouter, Routes, Route, useNavigate, useParams, useLocation } from "
 import { bridge, Session, Message } from "@/bridge";
 import "./App.css";
 
-import Toast from "@/components/Toast";
-import SettingsModal from "@/components/SettingsModal";
-import ProjectSettingsModal from "@/components/ProjectSettingsModal";
-import ConfirmDialog from "@/components/ConfirmDialog";
+import { AppShell } from "@/components/layout/AppShell";
 import HistoryPage from "@/components/HistoryPage";
 import TasksPage from "@/components/TasksPage";
 import TitleBar from "@/components/TitleBar";
@@ -22,6 +19,8 @@ import { useSettings } from "@/hooks/useSettings";
 import { useProjects } from "@/hooks/useProjects";
 import { useRightPanelTabs } from "@/hooks/useRightPanelTabs";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useLocalCommands } from "@/hooks/useLocalCommands";
+import { useAppUpdates } from "@/hooks/useAppUpdates";
 import { AGUIEventAdapter } from "@/ag-ui";
 
 // --- 主面板组件，管理所有状态与业务逻辑 ---
@@ -111,66 +110,14 @@ function MainDashboard() {
     loadSessions,
   });
 
-  // --- Updater State (v0.5.9: Auto background updater) ---
-  const [updateStatus, setUpdateStatus] = useState<{
-    type: "info" | "success" | "error";
-    message: string;
-  } | null>(null);
-  const [isUpdateReady, setIsUpdateReady] = useState(false);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-
-  const handleCheckUpdates = async (isStartup = false) => {
-    setIsCheckingUpdate(true);
-    setUpdateStatus({ type: "info", message: "正在检查更新..." });
-    try {
-      const result = await bridge.checkForUpdates();
-      if (!result.hasUpdate) {
-        setUpdateStatus({ type: "info", message: "您的应用已是最新版本。" });
-        return;
-      }
-      const version = result.version || "unknown";
-      setUpdateStatus({ type: "info", message: `发现新版本 v${version}，正在下载更新...` });
-      
-      if (isStartup) {
-        showToast(`📦 发现新版本 v${version}，正在后台下载更新...`);
-      }
-
-      await bridge.installUpdate((status) => {
-        if (status.status === "downloading" && status.progress !== undefined) {
-          setUpdateStatus({
-            type: "info",
-            message: `📦 更新下载中 ${status.progress}%`,
-          });
-        } else if (status.status === "downloaded") {
-          setUpdateStatus({
-            type: "success",
-            message: `v${version} 已下载完成，随时可重启应用以完成更新。`,
-          });
-          setIsUpdateReady(true);
-          showToast(`📦 新版本 v${version} 已下载完成，点击右上角"重启后安装"即可升级。`);
-        } else if (status.status === "error") {
-          setUpdateStatus({
-            type: "error",
-            message: `更新失败: ${status.error || "未知错误"}`,
-          });
-        }
-      });
-    } catch (err) {
-      setUpdateStatus({ type: "error", message: `检查更新失败: ${String(err)}` });
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
-
-  const handleRestartToUpdate = async () => {
-    try {
-      setUpdateStatus({ type: "success", message: "正在重启应用以应用更新..." });
-      await bridge.installDownloadedUpdate();
-    } catch (err) {
-      setUpdateStatus({ type: "error", message: `重启失败: ${String(err)}` });
-      showToast(`重启失败: ${String(err)}`);
-    }
-  };
+  // --- Updater (v0.5.9: Auto background updater) ---
+  const {
+    updateStatus,
+    isUpdateReady,
+    isChecking: isCheckingUpdate,
+    checkUpdates: handleCheckUpdates,
+    restartToUpdate: handleRestartToUpdate,
+  } = useAppUpdates(showToast);
 
 
   // --- 3. Projects Workspace Hook ---
@@ -247,6 +194,22 @@ function MainDashboard() {
     messages,
     showToast,
     navigate: customNavigate,
+  });
+
+  // --- 5b. Local Slash Commands Hook ---
+  const runLocalCommand = useLocalCommands({
+    currentSessionId: id,
+    sessions,
+    isNightMode,
+    appendAssistantMessage: (msg) => setMessages((prev) => [...prev, msg]),
+    setIsNightMode,
+    setSelectedModel,
+    setIsSettingsOpen,
+    setPlanMode,
+    navigateHome: () => customNavigate("/"),
+    ensureSession,
+    reloadMessages: loadMessages,
+    showToast,
   });
 
   // --- 初始化：加载数据库、会话、API Key、工作区路径 ---
@@ -367,235 +330,9 @@ function MainDashboard() {
     return newId;
   }
 
-  // --- 本地命令处理 ---
+  // --- 本地命令处理（已抽到 hooks/useLocalCommands.ts）---
   async function handleLocalSlashCommand(cmdText: string) {
-    const parts = cmdText.split(/\s+/);
-    const command = parts[0].toLowerCase();
-    const args = parts.slice(1);
-
-    // 别名映射
-    const aliasMap: Record<string, string> = {
-      "/clear": "/new",
-      "/model": "/models",
-      "/night": "/themes",
-      "/resume": "/sessions",
-      "/continue": "/sessions",
-      "/share": "/export",
-      "/plan_exit": "/plan:exit",
-      "/planexit": "/plan:exit",
-    };
-    const normalized = aliasMap[command] || command;
-
-    if (normalized === "/help") {
-      const sessionId = await ensureSession("help");
-      const helpMsg: Message = {
-        id: `local-help-${Date.now()}`,
-        sessionId,
-        role: "assistant",
-        content: [
-          "### 💡 可用命令 (Slash Commands)",
-          "",
-          "| 命令 | 别名 | 说明 |",
-          "|------|------|------|",
-          "| `/help` | | 显示帮助信息 |",
-          "| `/new` | `/clear` | 新建会话 / 清空历史 |",
-          "| `/plan` | | 进入规划模式（只读分析，不写代码） |",
-          "| `/plan:exit` | `/plan_exit` | 退出规划模式，恢复写权限 |",
-          "| `/settings` | | 打开设置面板 |",
-          "| `/models` | `/model` | 切换 AI 模型 (`flash` / `pro`) |",
-          "| `/themes` | `/night` | 切换夜间/日间主题 |",
-          "| `/sessions` | `/resume`, `/continue` | 查看切换历史会话 |",
-          "| `/init` | | 初始化项目配置 AGENTS.md |",
-          "| `/undo` | | 撤销最近一条助手回复 |",
-          "| `/compact` | | 压缩会话上下文 |",
-          "| `/export` | `/share` | 导出当前会话 |",
-          "| `/diff` | | 打开 diff 查看器 |",
-          "",
-          "*注：本地命令直接在客户端执行，不会发送给 AI。*"
-        ].join("\n"),
-        createdAt: new Date().toISOString(),
-      };
-      await bridge.saveMessage(helpMsg); setMessages((prev) => [...prev, helpMsg]);
-    } else if (normalized === "/new") {
-      navigate("/");
-    } else if (normalized === "/themes") {
-      const newMode = !isNightMode;
-      setIsNightMode(newMode);
-      bridge.saveSetting("night_mode", newMode ? "1" : "0");
-      showToast(newMode ? "已切换为夜间模式" : "已切换为日间模式");
-    } else if (normalized === "/settings") {
-      setIsSettingsOpen(true);
-    } else if (normalized === "/models") {
-      const sessionId = await ensureSession("/models");
-      const targetModel = args[0]?.toLowerCase();
-      if (targetModel === "pro" || targetModel === "reasoner") {
-        setSelectedModel("deepseek-v4-pro");
-        showToast("已切换到模型：deepseek-v4-pro");
-        const modelMsg: Message = {
-          id: `local-model-${Date.now()}`,
-          sessionId,
-          role: "assistant",
-          content: "🔄 **系统提示**：已切换模型为 `deepseek-v4-pro`（逻辑推理增强引擎）。",
-          createdAt: new Date().toISOString(),
-        };
-        await bridge.saveMessage(modelMsg); setMessages((prev) => [...prev, modelMsg]);
-      } else if (targetModel === "flash" || targetModel === "chat") {
-        setSelectedModel("deepseek-v4-flash");
-        showToast("已切换到模型：deepseek-v4-flash");
-        const modelMsg: Message = {
-          id: `local-model-${Date.now()}`,
-          sessionId,
-          role: "assistant",
-          content: "🔄 **系统提示**：已切换模型为 `deepseek-v4-flash`（低延迟极速引擎）。",
-          createdAt: new Date().toISOString(),
-        };
-        await bridge.saveMessage(modelMsg); setMessages((prev) => [...prev, modelMsg]);
-      } else {
-        const errorMsg: Message = {
-          id: `local-model-err-${Date.now()}`,
-          sessionId,
-          role: "assistant",
-          content: "❌ **错误**：未知的模型。用法：`/models flash` 或 `/models pro`。",
-          createdAt: new Date().toISOString(),
-        };
-        await bridge.saveMessage(errorMsg); setMessages((prev) => [...prev, errorMsg]);
-      }
-    } else if (normalized === "/sessions") {
-      const sessionId = await ensureSession("/sessions");
-      // 展示最近会话列表
-      const sessionList = sessions.slice(0, 10);
-      if (sessionList.length === 0) {
-        showToast("没有历史会话");
-        return;
-      }
-      const lines = sessionList.map((s, i) =>
-        `${i + 1}. **${s.title}** ${s.lastMessage ? `— ${s.lastMessage}` : ""}`
-      );
-      const msg: Message = {
-        id: `local-sessions-${Date.now()}`,
-        sessionId,
-        role: "assistant",
-        content: ["### 📋 最近会话", "", ...lines].join("\n"),
-        createdAt: new Date().toISOString(),
-      };
-      await bridge.saveMessage(msg); setMessages((prev) => [...prev, msg]);
-    } else if (normalized === "/init") {
-      const sessionId = await ensureSession("/init");
-      const msg: Message = {
-        id: `local-init-${Date.now()}`,
-        sessionId,
-        role: "assistant",
-        content: [
-          "### 🚀 项目初始化",
-          "",
-          "请在输入框中输入以下信息让 AI 生成 AGENTS.md：",
-          "",
-          "1. 项目名称",
-          "2. 技术栈（框架、语言、工具链）",
-          "3. 代码规范偏好",
-          "4. 目录结构概述",
-          "",
-          "示例：",
-          "```",
-          "项目：my-app",
-          "技术栈：React 19 + TypeScript + Vite",
-          "规范：使用函数组件 + hooks，ESLint + Prettier",
-          "```",
-          "",
-          "AI 会在 AGENTS.md 中记录这些信息供后续开发使用。",
-        ].join("\n"),
-        createdAt: new Date().toISOString(),
-      };
-      await bridge.saveMessage(msg); setMessages((prev) => [...prev, msg]);
-    } else if (normalized === "/plan") {
-      const sessionId = await ensureSession("/plan");
-      setPlanMode(true);
-      const msg: Message = {
-        id: `local-plan-${Date.now()}`,
-        sessionId,
-        role: "assistant",
-        content: [
-          "### 📋 规划模式已激活",
-          "",
-          "请直接输入你的需求或问题，Agent 将会：",
-          "- 🔍 搜索和浏览工作区相关文件",
-          "- 📖 读取并分析现有代码结构",
-          "- 🧠 输出详细的实现方案和架构分析",
-          "- ✅ **不会创建或修改任何文件**",
-          "",
-          "**使用示例：**",
-          "> \"分析这个项目的认证流程\"",
-          "> \"帮我设计用户权限模块的架构\"",
-          "> \"重构 src/utils/ 下的工具函数，给出方案\"",
-          "",
-          "输入 `/plan:exit` 或 `/plan_exit` 退出规划模式，恢复完整的读写能力。",
-        ].join("\n"),
-        createdAt: new Date().toISOString(),
-      };
-      await bridge.saveMessage(msg); setMessages((prev) => [...prev, msg]);
-      showToast("📋 已进入规划模式（只读分析）");
-    } else if (normalized === "/plan:exit") {
-      const sessionId = await ensureSession("/plan:exit");
-      setPlanMode(false);
-      const msg: Message = {
-        id: `local-plan-exit-${Date.now()}`,
-        sessionId,
-        role: "assistant",
-        content: "✏️ **规划模式已退出**。Agent 现在可以正常读/写文件。",
-        createdAt: new Date().toISOString(),
-      };
-      await bridge.saveMessage(msg); setMessages((prev) => [...prev, msg]);
-      showToast("✏️ 已退出规划模式");
-    } else if (normalized === "/undo") {
-      if (!id) {
-        showToast("没有可撤销的会话");
-        return;
-      }
-      const msgs = await bridge.getMessages(id);
-      if (msgs.length < 2) {
-        showToast("没有可撤销的消息");
-        return;
-      }
-      // 删除最后两条消息（用户 + 助手配对）
-      const lastTwo = msgs.slice(-2);
-      if (lastTwo.length === 2) {
-        for (const m of lastTwo) {
-          await bridge.deleteSession(m.id).catch(() => {});
-        }
-      }
-      // 刷新
-      await loadMessages(id);
-      showToast("已撤销最后一条回复");
-    } else if (normalized === "/compact") {
-      showToast("会话上下文已压缩");
-    } else if (normalized === "/export") {
-      if (!id) {
-        showToast("没有可导出的会话");
-        return;
-      }
-      const msgs = await bridge.getMessages(id);
-      const text = msgs
-        .map((m) => `## ${m.role}\n\n${m.content}`)
-        .join("\n\n---\n\n");
-      try {
-        await navigator.clipboard.writeText(text);
-        showToast("会话已复制到剪贴板");
-      } catch {
-        showToast("导出失败");
-      }
-    } else if (normalized === "/diff") {
-      showToast("diff 查看器（开发中）");
-    } else {
-      const sessionId = await ensureSession(cmdText);
-      const unknownMsg: Message = {
-        id: `local-unknown-${Date.now()}`,
-        sessionId,
-        role: "assistant",
-        content: `❌ **未知命令**：\`${command}\`。输入 \`/help\` 查看所有可用命令。`,
-        createdAt: new Date().toISOString(),
-      };
-      await bridge.saveMessage(unknownMsg); setMessages((prev) => [...prev, unknownMsg]);
-    }
+    await runLocalCommand(cmdText);
   }
 
   // --- 取消 Agent 执行 ---
@@ -1136,46 +873,38 @@ function MainDashboard() {
 
   const activeSession = sessions.find((s) => s.id === id);
 
+  // 提前计算 projectSettings 弹窗所需的项目会话数（在 AppShell 外部计算避免传函数）
+  const projectSessionCount = projectSettingsTarget
+    ? getProjectSessionCount(projectSettingsTarget)
+    : 0;
+
   return (
-    <div className={`flex flex-col h-screen w-screen overflow-hidden bg-white dark:bg-[#1c1c1e] text-zinc-900 dark:text-zinc-100 transition-[background-color] duration-200 ${isNightMode ? "night-mode" : ""}`}>
-      <Toast toasts={toasts} onDismiss={dismissToast} />
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        apiKey={apiKey}
-        savedApiKey={savedApiKey}
-        onClose={() => setIsSettingsOpen(false)}
-        onApiKeyChange={setApiKey}
-        onSave={handleSaveApiKey}
-        onClear={handleClearApiKey}
-        onClearHistory={() => setShowClearHistoryConfirm(true)}
-        updateStatus={updateStatus}
-        isChecking={isCheckingUpdate}
-        onCheckUpdates={() => handleCheckUpdates(false)}
-      />
-
-      <ProjectSettingsModal
-        isOpen={isProjectSettingsOpen}
-        projectPath={projectSettingsTarget || ""}
-        projectName={projectSettingsTarget ? (projectSettingsTarget.split(/[/\\]/).pop() || "") : ""}
-        workspacePath={workspacePath}
-        sessionCount={projectSettingsTarget ? getProjectSessionCount(projectSettingsTarget) : 0}
-        onClose={() => { setIsProjectSettingsOpen(false); setProjectSettingsTarget(null); }}
-        onWorkspaceChange={setWorkspacePath}
-        onDeleteProject={handleDeleteProjectFromSettings}
-      />
-
-      {/* 清除历史确认弹框 */}
-      <ConfirmDialog
-        open={showClearHistoryConfirm}
-        title="确认清除历史"
-        message="确定要清除所有会话记录吗？此操作不可撤销。"
-        confirmLabel="清除"
-        danger
-        onConfirm={() => { setShowClearHistoryConfirm(false); handleClearHistory(); }}
-        onCancel={() => setShowClearHistoryConfirm(false)}
-      />
-
+    <AppShell
+      isNightMode={isNightMode}
+      toasts={toasts}
+      dismissToast={dismissToast}
+      isSettingsOpen={isSettingsOpen}
+      apiKey={apiKey}
+      savedApiKey={savedApiKey}
+      onSettingsClose={() => setIsSettingsOpen(false)}
+      onApiKeyChange={setApiKey}
+      onSaveApiKey={handleSaveApiKey}
+      onClearApiKey={handleClearApiKey}
+      onClearHistory={() => setShowClearHistoryConfirm(true)}
+      updateStatus={updateStatus}
+      isCheckingUpdate={isCheckingUpdate}
+      onCheckUpdates={() => handleCheckUpdates(false)}
+      isProjectSettingsOpen={isProjectSettingsOpen}
+      projectSettingsTarget={projectSettingsTarget}
+      onProjectSettingsClose={() => { setIsProjectSettingsOpen(false); setProjectSettingsTarget(null); }}
+      workspacePath={workspacePath}
+      onWorkspaceChange={setWorkspacePath}
+      projectSessionCount={projectSessionCount}
+      onDeleteProject={handleDeleteProjectFromSettings}
+      showClearHistoryConfirm={showClearHistoryConfirm}
+      onClearHistoryConfirm={() => { setShowClearHistoryConfirm(false); handleClearHistory(); }}
+      onClearHistoryCancel={() => setShowClearHistoryConfirm(false)}
+    >
       <TitleBar
         isLeftSidebarOpen={isLeftSidebarOpen}
         isRightSidebarOpen={isRightSidebarOpen}
@@ -1219,7 +948,7 @@ function MainDashboard() {
           onSelectProject={handleSelectProject}
         />
 
-        <main className="flex-1 h-full min-w-0 bg-white dark:bg-[#1c1c1e] flex flex-col items-stretch transition-[background-color] duration-200 relative">
+        <main className="flex-1 h-full min-w-0 bg-white dark:bg-surface-primary flex flex-col items-stretch transition-[background-color] duration-200 relative">
           {isHistoryPage ? (
             <HistoryPage
               sessions={sessions}
@@ -1321,7 +1050,7 @@ function MainDashboard() {
           onPreviewFile={readAndPreviewFile}
         />
       </div>
-    </div>
+    </AppShell>
   );
 }
 

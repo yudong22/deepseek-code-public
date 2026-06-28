@@ -57,9 +57,9 @@ export default function EmptyState({
     : "sandbox_workspace";
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-8 max-w-2xl mx-auto w-full gap-5 relative bg-white dark:bg-[#1c1c1e]">
+    <div className="flex-1 flex flex-col items-center justify-center p-8 max-w-2xl mx-auto w-full gap-5 relative bg-white dark:bg-surface-primary">
       <div 
-        className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#efeff4] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] rounded-full text-xs font-semibold text-zinc-600 dark:text-zinc-400 transition-colors cursor-pointer select-none border-0 relative" 
+        className="inline-flex items-center gap-1.5 px-3 py-1 bg-surface-secondary hover:bg-surface-hover rounded-full text-xs font-semibold text-zinc-600 dark:text-zinc-400 transition-colors cursor-pointer select-none border-0 relative" 
         onClick={(e) => {
           e.stopPropagation();
           setIsFolderDropdownOpen(!isFolderDropdownOpen);
@@ -71,17 +71,17 @@ export default function EmptyState({
 
         {isFolderDropdownOpen && (
           <div 
-            className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg z-50 py-1 w-64 flex flex-col overflow-hidden"
+            className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg z-50 py-1 w-64 flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-3.5 py-2 text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase border-b border-[#e3e3e3] dark:border-[#2c2c2e] mb-1 select-none text-left">
+            <div className="px-3.5 py-2 text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase border-b border-border-primary mb-1 select-none text-left">
               选择项目目录
             </div>
             
             {/* 默认沙箱 */}
             <div
               className={`px-3 py-2 text-xs cursor-pointer flex items-center gap-2 transition-colors ${
-                !activeWorkspacePath ? "text-brand-blue font-semibold" : "text-zinc-700 dark:text-zinc-300 hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c]"
+                !activeWorkspacePath ? "text-brand-blue font-semibold" : "text-zinc-700 dark:text-zinc-300 hover:bg-surface-secondary hover:bg-surface-hover"
               }`}
               onClick={() => {
                 onSelectProject("");
@@ -100,7 +100,7 @@ export default function EmptyState({
                 <div
                   key={path}
                   className={`px-3 py-2 text-xs cursor-pointer flex items-start gap-2 border-b border-zinc-150/50 dark:border-zinc-850/50 transition-colors ${
-                    isActive ? "text-brand-blue font-semibold" : "text-zinc-700 dark:text-zinc-300 hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c]"
+                    isActive ? "text-brand-blue font-semibold" : "text-zinc-700 dark:text-zinc-300 hover:bg-surface-secondary hover:bg-surface-hover"
                   }`}
                   onClick={() => {
                     onSelectProject(path);
@@ -121,11 +121,11 @@ export default function EmptyState({
               );
             })}
 
-            <div className="h-[1px] bg-[#e3e3e3] dark:bg-[#2c2c2e] my-1" />
+            <div className="h-[1px] bg-[#e3e3e3] dark:bg-surface-secondary my-1" />
             
             {/* 打开新目录 */}
             <div
-              className="px-3 py-2 text-xs cursor-pointer text-brand-blue dark:text-deepseek-400 font-semibold flex items-center gap-2 hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c] transition-colors"
+              className="px-3 py-2 text-xs cursor-pointer text-brand-blue dark:text-deepseek-400 font-semibold flex items-center gap-2 hover:bg-surface-secondary hover:bg-surface-hover transition-colors"
               onClick={() => {
                 onAddProject();
                 setIsFolderDropdownOpen(false);
@@ -151,7 +151,7 @@ export default function EmptyState({
         onPreviewFile={onPreviewFile}
       />
 
-      <button className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-[#efeff4] dark:bg-[#2c2c2e] rounded-full text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-0 cursor-default select-none">
+      <button className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-surface-secondary rounded-full text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-0 cursor-default select-none">
         <Icons.Settings />
         <span>Local</span>
         <Icons.ChevronDown />

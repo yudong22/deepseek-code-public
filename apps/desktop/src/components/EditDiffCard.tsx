@@ -184,7 +184,7 @@ export default function EditDiffCard({
       </div>
 
       {isDone && diffLines.length > 0 && (
-        <div className="mt-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-[#f9f9fb] dark:bg-[#18181b] overflow-hidden flex flex-col font-mono text-[11px] leading-relaxed max-h-96 overflow-y-auto">
+        <div className="mt-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-[#f9f9fb] dark:bg-surface-primary overflow-hidden flex flex-col font-mono text-[11px] leading-relaxed max-h-96 overflow-y-auto">
           {diffLines.map((line, i) => {
             const isSep = line.type === "ctx" && line.lineNumber === undefined;
             const isAdd = line.type === "add";
@@ -201,7 +201,7 @@ export default function EditDiffCard({
               <div key={i} className={rowClass}>
                 {!isSep && (
                   <>
-                    <span className="py-0.5 px-2 text-right text-zinc-400 dark:text-zinc-600 bg-zinc-50 dark:bg-[#161618] border-r border-[#e3e3e3] dark:border-[#202022] min-w-[32px] select-none">{lineNum}</span>
+                    <span className="py-0.5 px-2 text-right text-zinc-400 dark:text-zinc-600 bg-zinc-50 dark:bg-[#161618] border-r border-border-primary dark:border-[#202022] min-w-[32px] select-none">{lineNum}</span>
                     <span className={`py-0.5 px-1.5 select-none font-bold shrink-0 align-middle ${isAdd ? "text-green-500" : isDel ? "text-red-500" : ""}`}>
                       {isAdd ? "+" : isDel ? "−" : " "}
                     </span>

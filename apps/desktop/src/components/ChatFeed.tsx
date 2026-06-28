@@ -215,10 +215,10 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
     : null;
 
   return (
-    <div className="relative flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#1c1c1e]">
+    <div className="relative flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-surface-primary">
       {/* 置顶 user 消息（悬浮定位，不占滚动容器空间，消除抖动） */}
       {stickyMsg && (
-        <div className="absolute top-0 left-0 right-0 z-50 h-10 px-4 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-md border-b border-[#e3e3e3] dark:border-[#2c2c2e] flex items-center gap-2 shadow-sm text-xs font-semibold text-zinc-800 dark:text-zinc-200 select-none">
+        <div className="absolute top-0 left-0 right-0 z-50 h-10 px-4 bg-white/80 dark:bg-surface-primary/80 backdrop-blur-md border-b border-border-primary flex items-center gap-2 shadow-sm text-xs font-semibold text-zinc-800 dark:text-zinc-200 select-none">
           <span className="text-sm">💬</span>
           <span className="truncate flex-1">{stickyMsg.content}</span>
         </div>
@@ -293,12 +293,12 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                   <span><strong>工具执行完成</strong></span>
                   <details className="ml-auto cursor-pointer">
                     <summary className="outline-none text-brand-blue text-[11px]">查看输出</summary>
-                    <pre className="mt-1.5 bg-[#f8f8f8] dark:bg-[#2c2c2e] p-2 rounded-md text-[11px] text-[#333] dark:text-[#f5f5f7] max-h-[200px] overflow-auto whitespace-pre-wrap break-all">{msg.content}</pre>
+                    <pre className="mt-1.5 bg-[#f8f8f8] dark:bg-surface-secondary p-2 rounded-md text-[11px] text-[#333] dark:text-label-primary max-h-[200px] overflow-auto whitespace-pre-wrap break-all">{msg.content}</pre>
                   </details>
                 </div>
               ) : (
                 <>
-                  <div className="text-zinc-800 dark:text-[#f5f5f7] text-[13px] leading-relaxed w-full whitespace-pre-wrap">
+                  <div className="text-zinc-800 dark:text-label-primary text-[13px] leading-relaxed w-full whitespace-pre-wrap">
                     {/* 有 sections 时按到达顺序渲染，否则降级为旧格式 */}
                     {msg.sections && msg.sections.length > 0 ? (
                       <>
@@ -433,7 +433,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                     {!(isLastMessage && isGenerating) && (
                       <>
                         <button 
-                          className="bg-transparent border-0 cursor-pointer text-[#8e8e93] hover:text-[#555] dark:hover:text-white p-1 rounded-md flex items-center justify-center transition-colors"
+                          className="bg-transparent border-0 cursor-pointer text-[#8e8e93] hover:text-label-secondary dark:hover:text-white p-1 rounded-md flex items-center justify-center transition-colors"
                           onClick={handleCopy}
                           title="复制消息"
                         >
@@ -441,7 +441,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                         </button>
                         <button 
                           className={`bg-transparent border-0 cursor-pointer text-[#8e8e93] p-1 rounded-md flex items-center justify-center transition-colors ${
-                            messageLiked ? "text-blue-500 hover:text-blue-600" : "hover:text-[#555] dark:hover:text-white"
+                            messageLiked ? "text-blue-500 hover:text-blue-600" : "hover:text-label-secondary dark:hover:text-white"
                           }`}
                           onClick={handleLike}
                           title="点赞"
@@ -450,7 +450,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                         </button>
                         <button 
                           className={`bg-transparent border-0 cursor-pointer text-[#8e8e93] p-1 rounded-md flex items-center justify-center transition-colors ${
-                            messageDisliked ? "text-red-500 hover:text-red-600" : "hover:text-[#555] dark:hover:text-white"
+                            messageDisliked ? "text-red-500 hover:text-red-600" : "hover:text-label-secondary dark:hover:text-white"
                           }`}
                           onClick={handleDislike}
                           title="点踩"

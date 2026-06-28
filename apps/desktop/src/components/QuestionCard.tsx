@@ -102,12 +102,12 @@ export default function QuestionCard({ args, callId: _callId, onAnswered, result
   const doneAnswer = selectedOption || customInput;
 
   return (
-    <div className={`bg-white dark:bg-[#1c1c1e] border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 my-2 shadow-sm w-full flex flex-col gap-3 transition-all duration-200 ${isDone ? "opacity-90" : ""}`}>
+    <div className={`bg-white dark:bg-surface-primary border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 my-2 shadow-sm w-full flex flex-col gap-3 transition-all duration-200 ${isDone ? "opacity-90" : ""}`}>
       <div className="flex items-center justify-between text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase">
         <span>{header || "Agent 提问"}</span>
         {isDone && <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-normal tracking-normal">已回复</span>}
       </div>
-      <div className="text-xs font-semibold text-zinc-800 dark:text-[#f5f5f7] leading-relaxed">
+      <div className="text-xs font-semibold text-zinc-800 dark:text-label-primary leading-relaxed">
         {questionText}
       </div>
 
@@ -118,7 +118,7 @@ export default function QuestionCard({ args, callId: _callId, onAnswered, result
             return (
               <button
                 key={i}
-                className={`w-full min-h-12 border rounded-lg px-3.5 py-2.5 flex items-center gap-3 cursor-pointer text-left transition-colors bg-[#f9f9fb] dark:bg-[#1c1c1e] ${
+                className={`w-full min-h-12 border rounded-lg px-3.5 py-2.5 flex items-center gap-3 cursor-pointer text-left transition-colors bg-[#f9f9fb] dark:bg-surface-primary ${
                   isSelected 
                     ? "border-zinc-400 dark:border-zinc-500 bg-zinc-50 dark:bg-zinc-800/30" 
                     : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700"
@@ -133,7 +133,7 @@ export default function QuestionCard({ args, callId: _callId, onAnswered, result
                 }`}>
                   {isSelected ? "✓" : i + 1}
                 </span>
-                <span className="flex flex-col text-xs font-semibold text-zinc-800 dark:text-[#f5f5f7]">
+                <span className="flex flex-col text-xs font-semibold text-zinc-800 dark:text-label-primary">
                   {opt.label}
                   {opt.description && (
                     <span className="text-[10px] text-zinc-400 dark:text-zinc-550 font-normal mt-0.5">{opt.description}</span>
@@ -148,7 +148,7 @@ export default function QuestionCard({ args, callId: _callId, onAnswered, result
       <div className="flex gap-2">
         <input
           type="text"
-          className="flex-1 h-8 px-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
+          className="flex-1 h-8 px-3 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
           value={isDone ? doneAnswer : customInput}
           onChange={(e) => !isDone && setCustomInput(e.target.value)}
           onKeyDown={(e) => !isDone && e.key === "Enter" && handleCustomSubmit()}

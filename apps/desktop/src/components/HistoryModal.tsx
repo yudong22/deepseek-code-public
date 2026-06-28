@@ -112,12 +112,12 @@ export default function HistoryModal({
     <>
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1100]" onClick={onClose}>
         <div
-          className="bg-white dark:bg-[#1c1c1e] w-[640px] max-w-[90vw] rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[80vh]"
+          className="bg-white dark:bg-surface-primary w-[640px] max-w-[90vw] rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[80vh]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* 头部 */}
-          <div className="px-5 py-4 border-b border-[#e3e3e3] dark:border-[#2c2c2e] flex justify-between items-center shrink-0">
-            <h3 className="text-sm font-semibold text-zinc-800 dark:text-[#f5f5f7] m-0">会话历史</h3>
+          <div className="px-5 py-4 border-b border-border-primary flex justify-between items-center shrink-0">
+            <h3 className="text-sm font-semibold text-zinc-800 dark:text-label-primary m-0">会话历史</h3>
             <button className="text-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 bg-transparent border-0 cursor-pointer" onClick={onClose}>×</button>
           </div>
 
@@ -129,7 +129,7 @@ export default function HistoryModal({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="搜索会话标题或项目名..."
-              className="w-full h-8 px-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
+              className="w-full h-8 px-3 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
               autoFocus
             />
 
@@ -138,7 +138,7 @@ export default function HistoryModal({
             </div>
 
             {/* 会话列表 */}
-            <div className="flex flex-col border-t border-[#e3e3e3] dark:border-[#2c2c2e] overflow-y-auto">
+            <div className="flex flex-col border-t border-border-primary overflow-y-auto">
               {filtered.length === 0 ? (
                 <div className="px-4 py-6 text-center text-xs text-zinc-400 dark:text-zinc-500">
                   {query.trim() ? "无匹配会话" : "暂无会话"}
@@ -147,7 +147,7 @@ export default function HistoryModal({
                 filtered.map((s) => (
                   <div
                     key={s.id}
-                    className="flex items-center px-3 py-2.5 border-b border-[#f2f2f7] dark:border-[#2c2c2e] gap-2 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition-colors"
+                    className="flex items-center px-3 py-2.5 border-b border-[#f2f2f7] dark:border-border-primary gap-2 hover:bg-surface-secondary dark:hover:bg-surface-secondary transition-colors"
                   >
                     <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleOpen(s.id)}>
                       {editingId === s.id ? (
@@ -162,12 +162,12 @@ export default function HistoryModal({
                           }}
                           onBlur={() => handleRename(s)}
                           autoFocus
-                          className="w-full h-7 px-2 bg-white dark:bg-[#3a3a3c] border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-none text-zinc-800 dark:text-[#f5f5f7]"
+                          className="w-full h-7 px-2 bg-white dark:bg-[#3a3a3c] border border-zinc-200 dark:border-zinc-700 rounded text-xs outline-none text-zinc-800 dark:text-label-primary"
                         />
                       ) : (
                         <>
                           <div
-                            className="text-xs font-medium text-zinc-800 dark:text-[#f5f5f7] overflow-hidden text-ellipsis whitespace-nowrap"
+                            className="text-xs font-medium text-zinc-800 dark:text-label-primary overflow-hidden text-ellipsis whitespace-nowrap"
                             title={s.title}
                           >
                             {s.title || "(未命名会话)"}
@@ -190,7 +190,7 @@ export default function HistoryModal({
                             setEditingId(s.id);
                             setEditTitle(s.title);
                           }}
-                          className="p-1 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 bg-transparent border-0 cursor-pointer rounded-sm hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] transition-colors text-xs"
+                          className="p-1 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 bg-transparent border-0 cursor-pointer rounded-sm hover:bg-surface-hover transition-colors text-xs"
                         >
                           ✎
                         </button>
@@ -213,9 +213,9 @@ export default function HistoryModal({
           </div>
 
           {/* 底部 */}
-          <div className="px-5 py-3 border-t border-[#e3e3e3] dark:border-[#2c2c2e] flex justify-end shrink-0">
+          <div className="px-5 py-3 border-t border-border-primary flex justify-end shrink-0">
             <button
-              className="h-8 px-4 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] border border-zinc-200 dark:border-zinc-800 rounded-md text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer transition-colors"
+              className="h-8 px-4 bg-surface-secondary hover:bg-surface-hover border border-zinc-200 dark:border-zinc-800 rounded-md text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer transition-colors"
               onClick={onClose}
             >
               关闭

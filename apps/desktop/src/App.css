@@ -242,3 +242,46 @@
     transform: translateY(0) scale(1);
   }
 }
+
+/* ── Slash autocomplete items (formerly inline style) ─────────────────── */
+.slash-autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+  border-radius: 4px;
+  color: inherit;
+  background: transparent;
+  transition: background-color 0.1s;
+}
+.slash-autocomplete-item.active {
+  color: #fff;
+  background: var(--dsw-static-deepseek-500);
+}
+.slash-autocomplete-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.slash-autocomplete-cmd {
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.slash-autocomplete-desc {
+  color: #aeaeb2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Mermaid loading placeholder (formerly inline style) ─────────────── */
+.mermaid-loading {
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  color: #8a8a8f;
+  font-size: 11px;
+}

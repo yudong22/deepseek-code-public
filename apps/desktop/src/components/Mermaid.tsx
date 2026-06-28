@@ -31,7 +31,7 @@ export default function Mermaid({ chart }: { chart: string }) {
 
   if (!svg) {
     return (
-      <div className="mermaid" id={id.current} style={{ display: "flex", justifyContent: "center", padding: "12px", color: "#8a8a8f", fontSize: "11px" }}>
+      <div className="mermaid mermaid-loading" id={id.current}>
         Rendering diagram...
       </div>
     );

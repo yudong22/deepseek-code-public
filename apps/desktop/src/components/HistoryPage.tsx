@@ -105,7 +105,7 @@ export default function HistoryPage({
   }, [sessions, query, filterProject]);
 
   return (
-    <div className="flex-1 bg-white dark:bg-[#1c1c1e] overflow-y-auto w-full">
+    <div className="flex-1 bg-white dark:bg-surface-primary overflow-y-auto w-full">
       <div className="max-w-[740px] mx-auto px-6 py-8 flex flex-col gap-6">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Conversation History</h1>
 
@@ -123,7 +123,7 @@ export default function HistoryPage({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search conversations..."
-              className="w-full h-9 pl-9 pr-4 bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-full text-[13px] outline-none text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-500 transition-colors focus:border-zinc-400 dark:focus:border-zinc-500"
+              className="w-full h-9 pl-9 pr-4 bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-700 rounded-full text-[13px] outline-none text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-500 transition-colors focus:border-zinc-400 dark:focus:border-zinc-500"
             />
           </div>
 
@@ -133,7 +133,7 @@ export default function HistoryPage({
               className={`h-9 px-4 border rounded-full text-[13px] font-medium flex items-center gap-2 cursor-pointer transition-colors ${
                 filterProject
                   ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent"
-                  : "bg-white dark:bg-[#2c2c2e] text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-[#3a3a3c]"
+                  : "bg-white dark:bg-surface-secondary text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 hover:bg-surface-hover"
               }`}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -151,10 +151,10 @@ export default function HistoryPage({
             </button>
 
             {isFilterDropdownOpen && (
-              <div className="absolute top-full right-0 mt-1 bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg z-50 py-1 w-52 flex flex-col overflow-hidden">
+              <div className="absolute top-full right-0 mt-1 bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg z-50 py-1 w-52 flex flex-col overflow-hidden">
                 <div
                   className={`px-3.5 py-2 text-[13px] cursor-pointer flex items-center justify-between transition-colors ${
-                    filterProject === null ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-[#3a3a3c]"
+                    filterProject === null ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 hover:bg-surface-hover"
                   }`}
                   onClick={() => { setFilterProject(null); setIsFilterDropdownOpen(false); }}
                 >
@@ -165,7 +165,7 @@ export default function HistoryPage({
                   <div
                     key={p}
                     className={`px-3.5 py-2 text-[13px] cursor-pointer flex items-center justify-between transition-colors ${
-                      filterProject === p ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-[#3a3a3c]"
+                      filterProject === p ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 hover:bg-surface-hover"
                     }`}
                     onClick={() => { setFilterProject(p); setIsFilterDropdownOpen(false); }}
                   >
@@ -193,7 +193,7 @@ export default function HistoryPage({
             filtered.map((s) => (
               <div
                 key={s.id}
-                className="group flex items-center justify-between py-3.5 border-b border-zinc-100 dark:border-zinc-800/70 hover:bg-zinc-50 dark:hover:bg-[#2c2c2e]/60 cursor-pointer select-none transition-colors rounded-sm -mx-2 px-2"
+                className="group flex items-center justify-between py-3.5 border-b border-zinc-100 dark:border-zinc-800/70 hover:bg-zinc-50 dark:hover:bg-surface-secondary/60 cursor-pointer select-none transition-colors rounded-sm -mx-2 px-2"
                 onClick={() => onNavigate(s.id)}
               >
                 <div className="flex-1 min-w-0 flex flex-col gap-0.5">
@@ -209,11 +209,11 @@ export default function HistoryPage({
                       }}
                       onBlur={() => handleRename(s)}
                       autoFocus
-                      className="h-7 px-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-brand-blue dark:border-deepseek-400 rounded-md text-[13px] text-zinc-800 dark:text-[#f5f5f7] outline-none w-full max-w-[400px]"
+                      className="h-7 px-2 bg-surface-secondary border border-brand-blue dark:border-deepseek-400 rounded-md text-[13px] text-zinc-800 dark:text-label-primary outline-none w-full max-w-[400px]"
                     />
                   ) : (
                     <>
-                      <div className="text-[14px] font-semibold text-zinc-900 dark:text-[#f5f5f7] truncate" title={s.title}>
+                      <div className="text-[14px] font-semibold text-zinc-900 dark:text-label-primary truncate" title={s.title}>
                         {s.title || "(Untitled Conversation)"}
                       </div>
                       <div className="text-[12px] text-zinc-400 dark:text-zinc-500">

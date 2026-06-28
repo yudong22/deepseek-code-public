@@ -96,14 +96,14 @@ export default function RightPanel({
 
     return (
       <aside
-        className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+        className={`flex flex-col bg-white dark:bg-surface-primary h-full shrink-0 relative transition-all duration-200 border-l border-border-primary overflow-hidden ${
           isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
         }`}
         style={panelStyles}
       >
         <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
         {rightPanelMarkdownContent ? (
-          <div className="p-5 text-zinc-800 dark:text-[#f5f5f7] leading-relaxed overflow-y-auto h-full box-border">
+          <div className="p-5 text-zinc-800 dark:text-label-primary leading-relaxed overflow-y-auto h-full box-border">
             {renderMarkdown(rightPanelMarkdownContent, false, onPreviewFile)}
           </div>
         ) : (
@@ -143,22 +143,19 @@ export default function RightPanel({
   if (isImage) {
     return (
       <aside
-        className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+        className={`flex flex-col bg-white dark:bg-surface-primary h-full shrink-0 relative transition-all duration-200 border-l border-border-primary overflow-hidden ${
           isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
         }`}
         style={panelStyles}
       >
         <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
-        <div className="flex items-center gap-1.5 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0 text-xs text-zinc-500 select-none">
+        <div className="flex items-center gap-1.5 px-4 h-8 bg-surface-primary border-b border-border-primary shrink-0 text-xs text-zinc-500 select-none">
           <span className="text-sm">🖼️</span>
-          <span className="font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[200px]">{activeTab.title}</span>
-          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">{activeTab.language || "image"}</span>
+          <span className="font-semibold text-zinc-800 dark:text-label-primary truncate max-w-[200px]">{activeTab.title}</span>
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-surface-secondary px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">{activeTab.language || "image"}</span>
         </div>
-        <div 
-          className="flex-1 overflow-auto flex items-center justify-center p-4"
-          style={{
-            background: isNightMode ? "#1c1c1e" : "#f5f5f7",
-          }}
+        <div
+          className={`flex-1 overflow-auto flex items-center justify-center p-4 ${isNightMode ? "bg-[#1c1c1e]" : "bg-[#f5f5f7]"}`}
         >
           <img
             src={activeTab.content}
@@ -187,16 +184,16 @@ export default function RightPanel({
   if (isBash) {
     return (
       <aside
-        className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+        className={`flex flex-col bg-white dark:bg-surface-primary h-full shrink-0 relative transition-all duration-200 border-l border-border-primary overflow-hidden ${
           isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
         }`}
         style={panelStyles}
       >
         <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
         <div className="flex flex-col h-full p-4 box-border">
-          <div className="flex flex-col bg-[#18181b] rounded-lg border border-[#27272a] h-full overflow-hidden shadow-xl">
+          <div className="flex flex-col bg-surface-primary rounded-lg border border-border-primary h-full overflow-hidden shadow-xl">
             {/* 终端标题栏 */}
-            <div className="flex items-center px-3.5 py-2.5 bg-[#202023] border-b border-[#27272a] select-none">
+            <div className="flex items-center px-3.5 py-2.5 bg-surface-primary border-b border-border-primary select-none">
               <div className="flex gap-1.5 mr-4">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
                 <span className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]" />
@@ -207,7 +204,7 @@ export default function RightPanel({
               </span>
             </div>
             {/* 终端内容区 */}
-            <pre className="m-0 p-4 overflow-auto flex-1 font-mono text-[12px] leading-relaxed text-[#e4e4e7] whitespace-pre-wrap break-all">
+            <pre className="m-0 p-4 overflow-auto flex-1 font-mono text-[12px] leading-relaxed text-label-primary whitespace-pre-wrap break-all">
               <code>{activeTab.content}</code>
             </pre>
           </div>
@@ -246,7 +243,7 @@ function MarkdownPanel({
 
   return (
     <aside
-      className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+      className={`flex flex-col bg-white dark:bg-surface-primary h-full shrink-0 relative transition-all duration-200 border-l border-border-primary overflow-hidden ${
         isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
       }`}
       style={isOpen ? { width } : undefined}
@@ -254,19 +251,19 @@ function MarkdownPanel({
       <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
 
       {/* 文件名头部 */}
-      <div className="flex items-center gap-1.5 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0 text-xs text-zinc-500 select-none">
+      <div className="flex items-center gap-1.5 px-4 h-8 bg-surface-primary border-b border-border-primary shrink-0 text-xs text-zinc-500 select-none">
         <span className="text-sm">📄</span>
-        <span className="font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[200px]">{activeTab.title}</span>
-        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">md</span>
+        <span className="font-semibold text-zinc-800 dark:text-label-primary truncate max-w-[200px]">{activeTab.title}</span>
+        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-surface-secondary px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">md</span>
       </div>
 
       {/* 内部 Tab 栏：Preview / Source + 复制/下载按钮 */}
-      <div className="flex items-center gap-1 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0">
+      <div className="flex items-center gap-1 px-4 h-8 bg-surface-primary border-b border-border-primary shrink-0">
         <button
           className={`px-3 h-6 rounded-md text-xs font-semibold cursor-pointer border-0 bg-transparent transition-colors ${
             activeInnerTab === "preview" 
-              ? "bg-white dark:bg-[#2c2c2e] text-[#111] dark:text-white shadow-sm" 
-              : "text-zinc-500 hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e]"
+              ? "bg-white dark:bg-surface-secondary text-[#111] dark:text-white shadow-sm" 
+              : "text-zinc-500 hover:bg-surface-secondary dark:hover:bg-surface-secondary"
           }`}
           onClick={() => setActiveInnerTab("preview")}
         >
@@ -275,8 +272,8 @@ function MarkdownPanel({
         <button
           className={`px-3 h-6 rounded-md text-xs font-semibold cursor-pointer border-0 bg-transparent transition-colors ${
             activeInnerTab === "source" 
-              ? "bg-white dark:bg-[#2c2c2e] text-[#111] dark:text-white shadow-sm" 
-              : "text-zinc-500 hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e]"
+              ? "bg-white dark:bg-surface-secondary text-[#111] dark:text-white shadow-sm" 
+              : "text-zinc-500 hover:bg-surface-secondary dark:hover:bg-surface-secondary"
           }`}
           onClick={() => setActiveInnerTab("source")}
         >
@@ -304,7 +301,7 @@ function MarkdownPanel({
             {renderCodeBlock(activeTab.content, "markdown")}
           </div>
         ) : (
-          <div className="p-5 text-zinc-800 dark:text-[#f5f5f7] leading-relaxed overflow-y-auto flex-1">
+          <div className="p-5 text-zinc-800 dark:text-label-primary leading-relaxed overflow-y-auto flex-1">
             {renderMarkdown(activeTab.content, false, onPreviewFile)}
           </div>
         )}
@@ -332,17 +329,17 @@ function FilePanel({
 
   return (
     <aside
-      className={`flex flex-col bg-white dark:bg-[#1c1c1e] h-full shrink-0 relative transition-all duration-200 border-l border-[#e3e3e3] dark:border-[#2c2c2e] overflow-hidden ${
+      className={`flex flex-col bg-white dark:bg-surface-primary h-full shrink-0 relative transition-all duration-200 border-l border-border-primary overflow-hidden ${
         isOpen ? "" : "w-0 border-l-transparent pointer-events-none"
       }`}
       style={isOpen ? { width } : undefined}
     >
       <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
       {/* 顶部工具栏：文件名 + 语言标签 + 复制/下载按钮 */}
-      <div className="flex items-center gap-1.5 px-4 h-9 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0 text-xs text-zinc-500 select-none">
+      <div className="flex items-center gap-1.5 px-4 h-9 bg-surface-primary border-b border-border-primary shrink-0 text-xs text-zinc-500 select-none">
         <span className="text-sm">📄</span>
-        <span className="font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[180px]">{activeTab.title}</span>
-        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">{language}</span>
+        <span className="font-semibold text-zinc-800 dark:text-label-primary truncate max-w-[180px]">{activeTab.title}</span>
+        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-surface-secondary px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">{language}</span>
         <div className="ml-auto flex items-center gap-1">
           <CodeBlockDownloadButton
             code={activeTab.content}

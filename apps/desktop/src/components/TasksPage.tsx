@@ -207,7 +207,7 @@ export default function TasksPage({
   }, [tasks, query]);
 
   return (
-    <div className="flex-1 bg-white dark:bg-[#1c1c1e] overflow-y-auto w-full">
+    <div className="flex-1 bg-white dark:bg-surface-primary overflow-y-auto w-full">
       <div className="max-w-[740px] mx-auto px-6 py-8 flex flex-col gap-6">
         <div className="flex justify-between items-center mb-1">
           <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight m-0">Scheduled Tasks</h2>
@@ -232,12 +232,12 @@ export default function TasksPage({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search tasks..."
-              className="w-full h-8 pl-10 pr-4 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
+              className="w-full h-8 pl-10 pr-4 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
             />
           </div>
         </div>
 
-        <div className="text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase border-b border-[#e3e3e3] dark:border-[#2c2c2e] pb-1 select-none">All Tasks</div>
+        <div className="text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase border-b border-border-primary pb-1 select-none">All Tasks</div>
 
         <div className="flex flex-col gap-0.5">
           {filteredTasks.length === 0 ? (
@@ -256,12 +256,12 @@ export default function TasksPage({
               return (
                 <div
                   key={t.id}
-                  className={`group flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-white dark:bg-[#1c1c1e] border border-zinc-100 dark:border-zinc-900/50 hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:border-zinc-200 dark:hover:border-zinc-800 transition-all duration-200 ${
+                  className={`group flex items-center justify-between px-3.5 py-2.5 rounded-lg bg-white dark:bg-surface-primary border border-zinc-100 dark:border-zinc-900/50 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:border-zinc-200 dark:hover:border-zinc-800 transition-all duration-200 ${
                     !t.enabled ? "opacity-50" : ""
                   }`}
                 >
                   <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                    <div className="text-xs font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[600px]" title={t.name}>
+                    <div className="text-xs font-semibold text-zinc-800 dark:text-label-primary truncate max-w-[600px]" title={t.name}>
                       {t.name}
                     </div>
                     <div className="text-[10px] text-zinc-400 dark:text-zinc-550">
@@ -277,8 +277,7 @@ export default function TasksPage({
                       <button
                         title={t.enabled ? "Disable Task" : "Enable Task"}
                         onClick={() => handleToggle(t)}
-                        className="bg-transparent border-0 cursor-pointer p-1 rounded-md transition-colors flex items-center justify-center"
-                        style={{ color: t.enabled ? "#34c759" : "#ff9500" }}
+                        className={`bg-transparent border-0 cursor-pointer p-1 rounded-md transition-colors flex items-center justify-center ${t.enabled ? "text-[#34c759]" : "text-[#ff9500]"}`}
                       >
                         {t.enabled ? (
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -327,9 +326,9 @@ export default function TasksPage({
       {/* New Scheduled Task Modal Overlay */}
       {showNewTaskModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1100]" onClick={() => setShowNewTaskModal(false)}>
-          <div className="bg-white dark:bg-[#1c1c1e] w-[460px] rounded-xl shadow-xl flex flex-col border border-zinc-200 dark:border-zinc-800 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-[#e3e3e3] dark:border-[#2c2c2e] flex justify-between items-center shrink-0">
-              <h3 className="text-sm font-semibold text-zinc-800 dark:text-[#f5f5f7] m-0">New Scheduled Task</h3>
+          <div className="bg-white dark:bg-surface-primary w-[460px] rounded-xl shadow-xl flex flex-col border border-zinc-200 dark:border-zinc-800 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-border-primary flex justify-between items-center shrink-0">
+              <h3 className="text-sm font-semibold text-zinc-800 dark:text-label-primary m-0">New Scheduled Task</h3>
               <button className="text-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 bg-transparent border-0 cursor-pointer" onClick={() => setShowNewTaskModal(false)}>✕</button>
             </div>
 
@@ -341,7 +340,7 @@ export default function TasksPage({
                   value={taskName}
                   onChange={(e) => setTaskName(e.target.value)}
                   placeholder="Enter scheduled task name..."
-                  className="w-full h-8 px-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
+                  className="w-full h-8 px-3 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
                   autoFocus
                 />
               </div>
@@ -349,7 +348,7 @@ export default function TasksPage({
               <div className="flex flex-col gap-1.5" ref={projectDropdownRef}>
                 <label className="text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase">Project</label>
                 <div className="relative" onClick={() => setIsProjectDropdownOpen(!isProjectDropdownOpen)}>
-                  <div className="w-full h-8 px-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-800 rounded-md text-xs flex items-center cursor-pointer transition-colors text-zinc-800 dark:text-[#f5f5f7]">
+                  <div className="w-full h-8 px-3 bg-surface-secondary border border-zinc-200 dark:border-zinc-800 rounded-md text-xs flex items-center cursor-pointer transition-colors text-zinc-800 dark:text-label-primary">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#8e8e93] mr-2">
                       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                     </svg>
@@ -362,14 +361,14 @@ export default function TasksPage({
                   </div>
 
                   {isProjectDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg z-50 py-1 flex flex-col overflow-hidden">
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-lg z-50 py-1 flex flex-col overflow-hidden">
                       {projects.map((projPath) => (
                         <div
                           key={projPath}
                           className={`px-3.5 py-2 text-xs cursor-pointer transition-colors ${
                             selectedProjectPath === projPath 
                               ? "text-brand-blue font-medium" 
-                              : "text-zinc-700 dark:text-zinc-300 hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c]"
+                              : "text-zinc-700 dark:text-zinc-300 hover:bg-surface-secondary hover:bg-surface-hover"
                           }`}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -384,7 +383,7 @@ export default function TasksPage({
                         className={`px-3.5 py-2 text-xs cursor-pointer transition-colors ${
                           selectedProjectPath === "" 
                             ? "text-brand-blue font-medium" 
-                            : "text-zinc-700 dark:text-zinc-300 hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c]"
+                            : "text-zinc-700 dark:text-zinc-300 hover:bg-surface-secondary hover:bg-surface-hover"
                         }`}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -405,7 +404,7 @@ export default function TasksPage({
                   <select
                     value={intervalType}
                     onChange={(e) => setIntervalType(e.target.value)}
-                    className="h-8 px-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-800 rounded-md text-xs text-zinc-800 dark:text-[#f5f5f7] outline-none cursor-pointer"
+                    className="h-8 px-2 bg-surface-secondary border border-zinc-200 dark:border-zinc-800 rounded-md text-xs text-zinc-800 dark:text-label-primary outline-none cursor-pointer"
                   >
                     <option value="Daily">Daily</option>
                     <option value="Hourly">Hourly</option>
@@ -418,7 +417,7 @@ export default function TasksPage({
                       <select
                         value={dailyTime}
                         onChange={(e) => setDailyTime(e.target.value)}
-                        className="h-8 px-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-800 rounded-md text-xs text-zinc-800 dark:text-[#f5f5f7] outline-none cursor-pointer"
+                        className="h-8 px-2 bg-surface-secondary border border-zinc-200 dark:border-zinc-800 rounded-md text-xs text-zinc-800 dark:text-label-primary outline-none cursor-pointer"
                       >
                         <option value="9:00 AM">9:00 AM</option>
                         <option value="10:00 AM">10:00 AM</option>
@@ -456,13 +455,13 @@ export default function TasksPage({
                   value={taskPrompt}
                   onChange={(e) => setTaskPrompt(e.target.value)}
                   placeholder="Enter a prompt for the agent to run..."
-                  className="w-full h-24 p-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-600 resize-none transition-colors"
+                  className="w-full h-24 p-3 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-600 resize-none transition-colors"
                 />
                 <div className="text-[10px] text-[#8e8e93] mt-1">All scheduled tasks run as Flash.</div>
               </div>
             </div>
 
-            <div className="px-5 py-4 border-t border-[#e3e3e3] dark:border-[#2c2c2e] flex justify-end shrink-0">
+            <div className="px-5 py-4 border-t border-border-primary flex justify-end shrink-0">
               <button 
                 className="h-8.5 px-4 bg-brand-blue hover:bg-brand-blue-hover text-white border-0 rounded-md text-xs font-semibold cursor-pointer transition-colors" 
                 onClick={handleSubmitTask}

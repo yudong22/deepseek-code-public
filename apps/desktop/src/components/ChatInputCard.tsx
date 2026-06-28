@@ -471,10 +471,10 @@ export default function ChatInputCard({
   }, [inputText]);
 
   return (
-    <div className="relative flex flex-col bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-xl w-full transition-all duration-200 shadow-sm focus-within:border-zinc-400 dark:focus-within:border-zinc-500">
+    <div className="relative flex flex-col bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-700 rounded-xl w-full transition-all duration-200 shadow-sm focus-within:border-zinc-400 dark:focus-within:border-zinc-500">
       <div
         ref={editorRef}
-        className="w-full bg-transparent border-0 outline-none text-[13px] text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-500 overflow-y-auto px-4 pt-3 pb-2.5 min-h-[38px] max-h-48"
+        className="w-full bg-transparent border-0 outline-none text-[13px] text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-500 overflow-y-auto px-4 pt-3 pb-2.5 min-h-[38px] max-h-48"
         contentEditable
         suppressContentEditableWarning
         data-placeholder={planMode ? "规划模式下提问，Agent 仅分析和规划…" : "Ask anything, @ to mention, / for actions"}
@@ -510,18 +510,18 @@ export default function ChatInputCard({
           >
             <Icons.Plus />
           </button>
-          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          <div className="relative flex items-center">
             <button
-              className="flex items-center gap-1 bg-transparent hover:bg-zinc-100 dark:hover:bg-[#3a3a3c] text-[12px] font-medium text-zinc-500 dark:text-zinc-400 px-2 py-1 rounded-md transition-colors border-0 cursor-pointer"
+              className="flex items-center gap-1 bg-transparent hover:bg-zinc-100 hover:bg-surface-hover text-[12px] font-medium text-zinc-500 dark:text-zinc-400 px-2 py-1 rounded-md transition-colors border-0 cursor-pointer"
               onClick={(e) => { e.stopPropagation(); onToggleModelDropdown(); }}
             >
               <span>{selectedModel}</span>
               <Icons.ChevronDown />
             </button>
             {isModelDropdownOpen && (
-              <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 py-1 w-44 flex flex-col overflow-hidden">
+              <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 py-1 w-44 flex flex-col overflow-hidden">
                 <div
-                  className={`px-3 py-1.5 text-[13px] hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c] cursor-pointer transition-colors ${
+                  className={`px-3 py-1.5 text-[13px] hover:bg-surface-secondary hover:bg-surface-hover cursor-pointer transition-colors ${
                     selectedModel === "deepseek-v4-flash" ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300"
                   }`}
                   onClick={() => onSelectModel("deepseek-v4-flash")}
@@ -529,7 +529,7 @@ export default function ChatInputCard({
                   deepseek-v4-flash
                 </div>
                 <div
-                  className={`px-3 py-1.5 text-[13px] hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c] cursor-pointer transition-colors ${
+                  className={`px-3 py-1.5 text-[13px] hover:bg-surface-secondary hover:bg-surface-hover cursor-pointer transition-colors ${
                     selectedModel === "deepseek-v4-pro" ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300"
                   }`}
                   onClick={() => onSelectModel("deepseek-v4-pro")}

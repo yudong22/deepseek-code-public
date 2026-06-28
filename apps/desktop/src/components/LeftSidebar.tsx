@@ -149,8 +149,8 @@ export default function LeftSidebar({
             key={s.id}
             className={`flex items-center justify-between px-3 h-7 text-[13px] rounded-md cursor-pointer select-none transition-colors ${
               activeSessionId === s.id 
-                ? "bg-[#efeff4] dark:bg-[#2c2c2e] text-[#111] dark:text-white font-medium" 
-                : "text-[#555] dark:text-[#a0a0a5] hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white"
+                ? "bg-surface-secondary text-[#111] dark:text-white font-medium" 
+                : "text-label-secondary dark:text-label-secondary hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary"
             }`}
             onClick={() => onSelectSession(s.id)}
           >
@@ -174,13 +174,13 @@ export default function LeftSidebar({
 
   return (
     <aside
-      className={`bg-[#f6f6f6] dark:bg-[#1c1c1e] border-r border-[#e3e3e3] dark:border-[#2c2c2e] flex flex-col h-full shrink-0 overflow-hidden relative ${isOpen ? "" : "w-0 border-r-transparent"}`}
+      className={`bg-surface-primary border-r border-border-primary flex flex-col h-full shrink-0 overflow-hidden relative ${isOpen ? "" : "w-0 border-r-transparent"}`}
       style={isOpen ? { width: sidebarWidth, transition: "width 200ms" } : undefined}
     >
       {/* 新建对话按钮 */}
       <div className="p-4 shrink-0">
         <button 
-          className="w-full h-9 flex items-center justify-center gap-2 bg-[#ebebeb] hover:bg-[#e0e0e0] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] text-[#333] dark:text-[#d0d0d0] rounded-md text-[13px] font-medium cursor-pointer select-none transition-colors border-0" 
+          className="w-full h-9 flex items-center justify-center gap-2 bg-[#ebebeb] hover:bg-[#e0e0e0] dark:bg-surface-secondary hover:bg-surface-hover text-[#333] dark:text-[#d0d0d0] rounded-md text-[13px] font-medium cursor-pointer select-none transition-colors border-0" 
           onClick={onNewConversation}
         >
           <Icons.Plus />
@@ -191,14 +191,14 @@ export default function LeftSidebar({
       {/* 静态导航 */}
       <div className="px-2 py-1 flex flex-col gap-0.5 shrink-0">
         <div 
-          className="flex items-center gap-3 px-3 h-8 text-[13px] text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors" 
+          className="flex items-center gap-3 px-3 h-8 text-[13px] text-label-secondary dark:text-label-secondary rounded-md cursor-pointer select-none hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary transition-colors" 
           onClick={onHistoryOpen}
         >
           <Icons.History />
           Conversation History
         </div>
         <div 
-          className="flex items-center gap-3 px-3 h-8 text-[13px] text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors" 
+          className="flex items-center gap-3 px-3 h-8 text-[13px] text-label-secondary dark:text-label-secondary rounded-md cursor-pointer select-none hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary transition-colors" 
           onClick={onTasksOpen}
         >
           <Icons.Tasks />
@@ -229,8 +229,8 @@ export default function LeftSidebar({
                   <div
                     className={`flex-1 flex items-center gap-1.5 px-3 h-8 text-[13px] rounded-md cursor-pointer select-none transition-colors ${
                       isActive 
-                        ? "bg-[#efeff4] dark:bg-[#2c2c2e] text-[#111] dark:text-white font-medium" 
-                        : "text-[#555] dark:text-[#a0a0a5] hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white"
+                        ? "bg-surface-secondary text-[#111] dark:text-white font-medium" 
+                        : "text-label-secondary dark:text-label-secondary hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary"
                     }`}
                     onClick={() => {
                       if (isActive) {
@@ -268,7 +268,7 @@ export default function LeftSidebar({
               <div key={name} className="flex flex-col gap-0.5 opacity-65">
                 <div className="flex items-center justify-between">
                   <div
-                    className="flex-1 flex items-center gap-1.5 px-3 h-8 text-xs text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors"
+                    className="flex-1 flex items-center gap-1.5 px-3 h-8 text-xs text-label-secondary dark:text-label-secondary rounded-md cursor-pointer select-none hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary transition-colors"
                     onClick={() => {
                       onToggleProjectCollapse(name);
                       showToast(`项目 "${name}" 未导入，请点击右上角 "+" 选择该文件夹以重新绑定。`);
@@ -301,8 +301,8 @@ export default function LeftSidebar({
                 key={s.id}
                 className={`flex items-center justify-between px-3 h-7 text-[13px] rounded-md cursor-pointer select-none transition-colors ${
                   activeSessionId === s.id 
-                    ? "bg-[#efeff4] dark:bg-[#2c2c2e] text-[#111] dark:text-white font-medium" 
-                    : "text-[#555] dark:text-[#a0a0a5] hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white"
+                    ? "bg-surface-secondary text-[#111] dark:text-white font-medium" 
+                    : "text-label-secondary dark:text-label-secondary hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary"
                 }`}
                 onClick={() => onSelectSession(s.id)}
               >
@@ -321,9 +321,9 @@ export default function LeftSidebar({
         </div>
       </div>
 
-      <div className="p-2 border-t border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0">
+      <div className="p-2 border-t border-border-primary shrink-0">
         <div
-          className="flex items-center gap-3 px-3 h-8 text-[13px] text-[#555] dark:text-[#a0a0a5] rounded-md cursor-pointer select-none hover:bg-[#efeff4] dark:hover:bg-[#2c2c2e] hover:text-[#111] dark:hover:text-white transition-colors"
+          className="flex items-center gap-3 px-3 h-8 text-[13px] text-label-secondary dark:text-label-secondary rounded-md cursor-pointer select-none hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary transition-colors"
           onClick={onSettingsOpen}
         >
           <Icons.Settings />

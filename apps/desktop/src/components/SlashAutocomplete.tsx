@@ -61,29 +61,12 @@ export default function SlashAutocomplete({
       {commands.map((cmd, idx) => (
         <div
           key={cmd.name}
-          className={`file-autocomplete-item ${idx === selectedIndex ? "active" : ""}`}
+          className={`slash-autocomplete-item ${idx === selectedIndex ? "active" : ""}`}
           onClick={() => onSelect(cmd)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "4px",
-            padding: "5px 10px",
-            fontSize: "12px",
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            cursor: "pointer",
-            borderRadius: "4px",
-            color: idx === selectedIndex ? "#fff" : "inherit",
-            background: idx === selectedIndex ? "var(--dsw-static-deepseek-500)" : "transparent",
-          }}
         >
-          <span style={{ fontSize: "13px", flexShrink: 0 }}>{cmd.icon}</span>
-          <span style={{ fontWeight: 600, flexShrink: 0, marginRight: "2px" }}>/{cmd.name}</span>
-          <span style={{
-            color: "#aeaeb2",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}>
+          <span className="slash-autocomplete-icon">{cmd.icon}</span>
+          <span className="slash-autocomplete-cmd">/{cmd.name}</span>
+          <span className="slash-autocomplete-desc">
             {cmd.description}
           </span>
         </div>
