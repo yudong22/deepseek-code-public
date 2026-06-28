@@ -77,7 +77,7 @@ export default function ProjectSettingsModal({
                     onWorkspaceChange(path);
                   }
                 }}
-                className="h-8 px-3 bg-surface-secondary hover:bg-surface-hover border border-zinc-200 dark:border-zinc-800 rounded-md text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer transition-colors flex items-center justify-center"
+                className="h-8 px-3 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs font-medium text-[#333] dark:text-[#d0d0d0] cursor-pointer transition-colors flex items-center justify-center"
               >
                 浏览...
               </button>
@@ -113,7 +113,7 @@ export default function ProjectSettingsModal({
         </div>
         <div className="px-5 py-4 border-t border-border-primary flex justify-end gap-2 shrink-0">
           <button
-            className="h-8.5 px-4 bg-surface-secondary hover:bg-surface-hover border border-zinc-200 dark:border-zinc-800 rounded-md text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer transition-colors flex items-center justify-center"
+            className="h-8.5 px-4 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs font-medium text-[#333] dark:text-[#d0d0d0] cursor-pointer transition-colors flex items-center justify-center"
             onClick={onClose}
           >
             关闭

@@ -7,13 +7,12 @@ function RightActions({
   isRightSidebarOpen,
   isUpdateReady,
   isNightMode,
-  onSettingsOpen,
   onToggleNightMode,
   onToggleRightSidebar,
   onRestartToUpdate,
 }: Pick<TitleBarProps,
   "isRightSidebarOpen" | "isUpdateReady" | "isNightMode" |
-  "onSettingsOpen" | "onToggleNightMode" | "onToggleRightSidebar" | "onRestartToUpdate"
+  "onToggleNightMode" | "onToggleRightSidebar" | "onRestartToUpdate"
 >) {
   return (
     <div className="flex items-center gap-0.5 shrink-0">
@@ -45,12 +44,7 @@ function RightActions({
           </svg>
         )}
       </button>
-      <button
-        className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse"
-        onClick={onSettingsOpen}
-      >
-        <Icons.Settings />
-      </button>
+      {/* Settings button removed */}
       <button
         className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
           isRightSidebarOpen ? "bg-surface-secondary dark:bg-surface-secondary text-label-primary dark:text-label-inverse" : ""
@@ -180,7 +174,7 @@ export default function TitleBar({
           </div>
         </div>
 
-        {/* 右侧区域（v0.5.14: tab 容器宽度 = rightPanelWidth - 120，actions 固定 120px） */}
+        {/* 右侧区域：tab 容器宽度 = rightPanelWidth - 70，actions 固定 54px */}
         <div
           className={`h-full border-l border-border-primary flex items-center pl-3 pr-0 box-border overflow-hidden shrink-0 ${
             isRightSidebarOpen ? "" : "w-0 border-r-transparent border-l-transparent transition-[width] duration-200"
@@ -188,10 +182,10 @@ export default function TitleBar({
             isRightSidebarDragging ? "" : "transition-[width] duration-200"
           }`}
           data-tauri-drag-region
-          // tab 容器宽度 = rightPanelWidth - 120：
-          // - 120 = actions 容器宽度 (104) + 16px 视觉间隔（不渲染 padding，靠外层 gap 留出）
-          // - tab 内容渲染到 rightPanelWidth - 120，与 RightPanel 内容宽度对齐（RightPanel 无 pr-4）
-          style={isRightSidebarOpen ? { width: `${Math.max(0, rightPanelWidth - 120)}px` } : undefined}
+          // tab 容器宽度 = rightPanelWidth - 70：
+          // - 70 = actions 容器宽度 (54) + 16px 视觉间隔
+          // - tab 内容渲染到 rightPanelWidth - 70，与 RightPanel 内容宽度对齐
+          style={isRightSidebarOpen ? { width: `${Math.max(0, rightPanelWidth - 70)}px` } : undefined}
         >
           {/* Tab 标签容器（占满容器剩余空间） */}
           <div className="flex items-end h-full min-w-0 w-full overflow-x-auto no-scrollbar">
@@ -233,13 +227,12 @@ export default function TitleBar({
           </div>
         </div>
 
-        {/* actions 固定 104px（无 padding），位置始终在最右 */}
-        <div className="flex items-center h-7 shrink-0" style={{ width: "104px" }}>
+        {/* actions 固定 54px（无 padding），位置始终在最右 */}
+        <div className="flex items-center h-7 shrink-0" style={{ width: "54px" }}>
           <RightActions
             isRightSidebarOpen={isRightSidebarOpen}
             isUpdateReady={isUpdateReady}
             isNightMode={isNightMode}
-            onSettingsOpen={onSettingsOpen}
             onToggleNightMode={onToggleNightMode}
             onToggleRightSidebar={onToggleRightSidebar}
             onRestartToUpdate={onRestartToUpdate}

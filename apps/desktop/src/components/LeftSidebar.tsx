@@ -139,7 +139,7 @@ export default function LeftSidebar({
         ))}
         {projectSessions.length > 5 && !showAll && (
           <div
-            className="flex items-center h-7 text-brand-blue dark:text-deepseek-400 font-medium text-[13px] pl-3 cursor-pointer"
+            className="flex items-center h-7 text-label-tertiary font-medium text-[13px] pl-3 cursor-pointer hover:text-label-secondary transition-colors"
             onClick={() => toggleExpandAll(projectName)}
           >
             See all ({projectSessions.length})
@@ -157,8 +157,8 @@ export default function LeftSidebar({
     >
       {/* 新建对话按钮 */}
       <div className="p-4 shrink-0">
-        <button 
-          className="w-full h-9 flex items-center justify-center gap-2 bg-[#ebebeb] hover:bg-[#e0e0e0] dark:bg-surface-secondary hover:bg-surface-hover text-[#333] dark:text-[#d0d0d0] rounded-md text-[13px] font-medium cursor-pointer select-none transition-colors border-0" 
+        <button
+          className="w-full h-9 flex items-center justify-center gap-2 bg-surface-secondary hover:bg-surface-hover text-[#333] dark:text-[#d0d0d0] rounded-md text-[13px] font-medium cursor-pointer select-none transition-colors border-0"
           onClick={onNewConversation}
         >
           <Icons.Plus />
@@ -205,11 +205,7 @@ export default function LeftSidebar({
               <div key={projectPath} className="flex flex-col gap-0.5">
                 <div className="flex items-center justify-between">
                   <div
-                    className={`flex-1 flex items-center gap-1.5 px-3 h-8 text-[13px] rounded-md cursor-pointer select-none transition-colors ${
-                      isActive 
-                        ? "bg-surface-secondary text-[#111] dark:text-white font-medium" 
-                        : "text-label-secondary dark:text-label-secondary hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary"
-                    }`}
+                    className={`flex-1 flex items-center gap-1.5 px-3 h-8 text-[13px] rounded-md cursor-pointer select-none transition-colors text-label-secondary dark:text-label-secondary hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-primary`}
                     onClick={() => {
                       if (isActive) {
                         onToggleProjectCollapse(name);

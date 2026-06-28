@@ -213,7 +213,7 @@ export default function TasksPage({
           <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight m-0">Scheduled Tasks</h2>
           <button
             onClick={() => setShowNewTaskModal(true)}
-            className="px-3 h-8 bg-brand-blue hover:bg-brand-blue-hover text-white rounded-md text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors border-0"
+            className="px-3 h-8 bg-surface-secondary hover:bg-surface-hover text-[#333] dark:text-[#d0d0d0] rounded-md text-xs font-medium flex items-center gap-1 cursor-pointer transition-colors border-0"
           >
             <span className="text-sm font-bold">+</span> New
           </button>
@@ -277,7 +277,7 @@ export default function TasksPage({
                       <button
                         title={t.enabled ? "Disable Task" : "Enable Task"}
                         onClick={() => handleToggle(t)}
-                        className={`bg-transparent border-0 cursor-pointer p-1 rounded-md transition-colors flex items-center justify-center ${t.enabled ? "text-[#34c759]" : "text-[#ff9500]"}`}
+                        className={`bg-surface-secondary hover:bg-surface-hover border-0 cursor-pointer p-1 rounded-md transition-colors flex items-center justify-center ${t.enabled ? "text-[#34c759]" : "text-[#ff9500]"}`}
                       >
                         {t.enabled ? (
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -294,7 +294,7 @@ export default function TasksPage({
                       <button
                         title="Delete"
                         onClick={(e) => handleDelete(e, t)}
-                        className="bg-transparent border-0 cursor-pointer text-[#8e8e93] hover:text-red-500 p-1 rounded-md transition-colors flex items-center justify-center"
+                        className="bg-surface-secondary hover:bg-surface-hover border-0 cursor-pointer text-[#8e8e93] hover:text-red-500 p-1 rounded-md transition-colors flex items-center justify-center"
                       >
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="3 6 5 6 21 6" />
@@ -462,8 +462,8 @@ export default function TasksPage({
             </div>
 
             <div className="px-5 py-4 border-t border-border-primary flex justify-end shrink-0">
-              <button 
-                className="h-8.5 px-4 bg-brand-blue hover:bg-brand-blue-hover text-white border-0 rounded-md text-xs font-semibold cursor-pointer transition-colors" 
+              <button
+                className="h-8.5 px-4 bg-surface-secondary hover:bg-surface-hover text-[#333] dark:text-[#d0d0d0] border-0 rounded-md text-xs font-medium cursor-pointer transition-colors"
                 onClick={handleSubmitTask}
               >
                 Add Scheduled Task

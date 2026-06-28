@@ -88,13 +88,13 @@ export default function SettingsModal({
                   type="button"
                   onClick={onCheckUpdates}
                   disabled={isChecking}
-                  className="h-7 px-2.5 bg-surface-secondary hover:bg-surface-hover border border-zinc-200 dark:border-zinc-800 rounded-md text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer transition-colors flex items-center justify-center"
+                  className="h-7 px-2.5 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs font-medium text-[#333] dark:text-[#d0d0d0] cursor-pointer transition-colors flex items-center justify-center"
                 >
                   {isChecking ? "正在检查..." : "检查更新"}
                 </button>
               </div>
               {updateStatus && (
-                <div className={`text-xs p-2.5 bg-surface-secondary border border-zinc-250 dark:border-zinc-800 rounded-md mt-1 leading-relaxed ${
+                <div className={`text-xs p-2.5 bg-surface-secondary rounded-md mt-1 leading-relaxed ${
                   updateStatus.type === "success"
                     ? "text-[#34c759]"
                     : updateStatus.type === "error"
@@ -112,11 +112,11 @@ export default function SettingsModal({
             清除历史
           </button>
           {savedApiKey && (
-            <button className="h-8.5 px-4 bg-surface-secondary hover:bg-surface-hover border border-zinc-200 dark:border-zinc-800 rounded-md text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer transition-colors flex items-center justify-center" onClick={onClear}>
+            <button className="h-8.5 px-4 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs font-medium text-[#333] dark:text-[#d0d0d0] cursor-pointer transition-colors flex items-center justify-center" onClick={onClear}>
               清除 Key
             </button>
           )}
-          <button className="h-8.5 px-4 bg-brand-blue hover:bg-brand-blue-hover text-white border-0 rounded-md text-xs font-semibold cursor-pointer transition-colors" onClick={onSave}>
+          <button className="h-8.5 px-4 bg-surface-secondary hover:bg-surface-hover text-[#333] dark:text-[#d0d0d0] border-0 rounded-md text-xs font-medium cursor-pointer transition-colors" onClick={onSave}>
             保存设置
           </button>
         </div>

@@ -107,7 +107,7 @@ export default function HistoryPage({
   return (
     <div className="flex-1 bg-white dark:bg-surface-primary overflow-y-auto w-full">
       <div className="max-w-[740px] mx-auto px-6 py-8 flex flex-col gap-6">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">Conversation History</h1>
+        <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight m-0">Conversation History</h2>
 
         {/* Search + Filter */}
         <div className="flex items-center gap-3 w-full">
@@ -123,17 +123,17 @@ export default function HistoryPage({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search conversations..."
-              className="w-full h-9 pl-9 pr-4 bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-700 rounded-full text-[13px] outline-none text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-500 transition-colors focus:border-zinc-400 dark:focus:border-zinc-500"
+              className="w-full h-8 pl-10 pr-4 bg-surface-secondary hover:bg-surface-hover border-0 rounded-md text-xs outline-none text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-600 transition-colors"
             />
           </div>
 
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsFilterDropdownOpen(!isFilterDropdownOpen)}
-              className={`h-9 px-4 border rounded-full text-[13px] font-medium flex items-center gap-2 cursor-pointer transition-colors ${
+              className={`h-8 px-4 border-0 rounded-md text-xs font-medium flex items-center gap-2 cursor-pointer transition-colors ${
                 filterProject
-                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 border-transparent"
-                  : "bg-white dark:bg-surface-secondary text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 hover:bg-surface-hover"
+                  ? "bg-surface-secondary text-brand-blue dark:text-deepseek-400"
+                  : "bg-surface-secondary hover:bg-surface-hover text-[#333] dark:text-[#d0d0d0]"
               }`}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -179,14 +179,14 @@ export default function HistoryPage({
         </div>
 
         {/* Section header */}
-        <div className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 tracking-widest uppercase select-none">
+        <div className="text-[10px] font-bold text-[#8e8e93] tracking-wider uppercase border-b border-border-primary pb-1 select-none">
           All Conversations
         </div>
 
         {/* List */}
         <div className="flex flex-col">
           {filtered.length === 0 ? (
-            <div className="py-12 text-center text-[13px] text-zinc-400 dark:text-zinc-500">
+            <div className="py-8 text-center text-zinc-550 dark:text-zinc-400 text-sm">
               {query.trim() || filterProject ? "No matching conversations" : "No conversation history"}
             </div>
           ) : (
@@ -213,10 +213,10 @@ export default function HistoryPage({
                     />
                   ) : (
                     <>
-                      <div className="text-[14px] font-semibold text-zinc-900 dark:text-label-primary truncate" title={s.title}>
+                      <div className="text-xs font-semibold text-zinc-800 dark:text-label-primary truncate" title={s.title}>
                         {s.title || "(Untitled Conversation)"}
                       </div>
-                      <div className="text-[12px] text-zinc-400 dark:text-zinc-500">
+                      <div className="text-[10px] text-zinc-400 dark:text-zinc-550">
                         {s.projectName || "Outside of Project"}
                       </div>
                     </>
@@ -226,14 +226,14 @@ export default function HistoryPage({
                 <div className="flex items-center gap-2 shrink-0 ml-6" onClick={(e) => e.stopPropagation()}>
                   {editingId !== s.id && (
                     <>
-                      <span className="text-[13px] text-zinc-400 dark:text-zinc-500 group-hover:hidden tabular-nums">
+                      <span className="text-[10px] text-[#8e8e93] group-hover:hidden">
                         {getSessionTimeLabel(s.updatedAt)}
                       </span>
                       <div className="hidden group-hover:flex items-center gap-0.5">
                         <button
                           title="Rename"
                           onClick={() => { setEditingId(s.id); setEditTitle(s.title); }}
-                          className="bg-transparent border-0 cursor-pointer text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 p-1.5 rounded-md transition-colors"
+                          className="bg-surface-secondary hover:bg-surface-hover border-0 cursor-pointer text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 p-1 rounded-md transition-colors"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M12 20h9" />
@@ -243,7 +243,7 @@ export default function HistoryPage({
                         <button
                           title="Delete"
                           onClick={(e) => handleDelete(e, s.id, s.title || "(Untitled)")}
-                          className="bg-transparent border-0 cursor-pointer text-zinc-400 hover:text-red-500 p-1.5 rounded-md transition-colors"
+                          className="bg-surface-secondary hover:bg-surface-hover border-0 cursor-pointer text-zinc-400 hover:text-red-500 p-1 rounded-md transition-colors"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="3 6 5 6 21 6" />
