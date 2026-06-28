@@ -1,11 +1,11 @@
 {
-  "version": "0.6.0",
+  "version": "0.6.1",
   "notes": "## 🚀 v0.5.13 Release Notes\n\n### 新功能\n- feat: 重构布局并提取本地命令与更新逻辑\n- feat: 添加文件链接相对路径解析与 lint 发布前检查\n- 支持文件引用预览和代码面板优化\n- 重构主题系统并优化历史弹窗交互\n- 新增项目设置、Toast 队列、代码复制及多项 UI 改进\n- 迁移至 Tailwind CSS 并集成 streamdown 渲染\n- scheduled tasks with Rust backend scheduler and CRUD\n- conversation history modal with search and delete\n\n### 缺陷修复\n- fix: 移除未使用的 text 变量并更新版本号\n- fix(ci): stash local changes before checkout to updater/latest branch\n- fix(desktop): use tauri::async_runtime::spawn instead of tokio::spawn\n- fix(desktop): lazy-start scheduler to avoid setup-stage panic\n- fix(cli): close out self-healing pipeline loose ends\n\n### 改进与优化\n- 统一 lint 流程，lint 通过后才发布版本\n- 提取 useLocalCommands / useAppUpdates / AppShell 三个模块，App.tsx 瘦身 270+ 行\n- 提取 18 个组件的硬编码颜色到 surface / label / border 语义化变量\n- 提取 MarkdownPanel / FilePanel 子组件，行号绝对定位 + 灰色样式\n- 消除 8+ 处 inline style hack\n- 修复 markdown 链接点击被 Tauri 2 webview 拦截跳首页问题\n- 修复 initDb / checkForUpdates 在 StrictMode 下执行两次\n- 修复 bridge.readFile 错误被静默吞掉（错误时打开错误 tab）",
-  "pub_date": "2026-06-28T10:07:03Z",
+  "pub_date": "2026-06-28T11:37:37Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.6.0/deepseek-code_aarch64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSUEhROWhKSk4xbXZEMnErSTlLR3J2aDd1V3V6WlJ0Z3pYR0RPbmpSZHkxSWZvWDZXVmVqN1pDUVduS2hjTjh6TUtUcHlDcmJGRkJlbzVoZEVSampaMndiRjJPQU05L3dzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNjQxMjIyCWZpbGU6ZGVlcHNlZWstY29kZS5hcHAudGFyLmd6CjNnSCtWTmphMU8yNGtOTTdwMzdlUmlLZCtHVGxmdlRjbXZRMlUrT1pZcC9KQXIxL0Q5YkxablU3UjBNTHpDUVNBNVhUNjF1VGJTeG5WTnlEem5XVER3PT0K"
+      "url": "https://github.com/yudong22/deepseek-code-public/releases/download/v0.6.1/deepseek-code_aarch64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSUEhROWhKSk4xbXNoSTZsQjRIaXJ6bXQvUWd4VExJbHRLV3ZNY29aTllvSlc1WlVSamtIQk5GU2hoZWN3SjFDQjhuY3pham1WS1A0VnZnM1FhTmJGM3VjTDdhRlBaWlFvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgyNjQ2NjU2CWZpbGU6ZGVlcHNlZWstY29kZS5hcHAudGFyLmd6CnU5WFVoMUpiZy9aMG53NjMxU2dZUzMrMFRRM2dYd0dlcEZobGlER1pmVW15VnkzUlA1UlNuclZPTGZzS3pSbmhuNlZ6UW9CMlNNSDdKbHA0cTBmN0F3PT0K"
     }
   }
 }
