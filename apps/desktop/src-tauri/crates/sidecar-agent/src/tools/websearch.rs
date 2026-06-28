@@ -300,18 +300,6 @@ impl WebSearchTool {
         };
 
         let html = fetch_result.map_err(|e| format!("DDG fetch failed: {}", e))?;
-                .map_err(|e| format!("Failed to read response: {}", e))
-        };
-
-        let fetch_result = match tokio::runtime::Handle::try_current() {
-            Ok(handle) => handle.block_on(fut),
-            Err(_) => {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(fut)
-            }
-        };
-
-        let html = fetch_result.map_err(|e| format!("DDG fetch failed: {}", e))?;
 
         // Debug: include first 300 chars of raw HTML in result for troubleshooting
         let debug_html = html.chars().take(300).collect::<String>();
