@@ -561,7 +561,7 @@ export default function ChatInputCard({
             </button>
           ) : (editorRef.current?.textContent?.trim() || hasPendingQuestion) ? (
             <button
-              className="w-7 h-7 flex items-center justify-center bg-brand-blue hover:bg-brand-blue-hover text-white rounded-full cursor-pointer border-0 transition-colors"
+              className="w-7 h-7 flex items-center justify-center bg-label-primary hover:opacity-80 text-label-inverse rounded-full cursor-pointer border-0 transition-all"
               onClick={() => {
                 const el = editorRef.current;
                 if (!el) return;
