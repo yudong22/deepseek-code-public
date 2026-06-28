@@ -233,10 +233,12 @@ impl Tool for WebSearchTool {
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
 
-        if content.is_empty() {
+        // Detect hallucinated/empty results — provider doesn't truly support search
+        if content.trim().is_empty() || content.len() < 20 {
             return ToolResult::error(
-                "web_search unavailable: provider returned empty response. \
-                 This LLM may not have web search enabled."
+                "web_search unavailable: this LLM provider does not support web search. \
+                 Do NOT attempt to generate fake search results. \
+                 Tell the user plainly that web search is not available."
             );
         }
 
