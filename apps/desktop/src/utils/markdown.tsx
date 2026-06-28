@@ -134,7 +134,21 @@ const buildComponents = (onPreviewFile?: PreviewFile, sourceFilePath?: string) =
   a: ({ href, children }: any) => {
     const linkPath = toLinkPath(href);
     if (!linkPath) {
-      return <a href={href} className="text-brand-blue hover:underline">{children}</a>;
+      // External link (http/https): open in system browser
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-brand-blue hover:underline"
+          onClick={(e: React.MouseEvent) => {
+            e.preventDefault();
+            window.open(href, "_blank", "noopener,noreferrer");
+          }}
+        >
+          {children}
+        </a>
+      );
     }
     // file:// 协议链接（用户主动写的引用）展示 file 风格 UI，其他本地文件保持普通链接样式
     const isFileUrl = FILE_URL_PREFIX.test(href || "");
