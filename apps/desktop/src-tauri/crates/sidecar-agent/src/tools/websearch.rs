@@ -239,7 +239,8 @@ impl Tool for WebSearchTool {
 }
 
 impl WebSearchTool {
-    /// Primary: DuckDuckGo Lite — real scraped results, no hallucinations.
+    /// Primary: DuckDuckGo Instant Answer API (api.duckduckgo.com).
+    /// Returns JSON — no HTML parsing, no anti-bot blocking.
     fn do_ddg_search(
         &self,
         query: &str,
@@ -248,129 +249,87 @@ impl WebSearchTool {
         max_results: usize,
     ) -> Result<Vec<serde_json::Value>, String> {
         let encoded: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
-        // Try DDG HTML endpoint first (more stable than lite for scraping)
-        let ddg_url = format!("https://html.duckduckgo.com/html/?q={}&kl=us-en", encoded);
+        let api_url = format!("https://api.duckduckgo.com/?q={}&format=json&no_html=1&skip_disambig=1", encoded);
 
         let fut = async {
             let client = reqwest::Client::builder()
-                .timeout(Duration::from_secs(15))
-                .redirect(reqwest::redirect::Policy::limited(3))
+                .timeout(Duration::from_secs(10))
                 .build()
                 .map_err(|e| format!("Failed to build client: {}", e))?;
 
-            let response = client
-                .get(&ddg_url)
-                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Accept-Encoding", "identity")
-                .header("DNT", "1")
+            let resp: serde_json::Value = client
+                .get(&api_url)
+                .header("User-Agent", "deepseek-code/0.6.0")
                 .send()
                 .await
-                .map_err(|e| format!("HTTP request failed: {}", e))?;
-
-            let status = response.status();
-            let final_url = response.url().to_string();
-            let html = response
-                .text()
+                .map_err(|e| format!("API request failed: {}", e))?
+                .json()
                 .await
-                .map_err(|e| format!("Failed to read response: {}", e))?;
+                .map_err(|e| format!("JSON parse failed: {}", e))?;
 
-            if !status.is_success() {
-                return Err(format!("DDG returned {}", status));
-            }
-
-            // Detect redirect to homepage (anti-bot measure)
-            if html.len() < 500 || html.contains("id=\"search_form\"") && !html.contains("result") {
-                return Err(format!(
-                    "DDG returned homepage instead of results (status={}, url={}, size={}b)",
-                    status, final_url, html.len()
-                ));
-            }
-
-            Ok(html)
+            Ok(resp)
         };
 
-        let fetch_result = match tokio::runtime::Handle::try_current() {
+        let json = match tokio::runtime::Handle::try_current() {
             Ok(handle) => handle.block_on(fut),
             Err(_) => {
                 let rt = tokio::runtime::Runtime::new().unwrap();
                 rt.block_on(fut)
             }
-        };
-
-        let html = fetch_result.map_err(|e| format!("DDG fetch failed: {}", e))?;
-
-        // Debug: include first 300 chars of raw HTML in result for troubleshooting
-        let debug_html = html.chars().take(300).collect::<String>();
-        let debug_info = format!("[DDG raw({}b): {}]", html.len(), debug_html);
-
-        // Parse DDG results — class-agnostic approach.
-        // Extract any <a> tag with an external http(s) URL and non-empty text.
-        // Filter out navigation/internal links by checking the URL structure.
-        let re_link = regex::Regex::new(
-            r#"<a[^>]*href="((?:https?:)?//[^"]+)"[^>]*>([^<]+)</a>"#
-        ).unwrap();
+        }.map_err(|e| format!("DDG API failed: {}", e))?;
 
         let mut results = Vec::new();
         let mut seen = std::collections::HashSet::new();
-        for cap in re_link.captures_iter(&html) {
-            let raw_url = cap.get(1).map(|m| m.as_str()).unwrap_or("");
-            let title = cap.get(2).map(|m| m.as_str()).unwrap_or("").trim().to_string();
 
-            // Skip empty, DDG internal links, navigation
-            if raw_url.is_empty() || title.is_empty() { continue; }
-            if title.len() < 3 { continue; }
-            if raw_url.contains("duckduckgo.com") { continue; }
-
-            let clean_url = if raw_url.starts_with("//") {
-                format!("https:{}", raw_url)
-            } else if raw_url.starts_with("http") {
-                raw_url.to_string()
-            } else {
-                continue;
-            };
-
-            if !seen.insert(clean_url.clone()) { continue; }
-
-            // Resolve uddg= redirect
-            let final_url = if let Ok(parsed) = url::Url::parse(&clean_url) {
-                let mut target = clean_url.clone();
-                for (key, val) in parsed.query_pairs() {
-                    if key == "uddg" { target = val.into_owned(); break; }
+        // Extract from Abstract (best match)
+        if let Some(url) = json.get("AbstractURL").and_then(|v| v.as_str()) {
+            if !url.is_empty() {
+                let title = json.get("AbstractText").and_then(|v| v.as_str()).unwrap_or("");
+                if !title.is_empty() && seen.insert(url.to_string()) {
+                    results.push(serde_json::json!({"title": title, "url": url, "snippet": ""}));
                 }
-                target
-            } else { clean_url };
+            }
+        }
 
-            // Filter by domains
-            if !allowed_domains.is_empty() || !blocked_domains.is_empty() {
-                if let Ok(parsed) = url::Url::parse(&final_url) {
-                    if let Some(host) = parsed.host_str().map(|h| h.to_lowercase()) {
-                        if !allowed_domains.is_empty() {
-                            let allowed = allowed_domains.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
-                            if !allowed { continue; }
-                        }
-                        if !blocked_domains.is_empty() {
-                            let blocked = blocked_domains.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
-                            if blocked { continue; }
+        // Extract from RelatedTopics
+        if let Some(topics) = json.get("RelatedTopics").and_then(|v| v.as_array()) {
+            for topic in topics {
+                if results.len() >= max_results { break; }
+                let url = topic.get("FirstURL").and_then(|v| v.as_str()).unwrap_or("");
+                let title = topic.get("Text").and_then(|v| v.as_str()).unwrap_or("");
+                if url.is_empty() || title.is_empty() { continue; }
+                if !seen.insert(url.to_string()) { continue; }
+
+                // Domain filtering
+                if !allowed_domains.is_empty() || !blocked_domains.is_empty() {
+                    if let Ok(parsed) = url::Url::parse(url) {
+                        if let Some(host) = parsed.host_str().map(|h| h.to_lowercase()) {
+                            if !allowed_domains.is_empty() {
+                                let a = allowed_domains.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
+                                if !a { continue; }
+                            }
+                            if !blocked_domains.is_empty() {
+                                let b = blocked_domains.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
+                                if b { continue; }
+                            }
                         }
                     }
                 }
+
+                results.push(serde_json::json!({"title": title, "url": url, "snippet": ""}));
             }
-
-            let snippet = String::new(); // DDG Lite doesn't show snippets inline
-            results.push(serde_json::json!({
-                "title": title,
-                "url": final_url,
-                "snippet": snippet
-            }));
-
-            if results.len() >= max_results { break; }
         }
 
-        // If no results found, include debug HTML in error
-        if results.is_empty() {
-            return Err(format!("DDG returned no parseable results. {}", debug_info));
+        // Extract from Results (if present)
+        if let Some(items) = json.get("Results").and_then(|v| v.as_array()) {
+            for item in items {
+                if results.len() >= max_results { break; }
+                let url = item.get("FirstURL").and_then(|v| v.as_str()).unwrap_or("");
+                let title = item.get("Text").and_then(|v| v.as_str()).unwrap_or("");
+                if url.is_empty() || title.is_empty() { continue; }
+                if !seen.insert(url.to_string()) { continue; }
+                results.push(serde_json::json!({"title": title, "url": url, "snippet": ""}));
+            }
         }
 
         Ok(results)
