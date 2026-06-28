@@ -258,7 +258,7 @@ impl WebSearchTool {
 
             let response = client
                 .get(&ddg_url)
-                .header("User-Agent", "deepseek-code/0.6.0")
+                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
                 .send()
                 .await
                 .map_err(|e| format!("HTTP request failed: {}", e))?;
@@ -279,27 +279,33 @@ impl WebSearchTool {
 
         let html = fetch_result.map_err(|e| format!("DDG fetch failed: {}", e))?;
 
-        // Parse DDG Lite results
+        // Parse DDG results — class-agnostic approach.
+        // Extract any <a> tag with an external http(s) URL and non-empty text.
+        // Filter out navigation/internal links by checking the URL structure.
         let re_link = regex::Regex::new(
-            r#"<a[^>]*href="([^"]+)"[^>]*class="result-link"[^>]*>([^<]+)</a>"#
+            r#"<a[^>]*href="((?:https?:)?//[^"]+)"[^>]*>([^<]+)</a>"#
         ).unwrap();
 
         let mut results = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         for cap in re_link.captures_iter(&html) {
             let raw_url = cap.get(1).map(|m| m.as_str()).unwrap_or("");
             let title = cap.get(2).map(|m| m.as_str()).unwrap_or("").trim().to_string();
 
+            // Skip empty, DDG internal links, navigation
             if raw_url.is_empty() || title.is_empty() { continue; }
+            if title.len() < 3 { continue; }
+            if raw_url.contains("duckduckgo.com") { continue; }
 
             let clean_url = if raw_url.starts_with("//") {
                 format!("https:{}", raw_url)
-            } else if raw_url.starts_with('/') {
-                continue;
             } else if raw_url.starts_with("http") {
                 raw_url.to_string()
             } else {
                 continue;
             };
+
+            if !seen.insert(clean_url.clone()) { continue; }
 
             // Resolve uddg= redirect
             let final_url = if let Ok(parsed) = url::Url::parse(&clean_url) {
