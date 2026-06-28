@@ -248,24 +248,58 @@ impl WebSearchTool {
         max_results: usize,
     ) -> Result<Vec<serde_json::Value>, String> {
         let encoded: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
-        let ddg_url = format!("https://lite.duckduckgo.com/lite/?q={}", encoded);
+        // Try DDG HTML endpoint first (more stable than lite for scraping)
+        let ddg_url = format!("https://html.duckduckgo.com/html/?q={}&kl=us-en", encoded);
 
         let fut = async {
             let client = reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(15))
+                .redirect(reqwest::redirect::Policy::limited(3))
                 .build()
                 .map_err(|e| format!("Failed to build client: {}", e))?;
 
             let response = client
                 .get(&ddg_url)
-                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Accept-Encoding", "identity")
+                .header("DNT", "1")
                 .send()
                 .await
                 .map_err(|e| format!("HTTP request failed: {}", e))?;
 
-            response
+            let status = response.status();
+            let final_url = response.url().to_string();
+            let html = response
                 .text()
                 .await
+                .map_err(|e| format!("Failed to read response: {}", e))?;
+
+            if !status.is_success() {
+                return Err(format!("DDG returned {}", status));
+            }
+
+            // Detect redirect to homepage (anti-bot measure)
+            if html.len() < 500 || html.contains("id=\"search_form\"") && !html.contains("result") {
+                return Err(format!(
+                    "DDG returned homepage instead of results (status={}, url={}, size={}b)",
+                    status, final_url, html.len()
+                ));
+            }
+
+            Ok(html)
+        };
+
+        let fetch_result = match tokio::runtime::Handle::try_current() {
+            Ok(handle) => handle.block_on(fut),
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(fut)
+            }
+        };
+
+        let html = fetch_result.map_err(|e| format!("DDG fetch failed: {}", e))?;
                 .map_err(|e| format!("Failed to read response: {}", e))
         };
 
