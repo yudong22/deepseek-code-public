@@ -45,6 +45,7 @@ pub enum AgentEvent {
     Error { message: String },
     PolicyConfirm { call_id: String, command: String, pattern: String, severity: String },
     TodoUpdated { todos: serde_json::Value },
+    ToolProgress { call_id: String, output: String },
 }
 
 // ─── Conversion: sidecar-agent protocol -> Tauri AgentEvent ───
@@ -89,6 +90,9 @@ impl From<sidecar_agent::protocol::AgentEvent> for AgentEvent {
             }
             sidecar_agent::protocol::AgentEvent::TodoUpdated { todos } => {
                 AgentEvent::TodoUpdated { todos }
+            }
+            sidecar_agent::protocol::AgentEvent::ToolProgress { call_id, output } => {
+                AgentEvent::ToolProgress { call_id, output }
             }
         }
     }

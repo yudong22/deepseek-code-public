@@ -112,9 +112,10 @@ apps/desktop/src-tauri/
                 ├── file_read.rs   # 只读 — 可并行
                 ├── file_write.rs  # 写入 — 串行（原子写 tmp+rename）
                 ├── file_edit.rs   # 写入 — 串行（replace_all 可选）
-                ├── grep.rs        # 只读 — 可并行（支持 context 参数）
+                ├── grep.rs        # 只读 — 可并行（支持 context、file_types 参数）
                 ├── glob.rs        # 只读 — 可并行（ignore crate）
                 ├── question.rs    # 交互式 Q&A — 串行
+                ├── subagent.rs    # [v0.6.1] 写入 — Claude Code / Antigravity 子代理
                 ├── todowrite.rs   # 写入 — session todo 列表 + TodoUpdated 事件
                 ├── webfetch.rs    # 只读 — HTTP(S) 拉取，SSRF 检查，html2md 转换
                 └── websearch.rs   # 只读 — DuckDuckGo HTML 搜索 + 过滤

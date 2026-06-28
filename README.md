@@ -205,13 +205,16 @@ bun run test    # 306 测试 (99 Rust + 207 TypeScript)
 | 主线 | 版本 | 主题 |
 |---|---|---|
 | **v0.6.0** Coding + 治理同步 | | |
-| Coding 能力 | v0.6.0 | 工具集对齐：TodoWrite / WebFetch / WebSearch / SubAgent |
+| Coding 能力 | v0.6.0 | 工具集对齐：TodoWrite / WebFetch / WebSearch |
 | Coding 能力 | v0.6.0 | Tool 工具调用基建升级（流式、超时、原子写） |
-| Coding 能力 | v0.6.0 | Bash 安全护栏（超时、危险命令确认、沙箱） |
-| 治理与可信 | v0.6.0 | Prompt injection 防护（WebFetch 强依赖） |
-| 治理与可信 | v0.6.0 | 人机协作边界（plan-then-confirm + diff review） |
-| **v0.6.1 / v0.6.2** | | |
-| Coding 能力 | v0.6.1 | 自愈流水线端到端集成测试 |
+| Coding 能力 | v0.6.0 | Bash 安全护栏（超时、危险命令确认） |
+| 治理与可信 | v0.6.0 | Prompt injection 防护（WebFetch SSRF + untrusted primed） |
+| **v0.6.1** 多引擎接入 + 工具完善 | | |
+| Coding 能力 | v0.6.1 | SubAgent 工具 + Claude Code (cc) CLI 接入 |
+| Coding 能力 | v0.6.1 | Antigravity CLI 接入 + 多引擎适配 |
+| Coding 能力 | v0.6.1 | Coding 工具完善：replace_all / file_types / offset+limit |
+| 治理与可信 | v0.6.1 | 前端 TodoUpdated 事件处理 + AG-UI adapter 补齐 |
+| **v0.6.2** 自愈流水线加固 | | |
 | Coding 能力 | v0.6.2 | fastValidate fail-fast、callAgent 失败推进预算、--task-id 校验 |
 | **v0.7.0** 记忆 + 可观测 + 成本 | | |
 | Coding 能力 | v0.7.0 | 上下文压缩 / 消息总结 |
@@ -222,9 +225,11 @@ bun run test    # 306 测试 (99 Rust + 207 TypeScript)
 | **v0.8.0** 输出侧安全 + 多模态 | | |
 | Coding 能力 | v0.8.0 | 多模态（图像输入） |
 | 治理与可信 | v0.8.0 | 代码安全扫描集成（gitleaks / semgrep / cargo audit） |
+| 治理与可信 | v0.8.0 | 人机协作边界（plan-then-confirm + diff review） |
 | **v0.9.0** 多引擎 + IDE 化 | | |
 | Coding 能力 | v0.9.0 | 多引擎横向比较：Claude Code / Cursor CLI / Codex 等二进制接入 |
 | Coding 能力 | v0.9.0 | 全场景 IDE 化：多语言 LSP 接入 |
+| Coding 能力 | v0.9.0 | CLI 自愈流水线端到端集成测试 |
 | **v1.0.0** 团队版 / 企业可用 | | |
 | Coding 能力 | v1.0.0 | Multi-agent 协作（planner / coder / reviewer） |
 | Coding 能力 | v1.0.0 | 多模型协议兼容：OpenCodeGo / 腾讯 / 阿里 / 字节 coding plan |

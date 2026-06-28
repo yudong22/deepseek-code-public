@@ -631,6 +631,28 @@ function MainDashboard() {
             // 危险命令安全确认 —— 弹出确认框并阻塞等待用户回复 yes/no
             const { call_id, command, pattern, severity } = event.payload;
             setPendingPolicyConfirm({ callId: call_id, command, pattern, severity });
+          } else if (event.type === "TodoUpdated") {
+            // TodoWrite 实时状态更新 —— 将 live todos 注入当前 todowrite 工具调用
+            const liveTodos = event.payload?.todos;
+            if (liveTodos && Array.isArray(liveTodos)) {
+              const todoTc = currentToolCalls.find(tc =>
+                tc.name === "todowrite" || tc.name === "TodoWrite"
+              );
+              if (todoTc) {
+                (todoTc as any)._liveTodos = liveTodos;
+                syncSections();
+                setMessages((prev) => {
+                  const idx = prev.findIndex((m) => m.id === assistantMsgId);
+                  if (idx > -1) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls], sections: [...sections] };
+                    return updated;
+                  }
+                  return prev;
+                });
+                saveDraft();
+              }
+            }
           } else if (event.type === "ToolStarted") {
             const callId = event.payload.call_id || "";
             const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId && tc.result === undefined);

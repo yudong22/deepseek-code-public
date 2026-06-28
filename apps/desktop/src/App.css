@@ -2,6 +2,10 @@
 
 @custom-variant dark (&:where(.night-mode, .night-mode *));
 
+html, body {
+  overscroll-behavior: none;
+}
+
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/mermaid/dist/*.js";
 

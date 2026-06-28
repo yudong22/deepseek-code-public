@@ -405,6 +405,26 @@ export class AGUIEventAdapter {
         // AG-UI 没有 TOOL_CALL_ENDED（TOOL_CALL_RESULT 已标识结束）
         break;
 
+      // ── PolicyConfirm (安全确认) ──
+      case "PolicyConfirm":
+        result.push({
+          type: EventType.CUSTOM as typeof EventType.CUSTOM,
+          name: "policy_confirm",
+          value: event.payload,
+          timestamp: Date.now(),
+        });
+        break;
+
+      // ── TodoUpdated (任务列表实时更新) ──
+      case "TodoUpdated":
+        result.push({
+          type: EventType.CUSTOM as typeof EventType.CUSTOM,
+          name: "todo_updated",
+          value: event.payload,
+          timestamp: Date.now(),
+        });
+        break;
+
       // ── Step ──
       case "StepStarted":
         this.stepCounter++;

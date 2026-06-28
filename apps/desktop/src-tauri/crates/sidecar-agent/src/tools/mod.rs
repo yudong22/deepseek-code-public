@@ -133,11 +133,12 @@ pub mod file_write;
 pub mod glob;
 pub mod grep;
 pub mod question;
+pub mod subagent;
 pub mod todowrite;
 pub mod webfetch;
 pub mod websearch;
 
-/// Create the default tool registry with all 10 tools.
+/// Create the default tool registry with all 11 tools.
 /// The question tool answer flow is handled at the agent loop level.
 pub fn default_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
@@ -150,6 +151,7 @@ pub fn default_registry() -> ToolRegistry {
     registry.register(Box::new(question::QuestionTool));
     registry.register(Box::new(todowrite::TodoWriteTool));
     registry.register(Box::new(webfetch::WebFetchTool));
+    registry.register(Box::new(subagent::SubAgentTool));
     // websearch disabled for now: DeepSeek enable_search hallucinates URLs.
     // Re-enable when a provider with true web search (e.g. Brave API) is integrated.
     // registry.register(Box::new(websearch::WebSearchTool));

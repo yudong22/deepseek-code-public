@@ -305,6 +305,13 @@ pub enum AgentEvent {
     TodoUpdated {
         todos: serde_json::Value,
     },
+
+    // ── SubAgent (1 variant) ──
+    #[serde(rename = "ToolProgress")]
+    ToolProgress {
+        call_id: String,
+        output: String,
+    },
 }
 
 impl serde::Serialize for AgentEvent {
@@ -448,6 +455,15 @@ impl serde::Serialize for AgentEvent {
             AgentEvent::TodoUpdated { todos } => {
                 map.serialize_entry("type", "TodoUpdated")?;
                 map.serialize_entry("payload", todos)?;
+            }
+
+            // ── ToolProgress ──
+            AgentEvent::ToolProgress { call_id, output } => {
+                map.serialize_entry("type", "ToolProgress")?;
+                map.serialize_entry("payload", &serde_json::json!({
+                    "call_id": call_id,
+                    "output": output,
+                }))?;
             }
         }
 

@@ -27,6 +27,10 @@ impl Tool for GrepTool {
                 "context": {
                     "type": "integer",
                     "description": "Number of context lines to display before and after each match (default 0)"
+                },
+                "file_types": {
+                    "type": "string",
+                    "description": "Comma-separated file extensions to limit search to (e.g. 'rs,toml,md')"
                 }
             },
             "required": ["pattern"]
@@ -43,10 +47,18 @@ impl Tool for GrepTool {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         let context = input.get("context").and_then(|v| v.as_u64()).unwrap_or(0);
+        let file_types = input.get("file_types").and_then(|v| v.as_str()).unwrap_or("");
 
         if pattern.is_empty() {
             return ToolResult::error("No search pattern provided");
         }
+
+        // Build file type filters
+        let extensions: Vec<&str> = file_types
+            .split(',')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
 
         // Build command arguments
         let mut rg_args = vec![
@@ -58,6 +70,11 @@ impl Tool for GrepTool {
             rg_args.push("-C".to_string());
             rg_args.push(context.to_string());
         }
+        // Add --include globs for file type filtering (rg)
+        for ext in &extensions {
+            rg_args.push("--include".to_string());
+            rg_args.push(format!("*.{}", ext));
+        }
         rg_args.push(pattern.to_string());
 
         let mut grep_args = vec![
@@ -67,6 +84,11 @@ impl Tool for GrepTool {
         if context > 0 {
             grep_args.push("-C".to_string());
             grep_args.push(context.to_string());
+        }
+        // Add --include patterns for file type filtering (grep)
+        for ext in &extensions {
+            grep_args.push("--include".to_string());
+            grep_args.push(format!("*.{}", ext));
         }
         grep_args.push(pattern.to_string());
 
@@ -185,6 +207,56 @@ mod tests {
 
         let result = tool.execute(serde_json::json!({"pattern": ""}), &ctx);
         assert!(matches!(result, ToolResult::Error { .. }));
+    }
+
+    #[test]
+    fn grep_with_file_types() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("main.rs"),
+            "fn main() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("lib.rs"),
+            "pub fn lib() {}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("README.md"),
+            "# Project\n",
+        )
+        .unwrap();
+
+        let tool = GrepTool;
+        let ctx = ToolContext {
+            workspace_path: tmp.path().to_path_buf(),
+            session_id: "test".to_string(),
+            call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
+        };
+
+        let result = tool.execute(
+            serde_json::json!({
+                "pattern": "fn",
+                "file_types": "rs"
+            }),
+            &ctx,
+        );
+
+        match result {
+            ToolResult::Success { output } => {
+                let matches = output["matches"].as_array().unwrap();
+                // Should only match .rs files, not .md
+                let all_rust = matches.iter().all(|m| {
+                    let file = m["file"].as_str().unwrap_or("");
+                    file.ends_with(".rs")
+                });
+                assert!(all_rust, "file_types filter should limit to .rs files");
+            }
+            _ => {}
+        }
     }
 
     #[test]

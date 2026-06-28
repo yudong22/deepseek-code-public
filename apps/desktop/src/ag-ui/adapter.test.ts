@@ -295,6 +295,53 @@ describe("AGUIEventAdapter - Full lifecycle integration", () => {
   });
 });
 
+describe("AGUIEventAdapter - PolicyConfirm and TodoUpdated", () => {
+  test("PolicyConfirm maps to CUSTOM policy_confirm event", () => {
+    const adapter = new AGUIEventAdapter();
+    const payload = { call_id: "c1", command: "rm -rf /", pattern: "rm", severity: "high" };
+    const events = adapter.process(makeEvent("PolicyConfirm", payload));
+
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    const custom = events.find(e => e.type === EventType.CUSTOM && e.name === "policy_confirm");
+    expect(custom).toBeTruthy();
+    expect((custom as any).value).toEqual(payload);
+    expect((custom as any).value.command).toBe("rm -rf /");
+    expect((custom as any).value.severity).toBe("high");
+  });
+
+  test("TodoUpdated maps to CUSTOM todo_updated event", () => {
+    const adapter = new AGUIEventAdapter();
+    const todos = [
+      { text: "Fix bug", status: "in_progress" },
+      { text: "Add test", status: "pending" },
+    ];
+    const events = adapter.process(makeEvent("TodoUpdated", { todos }));
+
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    const custom = events.find(e => e.type === EventType.CUSTOM && e.name === "todo_updated");
+    expect(custom).toBeTruthy();
+    expect((custom as any).value.todos).toHaveLength(2);
+    expect((custom as any).value.todos[0].text).toBe("Fix bug");
+    expect((custom as any).value.todos[0].status).toBe("in_progress");
+  });
+
+  test("TodoUpdated in lifecycle does not break ordering", () => {
+    const adapter = new AGUIEventAdapter();
+    const events: any[] = [];
+
+    events.push(...adapter.process(makeEvent("TextStarted")));
+    events.push(...adapter.process(makeEvent("TodoUpdated", { todos: [{ text: "Task 1", status: "pending" }] })));
+    events.push(...adapter.process(makeEvent("Text", "ok")));
+    events.push(...adapter.process(makeEvent("TextEnded")));
+
+    const custom = events.find(e => e.type === EventType.CUSTOM && e.name === "todo_updated");
+    expect(custom).toBeTruthy();
+    // Text events should still be present
+    const textStart = events.find(e => e.type === EventType.TEXT_MESSAGE_START);
+    expect(textStart).toBeTruthy();
+  });
+});
+
 describe("AGUIEventAdapter - Reset", () => {
   test("reset() clears state and generates new IDs", () => {
     const adapter = new AGUIEventAdapter();

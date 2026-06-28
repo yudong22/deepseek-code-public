@@ -37,7 +37,8 @@ export default function TodoListCard({ tc, onCancel }: TodoListCardProps) {
   const isDone = tc.result !== undefined;
   const isExecuting = tc.executing && !isDone;
   const elapsed = useElapsed(isDone, !!tc.executing);
-  const items = parseTodoItems(tc);
+  const liveTodos = (tc as any)._liveTodos as TodoItem[] | undefined;
+  const items = liveTodos && liveTodos.length > 0 ? liveTodos : parseTodoItems(tc);
 
   const doneCount = items.filter((i) => i.status === "completed").length;
   const totalCount = items.length;
@@ -91,7 +92,7 @@ export default function TodoListCard({ tc, onCancel }: TodoListCardProps) {
             item.status === "completed" ? "text-zinc-400 dark:text-zinc-500 line-through" : "text-zinc-800 dark:text-label-primary"
           }`}
         >
-          <span className={`text-sm shrink-0 mt-0.5 ${statusColorClass[item.status] || "text-zinc-400"}`}>
+          <span className={`text-sm shrink-0 mt-0.5 transition-colors duration-300 ${statusColorClass[item.status] || "text-zinc-400"}`}>
             {statusIcon[item.status] || "○"}
           </span>
           <span className="whitespace-pre-wrap break-all">
