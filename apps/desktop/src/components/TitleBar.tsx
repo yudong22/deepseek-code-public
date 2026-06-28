@@ -2,6 +2,67 @@ import React from "react";
 import { Session } from "@/bridge";
 import * as Icons from "@/components/Icons";
 
+/** 右侧操作按钮（设置、夜间模式、更新、切换 RightPanel）—— 在 right panel 开/关时位置和显示一致 */
+function RightActions({
+  isRightSidebarOpen,
+  isUpdateReady,
+  isNightMode,
+  onSettingsOpen,
+  onToggleNightMode,
+  onToggleRightSidebar,
+  onRestartToUpdate,
+}: Pick<TitleBarProps,
+  "isRightSidebarOpen" | "isUpdateReady" | "isNightMode" |
+  "onSettingsOpen" | "onToggleNightMode" | "onToggleRightSidebar" | "onRestartToUpdate"
+>) {
+  return (
+    <div className="flex items-center gap-0.5 shrink-0">
+      {isUpdateReady && (
+        <button
+          className="inline-flex items-center justify-center bg-brand-blue hover:bg-brand-blue-hover text-white border-0 rounded-full px-4 text-[11.5px] font-semibold cursor-pointer h-6 whitespace-nowrap transition-all duration-200 hover:-translate-y-[0.5px] active:translate-y-[0.5px] mr-1.5"
+          onClick={onRestartToUpdate}
+        >
+          Restart to Update →
+        </button>
+      )}
+      <button
+        className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
+          isNightMode ? "text-brand-blue" : ""
+        }`}
+        onClick={onToggleNightMode}
+        title={isNightMode ? "切换为日间模式" : "切换为夜间模式"}
+      >
+        {isNightMode ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        )}
+      </button>
+      <button
+        className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse"
+        onClick={onSettingsOpen}
+      >
+        <Icons.Settings />
+      </button>
+      <button
+        className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
+          isRightSidebarOpen ? "bg-surface-secondary dark:bg-surface-secondary text-label-primary dark:text-label-inverse" : ""
+        }`}
+        onClick={onToggleRightSidebar}
+      >
+        <Icons.RightSidebarToggle />
+      </button>
+    </div>
+  );
+}
+
 interface Tab {
   id: string;
   title: string;
@@ -14,7 +75,6 @@ interface TitleBarProps {
   isLeftSidebarOpen: boolean;
   isRightSidebarOpen: boolean;
   activeSession: Session | undefined;
-  hasActiveSession: boolean;
   planMode?: boolean;
   isHistoryPage?: boolean;
   isTasksPage?: boolean;
@@ -29,6 +89,9 @@ interface TitleBarProps {
   isNightMode: boolean;
   onToggleNightMode: () => void;
   rightPanelWidth: number;
+  leftSidebarWidth: number;
+  isLeftSidebarDragging?: boolean;
+  isRightSidebarDragging?: boolean;
   isUpdateReady?: boolean;
   onRestartToUpdate?: () => void;
 }
@@ -37,7 +100,6 @@ export default function TitleBar({
   isLeftSidebarOpen,
   isRightSidebarOpen,
   activeSession,
-  hasActiveSession,
   planMode,
   isHistoryPage,
   isTasksPage,
@@ -52,17 +114,23 @@ export default function TitleBar({
   isNightMode,
   onToggleNightMode,
   rightPanelWidth,
+  leftSidebarWidth,
+  isLeftSidebarDragging,
+  isRightSidebarDragging,
   isUpdateReady,
   onRestartToUpdate,
 }: TitleBarProps) {
   return (
     <div className="flex h-[38px] bg-transparent border-b border-border-primary select-none shrink-0 z-[1000]" data-tauri-drag-region>
-      {/* 左侧控制区 */}
-      <div 
-        className={`w-[260px] bg-surface-active dark:bg-surface-primary border-r border-border-primary h-full shrink-0 transition-[border-right-color] duration-200 overflow-hidden ${
+      {/* 左侧控制区（镜像 LeftSidebar 宽度） */}
+      <div
+        className={`bg-surface-active dark:bg-surface-primary border-r border-border-primary h-full shrink-0 transition-[border-right-color] duration-200 overflow-hidden ${
           isLeftSidebarOpen ? "" : "border-r-transparent"
-        }`} 
+        } ${
+          isLeftSidebarDragging ? "" : "transition-[width]"
+        }`}
         data-tauri-drag-region
+        style={isLeftSidebarOpen ? { width: `${leftSidebarWidth}px` } : undefined}
       >
         <div className="flex items-start gap-1.5 h-full pl-[80px] pt-[2px]" data-tauri-drag-region>
           <button 
@@ -112,184 +180,71 @@ export default function TitleBar({
           </div>
         </div>
 
-        {/* 右侧面板标题栏（在右侧边栏打开时可见） */}
-        {hasActiveSession && activeSession && isRightSidebarOpen && (
-          <div 
-            className="h-full border-l border-border-primary flex items-center justify-between pl-3 box-border" 
-            data-tauri-drag-region 
-            style={{ width: rightPanelWidth, minWidth: rightPanelWidth }}
-          >
-            {/* Tab 标签容器 */}
-            <div className="flex items-end h-full min-w-0 overflow-x-auto no-scrollbar">
-              {tabs.map((tab, index) => {
-                const isActive = activeTabId === tab.id;
+        {/* 右侧区域（v0.5.14: tab 容器宽度 = rightPanelWidth - 120，actions 固定 120px） */}
+        <div
+          className={`h-full border-l border-border-primary flex items-center pl-3 pr-0 box-border overflow-hidden shrink-0 ${
+            isRightSidebarOpen ? "" : "w-0 border-r-transparent border-l-transparent transition-[width] duration-200"
+          } ${
+            isRightSidebarDragging ? "" : "transition-[width] duration-200"
+          }`}
+          data-tauri-drag-region
+          // tab 容器宽度 = rightPanelWidth - 120：
+          // - 120 = actions 容器宽度 (104) + 16px 视觉间隔（不渲染 padding，靠外层 gap 留出）
+          // - tab 内容渲染到 rightPanelWidth - 120，与 RightPanel 内容宽度对齐（RightPanel 无 pr-4）
+          style={isRightSidebarOpen ? { width: `${Math.max(0, rightPanelWidth - 120)}px` } : undefined}
+        >
+          {/* Tab 标签容器（占满容器剩余空间） */}
+          <div className="flex items-end h-full min-w-0 w-full overflow-x-auto no-scrollbar">
+            {tabs.map((tab) => {
+              const isActive = activeTabId === tab.id;
 
-                let tabIcon = null;
-                if (tab.id === "overview") {
-                  tabIcon = <Icons.ListIcon />;
-                } else if (tab.title === "Walkthrough") {
-                  tabIcon = <Icons.BookIcon />;
-                } else if (tab.title.endsWith(".rs")) {
-                  tabIcon = <span className="text-[10px] font-bold text-orange-500 mr-1">R</span>;
-                } else {
-                  tabIcon = <Icons.FileCode />;
-                }
+              let tabIcon = null;
+              if (tab.id === "overview") {
+                tabIcon = <Icons.ListIcon />;
+              } else if (tab.title === "Walkthrough") {
+                tabIcon = <Icons.BookIcon />;
+              } else if (tab.title.endsWith(".rs")) {
+                tabIcon = <span className="text-[10px] font-bold text-orange-500 mr-1">R</span>;
+              } else {
+                tabIcon = <Icons.FileCode />;
+              }
 
-                return (
-                  <React.Fragment key={tab.id}>
-                    {index > 0 && !isActive && activeTabId !== tabs[index - 1].id && (
-                      <div className="w-[1px] h-3 bg-border-primary self-center shrink-0" />
-                    )}
-                    <div
-                      className={`flex items-center gap-1.5 px-3.5 h-7 text-xs border-r border-border-primary border-t-2 border-t-transparent cursor-pointer bg-surface-active dark:bg-surface-primary shrink-0 hover:bg-surface-active dark:hover:bg-[#252528] hover:text-label-primary dark:hover:text-label-inverse ${
-                        isActive
-                          ? "bg-surface-primary text-label-primary dark:text-label-inverse border-t-brand-blue font-medium"
-                          : "text-label-secondary"
-                      }`}
-                      onClick={() => onTabClick(tab.id)}
-                    >
-                      {tabIcon}
-                      <span>{tab.title}</span>
-                      {tab.id !== "overview" && (
-                        <span
-                          onClick={(e) => onTabClose(tab.id, e)}
-                          className="ml-1 p-0.5 text-[9px] text-label-tertiary hover:text-red-500 hover:bg-surface-hover rounded-full flex items-center justify-center w-3 h-3"
-                        >
-                          ✕
-                        </span>
-                      )}
-                    </div>
-                  </React.Fragment>
-                );
-              })}
-            </div>
-
-            {/* 操作按钮 */}
-            <div className="flex items-center gap-0.5 shrink-0 pl-1.5">
-              {isUpdateReady && (
-                <button 
-                  className="inline-flex items-center justify-center bg-brand-blue hover:bg-brand-blue-hover text-white border-0 rounded-full px-4 text-[11.5px] font-semibold cursor-pointer h-6 whitespace-nowrap transition-all duration-200 hover:-translate-y-[0.5px] active:translate-y-[0.5px] mr-1.5" 
-                  onClick={onRestartToUpdate}
+              return (
+                <div
+                  key={tab.id}
+                  className={`flex items-center gap-1.5 px-3.5 h-7 text-xs border-r border-border-primary border-t-2 border-t-transparent cursor-pointer bg-surface-active dark:bg-surface-primary shrink-0 hover:bg-surface-active dark:hover:bg-[#252528] hover:text-label-primary dark:hover:text-label-inverse ${
+                    isActive
+                      ? "bg-surface-primary text-label-primary dark:text-label-inverse border-t-brand-blue font-medium"
+                      : "text-label-secondary"
+                  }`}
+                  onClick={() => onTabClick(tab.id)}
+                  onContextMenu={(e) => {
+                    if (tab.id !== "overview") {
+                      e.preventDefault();
+                      onTabClose(tab.id, e as unknown as React.MouseEvent);
+                    }
+                  }}
                 >
-                  Restart to Update →
-                </button>
-              )}
-              <button
-                className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
-                  isNightMode ? "text-brand-blue" : ""
-                }`}
-                onClick={onToggleNightMode}
-                title={isNightMode ? "切换为日间模式" : "切换为夜间模式"}
-              >
-                {isNightMode ? (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                    <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                  </svg>
-                ) : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                  </svg>
-                )}
-              </button>
-              <button 
-                className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
-                onClick={onSettingsOpen}
-              >
-                <Icons.Settings />
-              </button>
-              <button 
-                className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
-                  isRightSidebarOpen ? "bg-surface-secondary dark:bg-surface-secondary text-label-primary dark:text-label-inverse" : ""
-                }`} 
-                onClick={() => onToggleRightSidebar()}
-              >
-                <Icons.RightSidebarToggle />
-              </button>
-            </div>
+                  {tabIcon}
+                  <span className="truncate max-w-[140px]">{tab.title}</span>
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
 
-        {/* 右侧边栏关闭时的切换按钮 */}
-        {hasActiveSession && activeSession && !isRightSidebarOpen && (
-          <div className="flex items-center gap-2 h-7 pr-4">
-            {isUpdateReady && (
-              <button 
-                className="inline-flex items-center justify-center bg-brand-blue hover:bg-brand-blue-hover text-white border-0 rounded-full px-4 text-[11.5px] font-semibold cursor-pointer h-6 whitespace-nowrap transition-all duration-200 hover:-translate-y-[0.5px] active:translate-y-[0.5px]" 
-                onClick={onRestartToUpdate}
-              >
-                Restart to Update →
-              </button>
-            )}
-            <button
-              className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
-                isNightMode ? "text-brand-blue" : ""
-              }`}
-              onClick={onToggleNightMode}
-              title={isNightMode ? "切换为日间模式" : "切换为夜间模式"}
-            >
-              {isNightMode ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-              )}
-            </button>
-            <button 
-              className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
-              onClick={onToggleRightSidebar}
-            >
-              <Icons.RightSidebarToggle />
-            </button>
-          </div>
-        )}
-
-        {!hasActiveSession && (
-          <div className="flex items-center gap-2 h-7 ml-auto pr-4">
-            {isUpdateReady && (
-              <button 
-                className="inline-flex items-center justify-center bg-brand-blue hover:bg-brand-blue-hover text-white border-0 rounded-full px-4 text-[11.5px] font-semibold cursor-pointer h-6 whitespace-nowrap transition-all duration-200 hover:-translate-y-[0.5px] active:translate-y-[0.5px]" 
-                onClick={onRestartToUpdate}
-              >
-                Restart to Update →
-              </button>
-            )}
-            <button
-              className={`bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse ${
-                isNightMode ? "text-brand-blue" : ""
-              }`}
-              onClick={onToggleNightMode}
-              title={isNightMode ? "切换为日间模式" : "切换为夜间模式"}
-            >
-              {isNightMode ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-              )}
-            </button>
-            <button 
-              className="bg-transparent border-0 cursor-pointer text-label-secondary flex items-center justify-center p-1.5 rounded-sm text-xs font-medium gap-1.5 h-7 hover:bg-surface-secondary dark:hover:bg-surface-secondary hover:text-label-primary dark:hover:text-label-inverse" 
-              onClick={onSettingsOpen}
-            >
-              <Icons.Settings />
-            </button>
-          </div>
-        )}
+        {/* actions 固定 104px（无 padding），位置始终在最右 */}
+        <div className="flex items-center h-7 shrink-0" style={{ width: "104px" }}>
+          <RightActions
+            isRightSidebarOpen={isRightSidebarOpen}
+            isUpdateReady={isUpdateReady}
+            isNightMode={isNightMode}
+            onSettingsOpen={onSettingsOpen}
+            onToggleNightMode={onToggleNightMode}
+            onToggleRightSidebar={onToggleRightSidebar}
+            onRestartToUpdate={onRestartToUpdate}
+          />
+        </div>
       </div>
     </div>
   );

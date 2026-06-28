@@ -56,8 +56,13 @@ function MainDashboard() {
   const [projectSettingsTarget, setProjectSettingsTarget] = useState<string | null>(null);
   const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
 
-  // 右侧面板宽度（可拖动调整）
-  const [rightPanelWidth, setRightPanelWidth] = useState(320);
+  // 左侧/右侧面板默认宽度（v0.5.14：固定默认值）
+  const [rightPanelWidth, setRightPanelWidth] = useState(600);
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(260);
+  /** LeftSidebar 拖动状态（用于 TitleBar 镜像时去掉 width transition） */
+  const [isLeftSidebarDragging, setIsLeftSidebarDragging] = useState(false);
+  /** RightPanel 拖动状态（用于 TitleBar 标签栏镜像时去掉 width transition） */
+  const [isRightSidebarDragging, setIsRightSidebarDragging] = useState(false);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [planMode, setPlanMode] = useState(false);
@@ -913,7 +918,6 @@ function MainDashboard() {
         isLeftSidebarOpen={isLeftSidebarOpen}
         isRightSidebarOpen={isRightSidebarOpen}
         activeSession={activeSession}
-        hasActiveSession={!!id && !!activeSession}
         planMode={planMode}
         isHistoryPage={isHistoryPage}
         isTasksPage={isTasksPage}
@@ -928,6 +932,9 @@ function MainDashboard() {
         isNightMode={isNightMode}
         onToggleNightMode={() => { const nm = !isNightMode; setIsNightMode(nm); bridge.saveSetting("night_mode", nm ? "1" : "0"); }}
         rightPanelWidth={rightPanelWidth}
+        leftSidebarWidth={leftSidebarWidth}
+        isLeftSidebarDragging={isLeftSidebarDragging}
+        isRightSidebarDragging={isRightSidebarDragging}
         isUpdateReady={isUpdateReady}
         onRestartToUpdate={handleRestartToUpdate}
       />
@@ -935,6 +942,9 @@ function MainDashboard() {
       <div className="flex flex-1 h-[calc(100vh-38px)] overflow-hidden items-stretch relative">
         <LeftSidebar
           isOpen={isLeftSidebarOpen}
+          width={leftSidebarWidth}
+          onWidthChange={setLeftSidebarWidth}
+          onDraggingChange={setIsLeftSidebarDragging}
           sessions={sessions}
           activeSessionId={id}
           onNewConversation={() => navigate("/")}
@@ -1052,6 +1062,7 @@ function MainDashboard() {
           onWidthChange={setRightPanelWidth}
           isNightMode={isNightMode}
           onPreviewFile={readAndPreviewFile}
+          onIsResizingChange={setIsRightSidebarDragging}
         />
       </div>
     </AppShell>

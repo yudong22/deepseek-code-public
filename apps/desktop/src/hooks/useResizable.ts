@@ -15,6 +15,8 @@ export interface UseResizableOptions {
   anchor: ResizeAnchor;
   /** 拖动结束（mouseup）时回调，传出最终宽度。如果提供，hook 不会自己 setState，而是回调给调用方做受控更新。 */
   onCommit?: (finalWidth: number) => void;
+  /** 拖动开始/结束时回调（用于外部 UI 反馈，如 TitleBar 去掉 width transition） */
+  onDraggingChange?: (dragging: boolean) => void;
 }
 
 export interface UseResizableResult {
@@ -41,7 +43,7 @@ export interface UseResizableResult {
  * 2. **元素选择 bug** — handleMouseDown 调 preventDefault()，并设 body.userSelect = "none"
  * 3. **layout 抖动** — 容器默认不挂 transition className（拖动期），
  *    widthStyle 提供的 style 在挂载/卸载时才有动画（用 CSS 控制）
- * 4. **rAF 节流** — mousemove 用 requestAnimationFrame 限流到 60fps
+ * 4. **rAF 节流** — mousemove 用 requestAnimationFrame 限流到 60fps（每帧最多一次 setState）
  *
  * follower 机制：拖动时如果传了 followerRef，它的 width 也会同步更新（避免 TitleBar 标签栏宽度滞后）
  */
@@ -61,16 +63,6 @@ export function useResizable(opts: UseResizableOptions): UseResizableResult {
 
   const clamp = useCallback((w: number) => Math.max(min, Math.min(max, w)), [min, max]);
 
-  const applyWidth = useCallback(
-    (newWidth: number) => {
-      const el = containerRef.current;
-      if (el) el.style.width = `${newWidth}px`;
-      const follower = followerRef.current;
-      if (follower) follower.style.width = `${newWidth}px`;
-    },
-    [],
-  );
-
   const onResizeStart = useCallback(
     (e: React.MouseEvent) => {
       // 阻止文本选择（核心：修复拖动时选中页面元素的 bug）
@@ -89,20 +81,26 @@ export function useResizable(opts: UseResizableOptions): UseResizableResult {
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
       setIsDragging(true);
+      opts.onDraggingChange?.(true);
 
+      // 拖动期间用 setState（React 自然 re-render），rAF 节流到每帧最多一次
       const onMove = (ev: MouseEvent) => {
         const ds = dragState.current;
         if (!ds) return;
         const delta = anchor === "right" ? ds.startX - ev.clientX : ev.clientX - ds.startX;
         const newW = clamp(ds.startWidth + delta);
         ds.pendingWidth = newW;
-        // rAF 节流：每帧最多应用一次
         if (ds.rafId === null) {
           ds.rafId = requestAnimationFrame(() => {
             const cur = dragState.current;
             if (!cur) return;
             if (cur.pendingWidth !== null) {
-              applyWidth(cur.pendingWidth);
+              // 触发 React re-render（受控时通过 onCommit 走外部 state；非受控走内部 setState）
+              if (opts.onCommit) {
+                opts.onCommit(cur.pendingWidth);
+              } else {
+                setWidth(cur.pendingWidth);
+              }
             }
             cur.rafId = null;
           });
@@ -116,31 +114,32 @@ export function useResizable(opts: UseResizableOptions): UseResizableResult {
           cancelAnimationFrame(ds.rafId);
           ds.rafId = null;
         }
-        // 计算最终宽度（拖动期间是 DOM 直改，state 可能没变）
-        const finalWidth = clamp(ds.pendingWidth ?? ds.startWidth);
-        applyWidth(finalWidth);
+        // 关键：mouseup 时如果还有 pendingWidth 没应用，立刻同步应用一次
+        // —— 否则 rAF 被取消，最后一帧的宽度丢失
+        if (ds.pendingWidth !== null) {
+          if (opts.onCommit) {
+            opts.onCommit(ds.pendingWidth);
+          } else {
+            setWidth(ds.pendingWidth);
+          }
+        }
         setIsDragging(false);
+        opts.onDraggingChange?.(false);
         dragState.current = null;
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
-        // 受控模式：回调给外部；非受控：内部 setState
-        if (opts.onCommit) {
-          opts.onCommit(finalWidth);
-        } else {
-          setWidth(finalWidth);
-        }
       };
 
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [anchor, clamp, applyWidth],
+    [anchor, clamp],
   );
 
-  // widthStyle 只在 width state 变化时更新（拖动期间 width 不变，style 不更新）
+  // widthStyle 跟随 width state 同步更新（拖动期间每帧 setState，React 重新渲染 width）
   const widthStyle: React.CSSProperties = { width: `${width}px` };
 
   const setFollowerRef = useCallback((el: HTMLElement | null) => {

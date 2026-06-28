@@ -1,7 +1,20 @@
 import React from "react";
 import { Streamdown, CodeBlockCopyButton, CodeBlockDownloadButton } from "streamdown";
-import Mermaid from "@/components/Mermaid";
+import { code as shikiCodePlugin, type ThemeInput } from "@streamdown/code";
+import { mermaid as mermaidPlugin } from "@streamdown/mermaid";
 import { FileCode } from "@/components/Icons";
+
+/** v0.5.14 修复代码高亮 + Mermaid 渲染
+ *  - 之前没传 plugins.code / plugins.mermaid，Streamdown 退化到 raw fallback（无高亮/Mermaid）
+ *  - 现在传入 @streamdown/code + @streamdown/mermaid 官方插件，所有支持的语言都正常高亮 + Mermaid 自动渲染 */
+const streamdownPlugins = {
+  code: shikiCodePlugin,
+  mermaid: mermaidPlugin,
+};
+const shikiConfig = {
+  shikiTheme: ["github-light", "github-dark"] as [ThemeInput, ThemeInput],
+  plugins: streamdownPlugins,
+};
 
 /** 点击 markdown 中本地文件链接时调用，转交给右侧面板预览。
  *  - linkPath: 链接的目标相对路径（相对当前文件，可能含 ../）
@@ -146,8 +159,7 @@ const buildComponents = (onPreviewFile?: PreviewFile, sourceFilePath?: string) =
   code: ({ className, children }: any) => {
     const match = /language-(\w+)/.exec(className || "");
     const lang = match ? match[1] : "";
-    if (lang === "mermaid") return <Mermaid chart={String(children).trim()} />;
-    // block code：返回 undefined 让 streamdown 走内置 shiki 渲染
+    // block code（含 mermaid）：返回 undefined 让 streamdown 走官方插件（shiki / mermaid）渲染
     if (lang || String(children).includes("\n")) return undefined;
     // inline code：自定义样式
     return (
@@ -215,7 +227,8 @@ export function renderMarkdown(
         isAnimating={isAnimating}
         caret="block"
         components={getCachedComponents(onPreviewFile, sourceFilePath)}
-        shikiTheme={["github-light", "github-dark"]}
+        shikiTheme={shikiConfig.shikiTheme}
+        plugins={shikiConfig.plugins}
       >
         {text}
       </Streamdown>
@@ -240,7 +253,7 @@ export function renderCodeBlock(content: string, language: string) {
     fence = "`".repeat(Math.max(3, maxLen + 1));
   }
   return (
-    <Streamdown mode="static" shikiTheme={["github-light", "github-dark"]} isAnimating={false}>
+    <Streamdown mode="static" shikiTheme={shikiConfig.shikiTheme} plugins={shikiConfig.plugins} isAnimating={false}>
       {`${fence}${language}\n${content}\n${fence}`}
     </Streamdown>
   );

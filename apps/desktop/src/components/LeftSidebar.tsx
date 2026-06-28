@@ -5,10 +5,13 @@ import { useResizable } from "@/hooks/useResizable";
 
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 400;
-const DEFAULT_WIDTH = 260;
 
 interface LeftSidebarProps {
   isOpen: boolean;
+  width: number;
+  onWidthChange: (w: number) => void;
+  /** 拖动状态变化回调（用于 TitleBar 镜像时去掉 width transition） */
+  onDraggingChange?: (dragging: boolean) => void;
   sessions: Session[];
   activeSessionId: string | undefined;
   onNewConversation: () => void;
@@ -47,6 +50,9 @@ function getProjectNameFromPath(path: string): string {
 
 export default function LeftSidebar({
   isOpen,
+  width,
+  onWidthChange,
+  onDraggingChange,
   sessions,
   activeSessionId,
   onNewConversation,
@@ -65,12 +71,14 @@ export default function LeftSidebar({
 }: LeftSidebarProps) {
   const [expandedProjectsAll, setExpandedProjectsAll] = useState<Record<string, boolean>>({});
 
-  // --- 可拖拽调整宽度 (v0.5.14 改用 useResizable hook) ---
+  // --- 可拖拽调整宽度 (v0.5.14 改用 useResizable hook，受控模式) ---
   const resizable = useResizable({
-    initial: DEFAULT_WIDTH,
+    initial: width,
     min: MIN_WIDTH,
     max: MAX_WIDTH,
     anchor: "left", // 容器靠左，handle 在右，drag right = wider
+    onCommit: onWidthChange,
+    onDraggingChange,
   });
 
   const toggleExpandAll = (projectName: string) => {
@@ -144,8 +152,8 @@ export default function LeftSidebar({
   return (
     <aside
       ref={resizable.containerRef}
-      className={`bg-surface-primary border-r border-border-primary flex flex-col h-full shrink-0 overflow-hidden relative transition-[width] duration-200 ${isOpen ? "" : "w-0 border-r-transparent"}`}
-      style={isOpen ? { width: `${resizable.width}px` } : undefined}
+      className={`bg-surface-primary border-r border-border-primary flex flex-col h-full shrink-0 overflow-hidden relative ${resizable.isDragging ? "" : "transition-[width] duration-200"} ${isOpen ? "" : "w-0 border-r-transparent"}`}
+      style={isOpen ? { width: `${width}px` } : undefined}
     >
       {/* 新建对话按钮 */}
       <div className="p-4 shrink-0">
