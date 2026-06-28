@@ -191,7 +191,7 @@ impl Tool for WebSearchTool {
         true
     }
 
-    fn execute(&self, input: Value, ctx: &ToolContext) -> ToolResult {
+    fn execute(&self, input: Value, _ctx: &ToolContext) -> ToolResult {
         let query = input.get("query").and_then(|v| v.as_str()).unwrap_or("");
         if query.is_empty() {
             return ToolResult::error("No search query provided");
