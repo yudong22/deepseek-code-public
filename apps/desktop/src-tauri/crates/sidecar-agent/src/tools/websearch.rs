@@ -251,32 +251,22 @@ impl WebSearchTool {
         let encoded: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
         let api_url = format!("https://api.duckduckgo.com/?q={}&format=json&no_html=1&skip_disambig=1", encoded);
 
-        let fut = async {
-            let client = reqwest::Client::builder()
+        let fetch_ddg = || -> Result<serde_json::Value, String> {
+            let client = reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(10))
                 .build()
                 .map_err(|e| format!("Failed to build client: {}", e))?;
 
-            let resp: serde_json::Value = client
+            client
                 .get(&api_url)
                 .header("User-Agent", "deepseek-code/0.6.0")
                 .send()
-                .await
                 .map_err(|e| format!("API request failed: {}", e))?
                 .json()
-                .await
-                .map_err(|e| format!("JSON parse failed: {}", e))?;
-
-            Ok(resp)
+                .map_err(|e| format!("JSON parse failed: {}", e))
         };
 
-        let json = match tokio::runtime::Handle::try_current() {
-            Ok(handle) => handle.block_on(fut),
-            Err(_) => {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(fut)
-            }
-        }.map_err(|e| format!("DDG API failed: {}", e))?;
+        let json = fetch_ddg().map_err(|e| format!("DDG API failed: {}", e))?;
 
         let mut results = Vec::new();
         let mut seen = std::collections::HashSet::new();
@@ -353,51 +343,38 @@ impl WebSearchTool {
             search_query.push_str(&format!(" -site:{}", blocked_domains.join(" -site:")));
         }
 
-        let fut = async {
-            let client = reqwest::Client::builder()
-                .timeout(Duration::from_secs(15))
-                .build()
-                .map_err(|e| format!("Failed to build client: {}", e))?;
-
-            let sys_prompt = format!(
-                "You are a web search assistant. The current date is {}.\n\
-                 Search the query and list up to {} results, each on a new line as: \
-                 \"- Title URL\". Do not add any commentary, introduction, or summary.",
-                date_str, max_results
-            );
-            let request_body = &SearchRequest {
-                model: provider.model.clone(),
-                messages: vec![
-                    SearchMessage { role: "system".to_string(), content: sys_prompt },
-                    SearchMessage { role: "user".to_string(), content: search_query },
-                ],
-                stream: false,
-                enable_search: Some(true),
-            };
-
-            let response = client
-                .post(&provider.endpoint_url)
-                .header("Authorization", format!("Bearer {}", provider.api_key))
-                .header("Content-Type", "application/json")
-                .json(request_body)
-                .send()
-                .await
-                .map_err(|e| format!("Provider request failed: {}", e))?;
-
-            if !response.status().is_success() {
-                return Err(format!("Provider returned {}", response.status()));
-            }
-
-            let resp: SearchResponse = response.json().await.map_err(|e| format!("Parse error: {}", e))?;
-            let content = resp.choices.first().map(|c| c.message.content.clone()).unwrap_or_default();
-            Ok(content)
+        let sys_prompt = format!(
+            "You are a web search assistant. The current date is {}.\n\
+             Search the query and list up to {} results, each on a new line as: \
+             \"- Title URL\". Do not add any commentary, introduction, or summary.",
+            date_str, max_results
+        );
+        let request_body = &SearchRequest {
+            model: provider.model.clone(),
+            messages: vec![
+                SearchMessage { role: "system".to_string(), content: sys_prompt },
+                SearchMessage { role: "user".to_string(), content: search_query },
+            ],
+            stream: false,
+            enable_search: Some(true),
         };
 
-        let content = match tokio::runtime::Handle::try_current() {
-            Ok(h) => h.block_on(fut),
-            Err(_) => tokio::runtime::Runtime::new().unwrap().block_on(fut),
-        }?;
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .map_err(|e| format!("Failed to build client: {}", e))?;
 
+        let resp: SearchResponse = client
+            .post(&provider.endpoint_url)
+            .header("Authorization", format!("Bearer {}", provider.api_key))
+            .header("Content-Type", "application/json")
+            .json(request_body)
+            .send()
+            .map_err(|e| format!("Provider request failed: {}", e))?
+            .json()
+            .map_err(|e| format!("Parse error: {}", e))?;
+
+        let content = resp.choices.first().map(|c| c.message.content.clone()).unwrap_or_default();
         Ok(extract_search_results(&content))
     }
 }
