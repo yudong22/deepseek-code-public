@@ -438,7 +438,7 @@ fn format_search_output(query: &str, results: &[serde_json::Value], note: Option
     }
 
     out.push_str(
-        "\nREMINDER: You MUST cite the sources above in your response to the \
+        "REMINDER: You MUST cite the sources above in your response to the \
          user using markdown hyperlinks, e.g. [Source Title](URL)."
     );
     out
