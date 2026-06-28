@@ -224,7 +224,7 @@ impl Tool for WebSearchTool {
         let provider = &ctx.provider_config;
         let start = std::time::Instant::now();
         let ddg_result = self.do_ddg_search(query, &allowed_domains, &blocked_domains, max_results);
-        let duration_ms = start.elapsed().as_millis() as u64;
+        let _duration_ms = start.elapsed().as_millis() as u64;
 
         let (results, note): (Vec<Value>, Option<String>) = match ddg_result {
             Ok(r) if !r.is_empty() => (r, None),
