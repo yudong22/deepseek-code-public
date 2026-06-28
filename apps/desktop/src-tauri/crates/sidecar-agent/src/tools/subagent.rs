@@ -15,6 +15,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
+// Sub-agent calls LLM via async reqwest inside spawn_blocking,
+// so we use Handle::block_on to bridge sync→async safely.
+use tokio::runtime::Handle;
+
 // ─── Agent Definition ──────────────────────────────────────────────
 
 /// Permission mode for sub-agent tool execution.
@@ -529,7 +533,7 @@ fn run_subagent_loop(
 
         step += 1;
 
-        // Call LLM
+        // Call LLM (async reqwest via block_on — we're inside spawn_blocking)
         let request_body = serde_json::json!({
             "model": model,
             "messages": messages,
@@ -537,18 +541,24 @@ fn run_subagent_loop(
             "stream": true,
         });
 
-        let client = reqwest::blocking::Client::new();
-        let response = client
-            .post(&api_url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .map_err(|e| format!("LLM request failed: {}", e))?;
-
-        let body = response
-            .text()
-            .map_err(|e| format!("response read failed: {}", e))?;
+        let api_url_clone = api_url.clone();
+        let api_key_clone = api_key.clone();
+        let body = Handle::current()
+            .block_on(async {
+                let client = reqwest::Client::new();
+                let response = client
+                    .post(&api_url_clone)
+                    .header("Authorization", format!("Bearer {}", api_key_clone))
+                    .header("Content-Type", "application/json")
+                    .json(&request_body)
+                    .send()
+                    .await
+                    .map_err(|e| format!("LLM request failed: {}", e))?;
+                response
+                    .text()
+                    .await
+                    .map_err(|e| format!("response read failed: {}", e))
+            })?;
 
         let (content, tool_calls) = parse_sse_response(&body)?;
 
