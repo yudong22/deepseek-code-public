@@ -13,6 +13,7 @@ import ChatFeed from "@/components/ChatFeed";
 import ChatInput from "@/components/ChatInput";
 import { fileBaseName } from "@/components/toolUtils";
 import EmptyState from "@/components/EmptyState";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 import { useToast } from "@/hooks/useToast";
 import { useSettings } from "@/hooks/useSettings";
@@ -81,6 +82,13 @@ function MainDashboard() {
 
   // 交互式问答：agent 提问时暂存的问题
   const [pendingQuestion, setPendingQuestion] = useState<{ args: string; callId: string } | null>(null);
+  // 安全确认：bash 危险命令拦截后的 PolicyConfirm 弹窗
+  const [pendingPolicyConfirm, setPendingPolicyConfirm] = useState<{
+    callId: string;
+    command: string;
+    pattern: string;
+    severity: string;
+  } | null>(null);
   /** 追踪最新的 assistant message（含 toolCalls 和 sections），用于切换标签页时持久化 */
   const latestAssistantMsgRef = useRef<Message | null>(null);
   useEffect(() => {
@@ -619,6 +627,10 @@ function MainDashboard() {
             })];
             setMessages((prev) => updateAssistantMsg(prev, assistantMsgId, currentContent, currentThinking, sections));
             saveDraft();
+          } else if (event.type === "PolicyConfirm") {
+            // 危险命令安全确认 —— 弹出确认框并阻塞等待用户回复 yes/no
+            const { call_id, command, pattern, severity } = event.payload;
+            setPendingPolicyConfirm({ callId: call_id, command, pattern, severity });
           } else if (event.type === "ToolStarted") {
             const callId = event.payload.call_id || "";
             const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId && tc.result === undefined);
@@ -1065,6 +1077,29 @@ function MainDashboard() {
           onIsResizingChange={setIsRightSidebarDragging}
         />
       </div>
+      {/* 危险命令安全确认弹窗 */}
+      <ConfirmDialog
+        open={pendingPolicyConfirm !== null}
+        title="⚠️ 危险操作确认"
+        message={pendingPolicyConfirm
+          ? `Agent 正要执行以下危险命令:\n\n${pendingPolicyConfirm.command}\n\n匹配规则: ${pendingPolicyConfirm.pattern}\n严重度: ${pendingPolicyConfirm.severity}`
+          : ""}
+        confirmLabel="Allow"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => {
+          if (pendingPolicyConfirm) {
+            bridge.respondToAgent("yes");
+            setPendingPolicyConfirm(null);
+          }
+        }}
+        onCancel={() => {
+          if (pendingPolicyConfirm) {
+            bridge.respondToAgent("no");
+            setPendingPolicyConfirm(null);
+          }
+        }}
+      />
     </AppShell>
   );
 }
