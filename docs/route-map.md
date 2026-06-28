@@ -46,21 +46,39 @@ apps/desktop/src/
 │   ├── Mermaid.tsx          # Mermaid 图表异步渲染组件
 │   ├── Icons.tsx            # 内联 SVG 图标组件集合（20+ 图标）
 │   ├── Toast.tsx            # 全局 Toast 消息提示组件
-│   ├── SettingsModal.tsx    # 设置弹窗（API Key 管理、历史清空、工作区目录原生浏览选择、检查更新面板与日志）
-│   ├── TitleBar.tsx         # 自定义单行标题栏（交通灯间距、面包屑、Tab 标签、操作按钮）
-│   ├── LeftSidebar.tsx      # 左侧折叠边栏（新建对话、导航、Projects 项目文件夹分组树形列表、会话列表、设置入口）
+│   ├── SettingsModal.tsx    # 设置弹窗（API Key 管理、历史清空、检查更新）
+│   ├── ProjectSettingsModal.tsx # 项目设置弹窗（工作区目录、删除项目）
+│   ├── TitleBar.tsx         # 自定义单行标题栏（面包屑、Tab 标签、日夜切换）
+│   ├── LeftSidebar.tsx      # 左侧折叠边栏（新建对话、历史/任务导航、项目分组、会话列表、设置）
 │   ├── RightPanel.tsx       # 右侧折叠面板（Overview Markdown 预览、工具结果展示）
-│   ├── ChatFeed.tsx         # 对话消息流（包含外层绝对定位防抖动 `.sticky-user-bar` 和内层滚动消息列表）
-│   ├── ChatInput.tsx        # 对话输入区（模型选择、文本输入，并在前端拦截 `/clear`、`/help` 等本地指令并执行相应处理）
-│   ├── EmptyState.tsx       # 新建对话空状态页面（居中提示框、模型选择）
-│   └── ToolCallCard.tsx     # 单个/组合工具调用卡片与执行组组件（ToolCallGroup，支持动态计时、状态变色及折叠概数统计）
+│   ├── HistoryPage.tsx      # 全屏会话历史页（搜索、项目过滤、重命名、删除）
+│   ├── TasksPage.tsx        # 定时任务管理页（创建、启用/禁用、删除定时任务）
+│   ├── ConfirmDialog.tsx    # 通用确认弹框（危险操作确认）
+│   ├── ChatFeed.tsx         # 对话消息流（含外层绝对定位防抖动和滚动消息列表）
+│   ├── ChatInput.tsx        # 对话输入区（模型选择、文本输入、本地指令拦截）
+│   ├── ChatInputCard.tsx    # 输入卡片容器
+│   ├── ToolCallCard.tsx     # 工具调用卡片（动态计时、状态变色、折叠统计）
+│   ├── FileToolCard.tsx     # 文件操作工具卡片（文件读/写/编辑展示）
+│   ├── TodoListCard.tsx     # TodoWrite 工具任务列表卡片
+│   ├── EditDiffCard.tsx     # 文件编辑 Diff 展示卡片
+│   ├── ExpandableToolCard.tsx # 可展开工具调用卡片
+│   ├── FileAutocomplete.tsx # 文件路径自动补全
+│   ├── SlashAutocomplete.tsx # 斜杠命令自动补全
+│   ├── QuestionCard.tsx     # Agent Q&A 交互卡片
+│   └── toolUtils.ts         # 工具卡片工具函数
+├── hooks/                    # React Hooks 目录
+│   ├── useToast.ts           # Toast 通知状态管理
+│   ├── useSettings.ts        # 设置持久化（API Key、工作区路径等）
+│   ├── useProjects.ts        # 项目列表状态管理
+│   ├── useRightPanelTabs.ts  # 右侧面板 Tab 状态管理
+│   └── useKeyboardShortcuts.ts # 全局键盘快捷键
 ├── utils/                   # 工具函数目录
 │   └── markdown.tsx         # 自定义 Markdown 渲染器（标题、列表、代码块、Mermaid 嵌入、行内格式）
 ├── bridge/                  # 统一的 JS Bridge 门面层（封装底层壳交互，支持多端适配）
 │   ├── index.ts             # 桥接层入口（环境检测与分发）
-│   ├── types.ts             # 桥接层 TypeScript 接口与类型定义（包含 selectDirectory、checkForUpdates 声明）
-│   ├── tauri.ts             # 原生 Tauri 壳能力实现
-│   └── mock.ts              # 浏览器环境 Mock/降级实现（模拟 Agent 事件流、工作区目录录入及更新返回）
+│   ├── types.ts             # 桥接层 TypeScript 接口与类型定义（包含 AgentEvent、ScheduledTask、IBridge）
+│   ├── tauri.ts             # 原生 Tauri 壳能力实现（SQLite 会话、Agent 流式、工作区文件、定时任务）
+│   └── mock.ts              # 浏览器环境 Mock/降级实现（模拟 Agent 事件流、定时任务、工作区目录录入及更新返回）
 └── vite-env.d.ts            # Vite 环境变量类型声明
 ```
 

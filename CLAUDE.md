@@ -67,7 +67,7 @@ bun run preview                      # 桌面端开发模式 (Tauri + Rust + SQL
 bun run build:desktop                # 构建前端 (sidecar + tsc + vite build)，tauri build 会自动调用
 bun run build:mac                    # 构建 macOS .app，终止旧实例，复制到 /Applications
 bun run build:sidecar                # 单独编译 sidecar 二进制 (packages/sidecar/src/index.ts → Bun)
-bun run test                         # 全量检查：302 tests (99 Rust + 203 TS)
+bun run test                         # 全量检查：306 tests (99 Rust + 207 TS)
 bun run scripts/bump-version.ts <ver> # 统一更新所有配置文件的版本号
 ```
 
