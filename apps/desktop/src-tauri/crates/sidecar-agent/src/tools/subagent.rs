@@ -389,12 +389,21 @@ impl Tool for SubAgentTool {
     }
 
     fn description(&self) -> &'static str {
-        "Delegate a task to a specialized sub-agent. Available agent types:\n\
-         - general-purpose: Full-access coding agent for general tasks\n\
-         - explore: Read-only search agent for code exploration\n\
-         - code-reviewer: Read-only review agent for correctness & security\n\
-         Custom agents defined in .deepseek-code/agents/*.md are also available.\n\
-         The sub-agent runs its own tool loop and returns its final text output."
+        "Delegate a task to a specialized sub-agent that runs its own independent tool loop.\n\
+         Use for complex multi-step tasks that benefit from focused, isolated execution.\n\
+         The sub-agent gets its own conversation context and returns final text output.\n\
+         \n\
+         ## Agent types and when to use each\n\
+         - general-purpose: Full tool access (read,write,bash,web). For coding, bug fixes, features.\n\
+         - explore: Read-only (file_read,grep,glob,webfetch). For code search & exploration — no changes.\n\
+         - code-reviewer: Read-only, no bash. For reviewing correctness, security, code quality.\n\
+         \n\
+         ## Tool permissions\n\
+         | Type | Read | Write/Edit | Bash | Web |\n\
+         |------|------|------------|------|-----|\n\
+         | general-purpose | yes | yes | yes | yes |\n\
+         | explore | yes | no | no | yes |\n\
+         | code-reviewer | yes | no | no | no |"
     }
 
     fn input_schema(&self) -> Value {

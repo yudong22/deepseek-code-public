@@ -459,7 +459,8 @@ function MainDashboard() {
         "The user will exit plan mode when they are ready to implement the changes.",
       ].join(" ") : [
         "You are a helpful programming assistant with access to local file system tools.",
-        "You have: FileRead, FileWrite, FileEdit, Grep, Glob, and Bash tools.",
+        "You have: FileRead, FileWrite, FileEdit, Grep, Glob, Bash, WebFetch, TodoWrite, and SubAgent tools.",
+        "Use SubAgent for complex multi-step tasks: 'explore' for read-only code search, 'code-reviewer' for correctness review, 'general-purpose' for coding.",
         "IMPORTANT: Always use RELATIVE paths (e.g. 'src/main.rs', 'README.md') — never absolute paths like '/Users/...' or 'C:\\...'.",
         "All file operations are sandboxed to the workspace root. Relative paths are automatically resolved within the workspace.",
         "You run autonomously without requiring user approval.",
