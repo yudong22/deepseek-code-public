@@ -8,6 +8,7 @@ import TodoListCard from "./TodoListCard";
 import EditDiffCard from "./EditDiffCard";
 import FileToolCard from "./FileToolCard";
 import ExpandableToolCard from "./ExpandableToolCard";
+import QuestionCard from "./QuestionCard";
 import type { Tab } from "./RightPanel/PanelShell";
 
 interface ToolCallCardProps {
@@ -18,6 +19,7 @@ interface ToolCallCardProps {
   onCancel?: () => void;
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;
+  onAnswerQuestion?: (answer: string) => void;
 }
 
 export default function ToolCallCard({
@@ -28,8 +30,20 @@ export default function ToolCallCard({
   onCancel,
   readFile,
   getFileUrl,
+  onAnswerQuestion,
 }: ToolCallCardProps) {
   const name = normalizeToolName(tc.name);
+
+  if (name === "question") {
+    return (
+      <QuestionCard
+        args={tc.args || "{}"}
+        callId={tc.call_id || ""}
+        result={tc.result}
+        onAnswered={onAnswerQuestion}
+      />
+    );
+  }
 
   if (name === "todowrite") {
     return <TodoListCard tc={tc} onCancel={onCancel} />;
@@ -73,6 +87,7 @@ interface ToolCallGroupProps {
   onCancel?: () => void;
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;
+  onAnswerQuestion?: (answer: string) => void;
 }
 
 export function ToolCallGroup({
@@ -82,6 +97,7 @@ export function ToolCallGroup({
   onCancel,
   readFile,
   getFileUrl,
+  onAnswerQuestion,
 }: ToolCallGroupProps) {
   return (
     <div className="flex flex-col gap-1 my-2">
@@ -97,6 +113,7 @@ export function ToolCallGroup({
             onCancel={onCancel}
             readFile={readFile}
             getFileUrl={getFileUrl}
+            onAnswerQuestion={onAnswerQuestion}
           />
         );
       })}

@@ -45,21 +45,11 @@ impl Tool for FileWriteTool {
             return ToolResult::error("No file path provided");
         }
 
-        let resolved = ctx.workspace_path.join(relative_path);
-
-        // Canonicalize parent for safety check
-        let resolved_canon = resolved.canonicalize().unwrap_or(resolved.clone());
-        let workspace_canon = match ctx.workspace_path.canonicalize() {
+        // Resolve and validate path safely (prevents path traversal)
+        let resolved = match super::resolve_safe(&ctx.workspace_path, relative_path) {
             Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Cannot resolve workspace: {}", e)),
+            Err(e) => return ToolResult::error(e),
         };
-
-        if !resolved_canon.starts_with(&workspace_canon) && !resolved.starts_with(&ctx.workspace_path) {
-            return ToolResult::error(format!(
-                "Path traversal detected: '{}' is outside the workspace",
-                relative_path
-            ));
-        }
 
         // Create parent directories
         if let Some(parent) = resolved.parent() {
@@ -68,15 +58,29 @@ impl Tool for FileWriteTool {
             }
         }
 
-        // Write the file
-        match std::fs::write(&resolved, content) {
-            Ok(_) => ToolResult::success(serde_json::json!({
-                "status": "ok",
-                "path": relative_path,
-                "bytes_written": content.len(),
-            })),
-            Err(e) => ToolResult::error(format!("Cannot write file: {}", e)),
+        // Atomic write
+        let parent = resolved.parent().unwrap_or(&resolved);
+        let file_name = resolved.file_name().and_then(|n| n.to_str()).unwrap_or("file");
+        let temp_file = parent.join(format!("{}.tmp-{}", file_name, uuid::Uuid::new_v4()));
+
+        if let Err(e) = std::fs::write(&temp_file, content) {
+            let _ = std::fs::remove_file(&temp_file);
+            return ToolResult::error(format!("Cannot write temp file {:?}: {}", temp_file, e));
         }
+
+        if let Err(e) = std::fs::rename(&temp_file, &resolved) {
+            let _ = std::fs::remove_file(&temp_file);
+            return ToolResult::error(format!(
+                "Cannot rename temp file {:?} to target {:?}: {}",
+                temp_file, resolved, e
+            ));
+        }
+
+        ToolResult::success(serde_json::json!({
+            "status": "ok",
+            "path": relative_path,
+            "bytes_written": content.len(),
+        }))
     }
 }
 
@@ -92,6 +96,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -121,6 +127,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -145,6 +153,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(

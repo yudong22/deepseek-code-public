@@ -32,6 +32,10 @@ impl Tool for FileEditTool {
                 "new_string": {
                     "type": "string",
                     "description": "The replacement text"
+                },
+                "replace_all": {
+                    "type": "boolean",
+                    "description": "If true, replace all occurrences of old_string. If false, replace only the first occurrence. (default false)"
                 }
             },
             "required": ["path", "old_string", "new_string"]
@@ -51,6 +55,10 @@ impl Tool for FileEditTool {
             .get("new_string")
             .and_then(|v| v.as_str())
             .unwrap_or("");
+        let replace_all = input
+            .get("replace_all")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         if relative_path.is_empty() {
             return ToolResult::error("No file path provided");
@@ -60,46 +68,56 @@ impl Tool for FileEditTool {
             return ToolResult::error("old_string cannot be empty");
         }
 
-        // Path validation: prevent traversal attacks
-        let resolved = ctx.workspace_path.join(relative_path);
-        let workspace_canon = ctx.workspace_path.canonicalize().unwrap_or_else(|_| ctx.workspace_path.clone());
-        let file_canon = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
-        if !file_canon.starts_with(&workspace_canon) && !resolved.starts_with(&ctx.workspace_path) {
-            return ToolResult::error(format!(
-                "Path traversal detected: '{}' is outside the workspace",
-                relative_path
-            ));
-        }
+        // Path validation: prevent traversal attacks safely
+        let resolved = match super::resolve_safe(&ctx.workspace_path, relative_path) {
+            Ok(p) => p,
+            Err(e) => return ToolResult::error(e),
+        };
 
         let content = match std::fs::read_to_string(&resolved) {
             Ok(c) => c,
             Err(e) => return ToolResult::error(format!("Cannot read file: {}", e)),
         };
 
-        // Find and replace exactly one occurrence
-        let edited = match content.find(old_string) {
-            Some(_pos) => content.replacen(old_string, new_string, 1),
-            None => {
-                return ToolResult::error(format!(
-                    "old_string not found in file '{}'",
-                    relative_path
-                ));
+        // Find and replace (one or all occurrences)
+        let edited = if content.contains(old_string) {
+            if replace_all {
+                content.replace(old_string, new_string)
+            } else {
+                content.replacen(old_string, new_string, 1)
             }
+        } else {
+            return ToolResult::error(format!(
+                "old_string not found in file '{}'",
+                relative_path
+            ));
         };
 
         // Generate a simple diff for the result
         let diff = generate_minimal_diff(&content, &edited);
 
-        match std::fs::write(&resolved, &edited) {
-            Ok(_) => ToolResult::success(serde_json::json!({
-                "status": "ok",
-                "path": relative_path,
-                "diff": diff,
-                "lines_before": content.lines().count(),
-                "lines_after": edited.lines().count(),
-            })),
-            Err(e) => ToolResult::error(format!("Cannot write file: {}", e)),
+        // Atomic write
+        let parent = resolved.parent().unwrap_or(&resolved);
+        let file_name = resolved.file_name().and_then(|n| n.to_str()).unwrap_or("file");
+        let temp_file = parent.join(format!("{}.tmp-{}", file_name, uuid::Uuid::new_v4()));
+
+        if let Err(e) = std::fs::write(&temp_file, &edited) {
+            let _ = std::fs::remove_file(&temp_file);
+            return ToolResult::error(format!("Cannot write temp file: {}", e));
         }
+
+        if let Err(e) = std::fs::rename(&temp_file, &resolved) {
+            let _ = std::fs::remove_file(&temp_file);
+            return ToolResult::error(format!("Cannot rename temp file to target: {}", e));
+        }
+
+        ToolResult::success(serde_json::json!({
+            "status": "ok",
+            "path": relative_path,
+            "diff": diff,
+            "lines_before": content.lines().count(),
+            "lines_after": edited.lines().count(),
+        }))
     }
 }
 
@@ -147,6 +165,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -179,6 +199,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -208,6 +230,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -220,5 +244,56 @@ mod tests {
         );
 
         assert!(matches!(result, ToolResult::Error { .. }));
+    }
+
+    #[test]
+    fn test_replace_all_multiple_occurrences() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("file.txt"), "foo bar foo baz\n").unwrap();
+
+        let tool = FileEditTool;
+        let ctx = ToolContext {
+            workspace_path: tmp.path().to_path_buf(),
+            session_id: "test".to_string(),
+            call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
+        };
+
+        // 1. replace_all = false (default)
+        let result = tool.execute(
+            serde_json::json!({
+                "path": "file.txt",
+                "old_string": "foo",
+                "new_string": "qux"
+            }),
+            &ctx,
+        );
+        match result {
+            ToolResult::Success { .. } => {
+                let content = std::fs::read_to_string(tmp.path().join("file.txt")).unwrap();
+                assert_eq!(content, "qux bar foo baz\n");
+            }
+            _ => panic!("Expected success"),
+        }
+
+        // 2. replace_all = true
+        std::fs::write(tmp.path().join("file.txt"), "foo bar foo baz\n").unwrap();
+        let result = tool.execute(
+            serde_json::json!({
+                "path": "file.txt",
+                "old_string": "foo",
+                "new_string": "qux",
+                "replace_all": true
+            }),
+            &ctx,
+        );
+        match result {
+            ToolResult::Success { .. } => {
+                let content = std::fs::read_to_string(tmp.path().join("file.txt")).unwrap();
+                assert_eq!(content, "qux bar qux baz\n");
+            }
+            _ => panic!("Expected success"),
+        }
     }
 }

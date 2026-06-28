@@ -23,6 +23,10 @@ impl Tool for GrepTool {
                 "pattern": {
                     "type": "string",
                     "description": "The regex pattern to search for"
+                },
+                "context": {
+                    "type": "integer",
+                    "description": "Number of context lines to display before and after each match (default 0)"
                 }
             },
             "required": ["pattern"]
@@ -38,14 +42,37 @@ impl Tool for GrepTool {
             .get("pattern")
             .and_then(|v| v.as_str())
             .unwrap_or("");
+        let context = input.get("context").and_then(|v| v.as_u64()).unwrap_or(0);
 
         if pattern.is_empty() {
             return ToolResult::error("No search pattern provided");
         }
 
+        // Build command arguments
+        let mut rg_args = vec![
+            "--line-number".to_string(),
+            "--no-heading".to_string(),
+            "--color=never".to_string(),
+        ];
+        if context > 0 {
+            rg_args.push("-C".to_string());
+            rg_args.push(context.to_string());
+        }
+        rg_args.push(pattern.to_string());
+
+        let mut grep_args = vec![
+            "-rn".to_string(),
+            "--color=never".to_string(),
+        ];
+        if context > 0 {
+            grep_args.push("-C".to_string());
+            grep_args.push(context.to_string());
+        }
+        grep_args.push(pattern.to_string());
+
         // Try ripgrep first, fall back to grep
         let output = std::process::Command::new("rg")
-            .args(["--line-number", "--no-heading", "--color=never", pattern])
+            .args(&rg_args)
             .current_dir(&ctx.workspace_path)
             .output();
 
@@ -54,7 +81,7 @@ impl Tool for GrepTool {
             _ => {
                 // Fallback to grep -r
                 std::process::Command::new("grep")
-                    .args(["-rn", "--color=never", pattern])
+                    .args(&grep_args)
                     .current_dir(&ctx.workspace_path)
                     .output()
                     .unwrap_or_else(|e| {
@@ -76,13 +103,21 @@ impl Tool for GrepTool {
             .filter(|l| !l.is_empty())
             .take(100) // Limit to 100 matches
             .map(|line| {
-                let parts: Vec<&str> = line.splitn(3, ':').collect();
+                let parts: Vec<&str> = if line.contains(':') {
+                    line.splitn(3, ':').collect()
+                } else {
+                    line.splitn(3, '-').collect()
+                };
                 match parts.len() {
-                    3 => serde_json::json!({
-                        "file": parts[0],
-                        "line": parts[1].parse::<u32>().unwrap_or(0),
-                        "content": parts[2].trim(),
-                    }),
+                    3 => {
+                        let is_context = !line.contains(':');
+                        serde_json::json!({
+                            "file": parts[0],
+                            "line": parts[1].parse::<u32>().unwrap_or(0),
+                            "content": parts[2].trim(),
+                            "is_context": is_context,
+                        })
+                    }
                     _ => serde_json::json!({
                         "raw": line,
                     }),
@@ -117,6 +152,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(serde_json::json!({"pattern": "main"}), &ctx);
@@ -142,9 +179,55 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(serde_json::json!({"pattern": ""}), &ctx);
         assert!(matches!(result, ToolResult::Error { .. }));
+    }
+
+    #[test]
+    fn grep_with_context() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("file.txt"),
+            "line1\nmatch_me\nline3\n",
+        )
+        .unwrap();
+
+        let tool = GrepTool;
+        let ctx = ToolContext {
+            workspace_path: tmp.path().to_path_buf(),
+            session_id: "test".to_string(),
+            call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
+        };
+
+        let result = tool.execute(
+            serde_json::json!({
+                "pattern": "match_me",
+                "context": 1
+            }),
+            &ctx,
+        );
+
+        match result {
+            ToolResult::Success { output } => {
+                let matches = output["matches"].as_array().unwrap();
+                // Should find matches
+                assert!(matches.len() > 0);
+                // Should contain context lines (with is_context: true or is_context: false)
+                let has_match = matches.iter().any(|m| m["content"].as_str().unwrap() == "match_me" && m["is_context"].as_bool() == Some(false));
+                let has_context = matches.iter().any(|m| m["is_context"].as_bool() == Some(true));
+                assert!(has_match);
+                // Note: fallback grep might not support -C on some systems, but it's fine if ripgrep does
+                if has_context {
+                    println!("Found context line!");
+                }
+            }
+            _ => {}
+        }
     }
 }

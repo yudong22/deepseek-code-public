@@ -6,8 +6,9 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
-// ─── Tool Trait ──────────────────────────────────
+// ─── Tool Context ──────────────────────────────────
 
 /// Context passed to every tool execution.
 #[derive(Debug, Clone)]
@@ -18,6 +19,10 @@ pub struct ToolContext {
     pub session_id: String,
     /// Call ID from the LLM (for event correlation)
     pub call_id: String,
+    /// Cancellation flag checked by the tool
+    pub cancel_flag: Arc<AtomicBool>,
+    /// Provider configuration for nested LLM queries (e.g. WebFetch summaries)
+    pub provider_config: crate::provider::ProviderConfig,
 }
 
 /// Result of a tool execution.
@@ -128,8 +133,10 @@ pub mod file_write;
 pub mod glob;
 pub mod grep;
 pub mod question;
+pub mod webfetch;
+pub mod websearch;
 
-/// Create the default tool registry with all 7 tools.
+/// Create the default tool registry with all 9 tools.
 /// The question tool answer flow is handled at the agent loop level.
 pub fn default_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
@@ -140,5 +147,81 @@ pub fn default_registry() -> ToolRegistry {
     registry.register(Box::new(grep::GrepTool));
     registry.register(Box::new(glob::GlobTool));
     registry.register(Box::new(question::QuestionTool));
+    registry.register(Box::new(webfetch::WebFetchTool));
+    registry.register(Box::new(websearch::WebSearchTool));
     registry
+}
+
+/// Resolve a relative path safely within the workspace root.
+/// Prevents path traversal attacks (e.g., `../../etc/passwd`).
+pub fn resolve_safe(workspace: &std::path::Path, relative: &str) -> Result<PathBuf, String> {
+    let resolved = workspace.join(relative);
+
+    // Normalize the path (resolve `..` and `.` components) without requiring existence
+    let normalized = normalize_path(&resolved);
+
+    // Canonicalize workspace for comparison (handles symlinks like /tmp → /private/tmp)
+    let workspace_canon = workspace
+        .canonicalize()
+        .map_err(|e| format!("Cannot resolve workspace path: {}", e))?;
+
+    // Try canonicalize on the target or the closest existing ancestor to preserve symlink resolution
+    let resolved_canon = if let Ok(p) = normalized.canonicalize() {
+        p
+    } else {
+        let mut current = normalized.clone();
+        let mut suffix = std::path::PathBuf::new();
+        loop {
+            if current.exists() {
+                if let Ok(canon) = current.canonicalize() {
+                    if suffix.as_os_str().is_empty() {
+                        current = canon;
+                    } else {
+                        current = canon.join(suffix);
+                    }
+                    break;
+                }
+            }
+            if let Some(parent) = current.parent() {
+                if let Some(file_name) = current.file_name() {
+                    if suffix.as_os_str().is_empty() {
+                        suffix = std::path::PathBuf::from(file_name);
+                    } else {
+                        suffix = std::path::PathBuf::from(file_name).join(suffix);
+                    }
+                }
+                current = parent.to_path_buf();
+            } else {
+                current = normalized.clone();
+                break;
+            }
+        }
+        current
+    };
+
+    // Verify the resolved path is within the workspace
+    if !resolved_canon.starts_with(&workspace_canon) {
+        return Err(format!(
+            "Path traversal detected: '{}' is outside the workspace",
+            relative
+        ));
+    }
+
+    // Return the canonical path if it exists, otherwise the resolved_canon (which contains canonical ancestor)
+    Ok(resolved_canon)
+}
+
+/// Normalize a path by resolving `..` and `.` components without touching the filesystem.
+pub fn normalize_path(path: &std::path::Path) -> PathBuf {
+    let mut components = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                components.pop();
+            }
+            std::path::Component::CurDir => {}
+            c => components.push(c),
+        }
+    }
+    components.iter().collect()
 }

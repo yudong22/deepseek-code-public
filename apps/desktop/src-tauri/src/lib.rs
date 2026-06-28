@@ -43,6 +43,7 @@ pub enum AgentEvent {
     StepEnded,
     Finished,
     Error { message: String },
+    PolicyConfirm { call_id: String, command: String, pattern: String, severity: String },
 }
 
 // ─── Conversion: sidecar-agent protocol -> Tauri AgentEvent ───
@@ -81,6 +82,9 @@ impl From<sidecar_agent::protocol::AgentEvent> for AgentEvent {
                     tokens_output,
                     tokens_reasoning: tokens_reasoning.unwrap_or(0),
                 }
+            }
+            sidecar_agent::protocol::AgentEvent::PolicyConfirm { call_id, command, pattern, severity } => {
+                AgentEvent::PolicyConfirm { call_id, command, pattern, severity }
             }
         }
     }

@@ -18,6 +18,10 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 uuid = { version = "1", features = ["v4"] }
 thiserror = "2"
 tracing = "0.1"
+ignore = "0.4"
+url = "2"
+html2md = "0.2"
+regex = "1"
 
 [dev-dependencies]
 tokio-test = "0.4"

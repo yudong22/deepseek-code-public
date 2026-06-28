@@ -3,7 +3,6 @@ import { Message } from "@/bridge";
 import { renderMarkdown } from "@/utils/markdown";
 import * as Icons from "@/components/Icons";
 import { ToolCallGroup } from "@/components/ToolCallCard";
-import QuestionCard from "@/components/QuestionCard";
 import { fileBaseName } from "./toolUtils";
 
 /** 根据文件扩展名返回图标 */
@@ -318,20 +317,6 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                             );
                           }
                           if (sec.type === "tools" && sec.toolCalls && sec.toolCalls.length > 0) {
-                            // 检测 question 工具调用→渲染交互式问答卡片
-                            const questionTc = sec.toolCalls.find(tc => tc.name === "question");
-                            if (questionTc) {
-                              return (
-                                <div key={si}>
-                                  <QuestionCard
-                                    args={questionTc.args || "{}"}
-                                    callId={questionTc.call_id || ""}
-                                    result={questionTc.result}
-                                    onAnswered={onAnswerQuestion}
-                                  />
-                                </div>
-                              );
-                            }
                             return (
                               <div key={si} className="my-1 w-full">
                                 <ToolCallGroup
@@ -341,6 +326,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                                   onCancel={isGenerating && isLastMessage ? onCancelAgent : undefined}
                                   readFile={readFile}
                                   getFileUrl={getFileUrl}
+                                  onAnswerQuestion={onAnswerQuestion}
                                 />
                               </div>
                             );

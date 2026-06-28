@@ -290,6 +290,15 @@ pub enum AgentEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         tokens_reasoning: Option<i64>,
     },
+
+    // ── Safety Policy Confirmation (1 variant) ──
+    #[serde(rename = "PolicyConfirm")]
+    PolicyConfirm {
+        call_id: String,
+        command: String,
+        pattern: String,
+        severity: String,
+    },
 }
 
 impl serde::Serialize for AgentEvent {
@@ -414,6 +423,19 @@ impl serde::Serialize for AgentEvent {
                     tokens_output: *tokens_output,
                     tokens_reasoning: *tokens_reasoning,
                 })?;
+            }
+
+            // ── PolicyConfirm ──
+            AgentEvent::PolicyConfirm { call_id, command, pattern, severity } => {
+                map.serialize_entry("type", "PolicyConfirm")?;
+                #[derive(Serialize)]
+                struct PolicyConfirmPayload<'a> {
+                    call_id: &'a str,
+                    command: &'a str,
+                    pattern: &'a str,
+                    severity: &'a str,
+                }
+                map.serialize_entry("payload", &PolicyConfirmPayload { call_id, command, pattern, severity })?;
             }
         }
 

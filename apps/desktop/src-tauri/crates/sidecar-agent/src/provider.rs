@@ -551,6 +551,46 @@ pub enum ProviderError {
     Stream(String),
 }
 
+/// Fetch non-streaming chat completion from an LLM provider.
+pub async fn fetch_chat_completion(
+    config: &ProviderConfig,
+    messages: &[ChatMessage],
+) -> Result<String, ProviderError> {
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "model": config.model,
+        "messages": messages,
+        "temperature": Some(0.2),
+        "stream": false,
+    });
+
+    let response = client
+        .post(&config.endpoint_url)
+        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| ProviderError::Http(e.to_string()))?;
+
+    if !response.status().is_success() {
+        let status = response.status().as_u16();
+        let error_body = response.text().await.unwrap_or_default();
+        return Err(ProviderError::ApiError { status, body: error_body });
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| ProviderError::Http(format!("Failed to parse response JSON: {}", e)))?;
+
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or_else(|| ProviderError::Stream("No message content in choices[0]".to_string()))?;
+
+    Ok(content.to_string())
+}
+
 // ─── Tests ───────────────────────────────────────
 
 #[cfg(test)]

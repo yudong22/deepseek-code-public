@@ -2,7 +2,6 @@
 
 use super::{Tool, ToolContext, ToolResult};
 use serde_json::Value;
-use std::path::PathBuf;
 
 pub struct FileReadTool;
 
@@ -51,7 +50,7 @@ impl Tool for FileReadTool {
         }
 
         // Resolve and validate path
-        let resolved = match resolve_safe(&ctx.workspace_path, relative_path) {
+        let resolved = match super::resolve_safe(&ctx.workspace_path, relative_path) {
             Ok(p) => p,
             Err(e) => return ToolResult::error(e),
         };
@@ -86,63 +85,6 @@ impl Tool for FileReadTool {
     }
 }
 
-/// Resolve a relative path safely within the workspace root.
-/// Prevents path traversal attacks (e.g., `../../etc/passwd`).
-fn resolve_safe(workspace: &PathBuf, relative: &str) -> Result<PathBuf, String> {
-    let resolved = workspace.join(relative);
-
-    // Normalize the path (resolve `..` and `.` components) without requiring existence
-    let normalized = normalize_path(&resolved);
-
-    // Canonicalize workspace for comparison (handles symlinks like /tmp → /private/tmp)
-    let workspace_canon = workspace
-        .canonicalize()
-        .map_err(|e| format!("Cannot resolve workspace path: {}", e))?;
-
-    // Try canonicalize on the target; if it fails (file may not exist yet),
-    // canonicalize the parent and join the filename
-    let resolved_canon = match normalized.canonicalize() {
-        Ok(p) => p,
-        Err(_) => {
-            // File doesn't exist — canonicalize parent directory instead
-            let parent = normalized.parent().unwrap_or(&normalized);
-            let parent_canon = parent.canonicalize().unwrap_or(parent.to_path_buf());
-            let filename = normalized.file_name().unwrap_or_default();
-            parent_canon.join(filename)
-        }
-    };
-
-    // Verify the resolved path is within the workspace
-    if !resolved_canon.starts_with(&workspace_canon) {
-        return Err(format!(
-            "Path traversal detected: '{}' is outside the workspace",
-            relative
-        ));
-    }
-
-    // Return the canonical path if it exists, otherwise the normalized path
-    if resolved_canon.exists() {
-        Ok(resolved_canon)
-    } else {
-        Ok(normalized)
-    }
-}
-
-/// Normalize a path by resolving `..` and `.` components without touching the filesystem.
-fn normalize_path(path: &std::path::Path) -> PathBuf {
-    let mut components = Vec::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::ParentDir => {
-                components.pop();
-            }
-            std::path::Component::CurDir => {}
-            c => components.push(c),
-        }
-    }
-    components.iter().collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,6 +100,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -186,6 +130,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -216,6 +162,8 @@ mod tests {
             workspace_path: tmp.path().join("subdir").to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
         std::fs::create_dir_all(&ctx.workspace_path).unwrap();
 
@@ -240,6 +188,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(

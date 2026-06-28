@@ -286,9 +286,11 @@ impl Agent {
                     name: name.clone(),
                     args,
                 };
-                match name.as_str() {
-                    "file_read" | "grep" | "glob" => read_only_calls.push(entry),
-                    _ => mutating_calls.push(entry),
+                let is_ro = self.tools.find(name).map(|t| t.is_read_only()).unwrap_or(false);
+                if is_ro {
+                    read_only_calls.push(entry);
+                } else {
+                    mutating_calls.push(entry);
                 }
             }
 
@@ -310,6 +312,8 @@ impl Agent {
 
                 let workspace = self.config.workspace_path.clone();
                 let session = self.config.session_id.clone();
+                let cancel_flag = self.cancel_flag.clone();
+                let provider_config = self.provider_config.clone();
 
                 let parallel_futures: Vec<_> = read_only_calls
                     .into_iter()
@@ -317,6 +321,8 @@ impl Agent {
                     .map(|(call, tool_opt)| {
                         let workspace = workspace.clone();
                         let session = session.clone();
+                        let cancel_flag = cancel_flag.clone();
+                        let provider_config = provider_config.clone();
                         tokio::task::spawn_blocking(move || {
                             let result = match tool_opt {
                                 Some(tool) => {
@@ -324,6 +330,8 @@ impl Agent {
                                         workspace_path: workspace,
                                         session_id: session,
                                         call_id: call.call_id.clone(),
+                                        cancel_flag,
+                                        provider_config,
                                     };
                                     tool.execute(call.args, &ctx)
                                 }
@@ -397,6 +405,9 @@ impl Agent {
 
                 // Special handling for question tool: wait for user answer or cancellation
                 if call.name == "question" {
+                    // Drain any stale messages from answer_rx
+                    while self.answer_rx.try_recv().is_ok() {}
+
                     let answer = tokio::select! {
                         a = self.answer_rx.recv() => a,
                         _ = self.cancel_notify.changed() => {
@@ -442,11 +453,84 @@ impl Agent {
                         }
                     }
                 } else {
+                    // Safety check for Bash tool
+                    if call.name == "bash" {
+                        let command_str = call.args.get("command").and_then(|v| v.as_str()).unwrap_or("");
+                        
+                        // 1. Blacklisted executable check
+                        if let Some(pattern) = find_blacklisted_executable(command_str) {
+                            // Emit PolicyConfirm event
+                            self.emit(AgentEvent::PolicyConfirm {
+                                call_id: call.call_id.clone(),
+                                command: command_str.to_string(),
+                                pattern: pattern.clone(),
+                                severity: "high".to_string(),
+                            })?;
+                            
+                            // Drain any stale messages from answer_rx
+                            while self.answer_rx.try_recv().is_ok() {}
+
+                            // Block and wait for user reply on answer_rx (reuse Q&A channel)
+                            let answer = tokio::select! {
+                                a = self.answer_rx.recv() => a,
+                                _ = self.cancel_notify.changed() => None,
+                            };
+                            
+                            match answer {
+                                Some(ref ans) if ans.trim().to_lowercase() == "yes" || ans.trim().to_lowercase() == "allow" => {
+                                    // User allowed! Proceed to execution
+                                }
+                                _ => {
+                                    // Rejected or cancelled
+                                    self.emit(AgentEvent::ToolFailed {
+                                        name: call.name.clone(),
+                                        error: "Security Policy check failed: User rejected dangerous command".to_string(),
+                                        call_id: call.call_id.clone(),
+                                    })?;
+                                    self.messages.push(ChatMessage {
+                                        role: "tool".to_string(),
+                                        content: Some("Error: Security Policy check failed: User rejected dangerous command".to_string()),
+                                        tool_call_id: Some(call.call_id.clone()),
+                                        tool_calls: None,
+                                    });
+                                    self.emit(AgentEvent::ToolEnded {
+                                        call_id: call.call_id.clone(),
+                                    })?;
+                                    continue; // Skip execution
+                                }
+                            }
+                        }
+
+                        // 2. CWD escape check
+                        let allow_outside = call.args.get("allow_outside_workspace").and_then(|v| v.as_bool()).unwrap_or(false);
+                        if !allow_outside {
+                            if let Err(err_msg) = check_command_paths(command_str, &self.config.workspace_path) {
+                                self.emit(AgentEvent::ToolFailed {
+                                    name: call.name.clone(),
+                                    error: err_msg.clone(),
+                                    call_id: call.call_id.clone(),
+                                })?;
+                                self.messages.push(ChatMessage {
+                                    role: "tool".to_string(),
+                                    content: Some(format!("Error: {}", err_msg)),
+                                    tool_call_id: Some(call.call_id.clone()),
+                                    tool_calls: None,
+                                });
+                                self.emit(AgentEvent::ToolEnded {
+                                    call_id: call.call_id.clone(),
+                                })?;
+                                continue; // Skip execution
+                            }
+                        }
+                    }
+
                     // Execute the tool
                     let ctx = ToolContext {
                         workspace_path: self.config.workspace_path.clone(),
                         session_id: self.config.session_id.clone(),
                         call_id: call.call_id.clone(),
+                        cancel_flag: self.cancel_flag.clone(),
+                        provider_config: self.provider_config.clone(),
                     };
 
                     match self.tools.find(&call.name) {
@@ -554,5 +638,107 @@ impl Agent {
         self.event_tx
             .send(event)
             .map_err(|e| format!("Event channel closed: {}", e))
+    }
+}
+
+/// Helper to clean quotes/backticks from tokens.
+fn clean_token(token: &str) -> &str {
+    token.trim_matches(|c| c == '\'' || c == '"' || c == '`')
+}
+
+/// Check if the command has any blacklisted executables.
+fn find_blacklisted_executable(command: &str) -> Option<String> {
+    let blacklist = ["rm", "sudo", "dd", "mkfs", "reboot", "shutdown", "init"];
+    let segments = command.split(|c| c == ';' || c == '|' || c == '&');
+    for segment in segments {
+        let segment = segment.trim();
+        if segment.is_empty() { continue; }
+        if let Some(first_token) = segment.split_whitespace().next() {
+            let cleaned = clean_token(first_token);
+            // Strip any path prefix if it is an absolute or relative path, e.g. /bin/rm -> rm
+            let exec_name = std::path::Path::new(cleaned)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(cleaned);
+            if blacklist.contains(&exec_name) {
+                return Some(exec_name.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Check if `cd <path>` goes outside the workspace.
+fn check_command_paths(command: &str, workspace: &std::path::Path) -> Result<(), String> {
+    // Split command by separators first: ;, &&, ||, |
+    let segments = command.split(|c| c == ';' || c == '|' || c == '&');
+    for segment in segments {
+        let segment = segment.trim();
+        if segment.is_empty() { continue; }
+        
+        // Find cd commands
+        let tokens: Vec<&str> = segment.split_whitespace().collect();
+        for (i, token) in tokens.iter().enumerate() {
+            let cleaned_token = clean_token(token);
+            if cleaned_token == "cd" {
+                if let Some(target_path_str) = tokens.get(i + 1) {
+                    let cleaned_path = clean_token(target_path_str);
+                    let target_path = std::path::Path::new(cleaned_path);
+                    let resolved = if target_path.is_absolute() {
+                        target_path.to_path_buf()
+                    } else {
+                        workspace.join(target_path)
+                    };
+                    
+                    // Canonicalize to resolve ".." and symlinks
+                    let canon_workspace = workspace.canonicalize().unwrap_or_else(|_| workspace.to_path_buf());
+                    let canon_resolved = resolved.canonicalize().unwrap_or_else(|_| resolved.clone());
+                    
+                    if !canon_resolved.starts_with(&canon_workspace) {
+                        return Err(format!(
+                            "cd target '{}' is outside the workspace. Prohibited unless allow_outside_workspace is true.",
+                            cleaned_path
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_find_blacklisted_executable() {
+        assert_eq!(find_blacklisted_executable("rm -rf /"), Some("rm".to_string()));
+        assert_eq!(find_blacklisted_executable("sudo apt update"), Some("sudo".to_string()));
+        assert_eq!(find_blacklisted_executable("/bin/rm file"), Some("rm".to_string()));
+        assert_eq!(find_blacklisted_executable("echo hello && sudo rm -rf file"), Some("sudo".to_string()));
+        assert_eq!(find_blacklisted_executable("echo 'rm'"), None);
+        assert_eq!(find_blacklisted_executable("cargo build"), None);
+    }
+
+    #[test]
+    fn test_check_command_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let ws = temp.path();
+
+        // Create target path inside workspace
+        std::fs::create_dir_all(ws.join("src")).unwrap();
+        assert!(check_command_paths("cd src && cargo build", ws).is_ok());
+
+        // Target path outside workspace
+        assert!(check_command_paths("cd .. && ls", ws).is_err());
+        assert!(check_command_paths("cd /etc && cat hosts", ws).is_err());
+
+        // Canonicalized escape check (should canonicalize targets to test true path)
+        let ws_nested = ws.join("a/b/c");
+        std::fs::create_dir_all(&ws_nested).unwrap();
+        assert!(check_command_paths("cd a/b/c", ws).is_ok());
+        assert!(check_command_paths("cd a/b/c/../..", ws).is_ok()); // resolves to ws/a, inside ws
+        assert!(check_command_paths("cd a/b/c/../../../../", ws).is_err()); // goes outside ws
     }
 }

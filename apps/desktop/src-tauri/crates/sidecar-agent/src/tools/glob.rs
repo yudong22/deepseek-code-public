@@ -43,23 +43,23 @@ impl Tool for GlobTool {
 
         let mut files: Vec<String> = Vec::new();
 
-        // Walk the workspace directory
+        // Walk the workspace directory using ignore crate to respect .gitignore
         let workspace = ctx.workspace_path.clone();
-        for entry in walkdir::WalkDir::new(&workspace)
-            .into_iter()
-            .filter_entry(move |e| {
-                // Don't filter the root directory itself
-                if e.path() == workspace { return true; }
-                let name = e.file_name().to_string_lossy();
-                !name.starts_with('.') && name != "node_modules" && name != "target"
-            })
-        {
+        let mut builder = ignore::WalkBuilder::new(&workspace);
+        builder.hidden(true); // ignore hidden files/directories (starting with .)
+        builder.require_git(false); // respect gitignore even if not in a git repo
+        builder.filter_entry(|entry| {
+            let name = entry.file_name().to_string_lossy();
+            name != "node_modules" && name != "target" && name != ".git"
+        });
+
+        for entry in builder.build() {
             let entry = match entry {
                 Ok(e) => e,
                 Err(_) => continue,
             };
 
-            if !entry.file_type().is_file() {
+            if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
                 continue;
             }
 
@@ -182,6 +182,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -217,6 +219,8 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(
@@ -248,10 +252,50 @@ mod tests {
             workspace_path: tmp.path().to_path_buf(),
             session_id: "test".to_string(),
             call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
         };
 
         let result = tool.execute(serde_json::json!({"pattern": ""}), &ctx);
         assert!(matches!(result, ToolResult::Error { .. }));
+    }
+
+    #[test]
+    fn glob_respects_gitignore() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Create files
+        std::fs::write(tmp.path().join("allowed.rs"), "fn main() {}").unwrap();
+        std::fs::write(tmp.path().join("ignored.rs"), "fn main() {}").unwrap();
+        // Create gitignore
+        std::fs::write(tmp.path().join(".gitignore"), "ignored.rs\n").unwrap();
+
+        let tool = GlobTool;
+        let ctx = ToolContext {
+            workspace_path: tmp.path().to_path_buf(),
+            session_id: "test".to_string(),
+            call_id: "c1".to_string(),
+            cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_config: crate::provider::config_for_model("dummy", "dummy"),
+        };
+
+        let result = tool.execute(
+            serde_json::json!({"pattern": "**/*.rs"}),
+            &ctx,
+        );
+
+        match result {
+            ToolResult::Success { output } => {
+                let files: Vec<&str> = output["files"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_str().unwrap())
+                    .collect();
+                assert!(files.iter().any(|f| f.contains("allowed.rs")));
+                assert!(!files.iter().any(|f| f.contains("ignored.rs")));
+            }
+            ToolResult::Error { message } => panic!("{}", message),
+        }
     }
 
     #[test]
