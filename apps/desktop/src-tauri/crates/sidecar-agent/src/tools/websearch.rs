@@ -177,10 +177,11 @@ impl Tool for WebSearchTool {
             .filter_map(|v| v.as_str().map(|s| s.to_lowercase()))
             .collect();
 
-        // Use the provider's API for web search.
-        // Claude Code pattern: the web_search tool delegates to the LLM API,
-        // which handles the actual search server-side.
+        // ── Phase 1: Call provider API for search ──
+        // Claude Code pattern: the web_search tool delegates to the LLM API.
+        // We send a minimal request — no excess context, just the query.
         let provider = &ctx.provider_config;
+        let start = std::time::Instant::now();
 
         // Build domain constraints into the query if present
         let mut search_query = query.to_string();
@@ -197,21 +198,20 @@ impl Tool for WebSearchTool {
                 .build()
                 .map_err(|e| format!("Failed to build client: {}", e))?;
 
-            // Provider-native search: send a focused request. The provider's
-            // built-in web search (enable_search for DeepSeek, tool_choice for
-            // others) will handle the actual search server-side.
+            // Minimal context: system prompt only says "search and list results".
+            // No user conversation history, no tool outputs, no extra context.
             let request_body = &SearchRequest {
                 model: provider.model.clone(),
                 messages: vec![
                     SearchMessage {
                         role: "system".to_string(),
-                        content: format!(
-                            "You are a web search assistant. Search for the following query \
-                             and return the top results as a list. For each result include \
-                             the title and URL. Do not add commentary.\n\
-                             Query: {}",
-                            search_query
-                        ),
+                        content: "You are a web search assistant. Search the query and list \
+                                  each result on a new line as: \"- Title URL\". \
+                                  Do not add any commentary, introduction, or summary.".to_string(),
+                    },
+                    SearchMessage {
+                        role: "user".to_string(),
+                        content: search_query.clone(),
                     },
                 ],
                 stream: false,
@@ -255,22 +255,48 @@ impl Tool for WebSearchTool {
             }
         };
 
+        let duration_ms = start.elapsed().as_millis() as u64;
+
         let content = match search_result {
             Ok(c) => c,
             Err(e) => {
-                // Fallback: if provider search failed, try DuckDuckGo Lite
                 return self.fallback_ddg(query, &allowed_domains, &blocked_domains, &e);
             }
         };
 
-        // Parse search results from the provider's response
+        // ── Phase 2: Parse and format results ──
+        // Matches Claude Code's mapToolResultToToolResultBlockParam:
+        // results → formatted output → REMINDER about citing sources.
         let results = extract_search_results(&content);
 
+        // Build the tool result message that the LLM will see.
+        // Claude Code format: "Web search results for query: \"...\"\n\nLinks: [...]"
+        // + REMINDER: "You MUST include the sources above..."
+        let mut formatted = format!("Web search results for query: \"{}\"\n\n", query);
+        if results.is_empty() {
+            formatted.push_str("No results found.\n");
+        } else {
+            formatted.push_str(&format!("Found {} results:\n\n", results.len()));
+            for (i, r) in results.iter().enumerate() {
+                let title = r["title"].as_str().unwrap_or("");
+                let url = r["url"].as_str().unwrap_or("");
+                formatted.push_str(&format!("{}. {} — {}\n", i + 1, title, url));
+            }
+        }
+
+        formatted.push_str(
+            "\nREMINDER: You MUST cite the sources above in your response to the \
+             user using markdown hyperlinks, e.g. [Source Title](URL)."
+        );
+
+        // Return BOTH structured results AND the formatted message with REMINDER.
+        // `build_tool_success_result` wraps this in {result: ...}, so the LLM sees
+        // the "message" field as plain text + "results" as structured data.
         ToolResult::success(serde_json::json!({
+            "message": formatted,
             "query": query,
             "results": results,
-            "provider": provider.model,
-            "raw_text": content
+            "duration_ms": duration_ms
         }))
     }
 }
@@ -384,10 +410,26 @@ impl WebSearchTool {
             if results.len() >= 8 { break; }
         }
 
+        let mut formatted = format!("Web search results for query: \"{}\"\n\n", query);
+        if results.is_empty() {
+            formatted.push_str("No results found.\n");
+        } else {
+            formatted.push_str(&format!("Found {} results:\n\n", results.len()));
+            for (i, r) in results.iter().enumerate() {
+                let title = r["title"].as_str().unwrap_or("");
+                let url = r["url"].as_str().unwrap_or("");
+                formatted.push_str(&format!("{}. {} — {}\n", i + 1, title, url));
+            }
+        }
+        formatted.push_str(
+            "\nREMINDER: You MUST cite the sources above in your response to the \
+             user using markdown hyperlinks, e.g. [Source Title](URL)."
+        );
+
         ToolResult::success(serde_json::json!({
+            "message": formatted,
             "query": query,
             "results": results,
-            "provider": "duckduckgo_lite_fallback",
             "note": format!("Provider search unavailable: {}", provider_error)
         }))
     }
