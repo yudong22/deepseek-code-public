@@ -349,6 +349,18 @@ if (isDryRun) {
 console.log("");
 console.log(formatStep(`准备提交版本文件并发布 v${newVersion}...`));
 
+// ─── Lint gate：lint 不通过则直接退出，避免发布有问题的版本 ──
+console.log("");
+console.log(formatCommandHeader("Bash", "bun run lint"));
+console.log(formatCommandSubHeader("lint"));
+try {
+  execSync("bun run lint", { encoding: "utf-8", cwd: rootDir, stdio: "inherit" });
+} catch (err) {
+  console.error("");
+  console.error(formatResult("❌ lint 失败，发布已中止。请先修复 lint 错误再重试。"));
+  process.exit(1);
+}
+
 // 只 stage 已更新的版本文件 + changelog
 const stagedPaths = files.map(f => f.path).concat([".changelog.md"]);
 for (const p of stagedPaths) {

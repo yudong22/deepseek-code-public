@@ -3,8 +3,16 @@ import { Streamdown, CodeBlockCopyButton, CodeBlockDownloadButton } from "stream
 import Mermaid from "@/components/Mermaid";
 import { FileCode } from "@/components/Icons";
 
-/** 预览文件回调：点击 file:// 链接时调用，更新右侧面板而非弹系统选择器 */
-type PreviewFile = (relativePath: string) => void;
+/** 点击 markdown 中本地文件链接时调用，转交给右侧面板预览。
+ *  - linkPath: 链接的目标相对路径（相对当前文件，可能含 ../）
+ *  - sourceFilePath: 当前 markdown 所属文件的 workspace 相对路径 */
+type PreviewFile = (linkPath: string, sourceFilePath?: string) => void;
+
+const EXTERNAL_LINK = /^(https?:|mailto:|tel:|#)/i;
+/** 看起来像本地文件链接（绝对或相对、含扩展名） */
+const LOCAL_FILE = /\.[a-z0-9]{1,8}($|[#?])/i;
+/** 提取 file:// 协议里的实际路径 */
+const FILE_URL_PREFIX = /^file:\/\//;
 
 const ReactIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3964fe" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 align-middle">
@@ -15,8 +23,35 @@ const ReactIcon = () => (
   </svg>
 );
 
+/** 把任意形式的本地文件链接规整成 linkPath（相对当前文件，可能含 ../）。
+ *  - file://ROADMAP.md → ROADMAP.md
+ *  - /ROADMAP.md → ROADMAP.md
+ *  - ROADMAP.md / ./ROADMAP.md → 原样
+ *  - 外部链接（http / https / mailto / tel / 锚点）→ null，不处理 */
+function toLinkPath(href: string | undefined): string | null {
+  if (!href) return null;
+  if (FILE_URL_PREFIX.test(href)) return href.replace(FILE_URL_PREFIX, "");
+  if (EXTERNAL_LINK.test(href)) return null;
+  if (!LOCAL_FILE.test(href)) return null;
+  return href.startsWith("/") ? href.slice(1) : href;
+}
 
-const buildComponents = (onPreviewFile?: PreviewFile) => ({
+/** 创建点击 handler：阻止默认行为 + 调 onPreviewFile */
+function makeFileClickHandler(
+  href: string,
+  linkPath: string,
+  onPreviewFile: PreviewFile | undefined,
+  sourceFilePath: string | undefined,
+) {
+  return (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onPreviewFile?.(linkPath, sourceFilePath);
+    void href; // 保留原 href 给调试用
+  };
+}
+
+const buildComponents = (onPreviewFile?: PreviewFile, sourceFilePath?: string) => ({
   h1: ({ children }: any) => (
     <h1 className="text-2xl font-bold tracking-tight mt-6 mb-4 text-zinc-900 dark:text-zinc-100 leading-tight">
       {children}
@@ -47,15 +82,11 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
       {children}
     </h6>
   ),
-  pre: ({ children }: any) => {
-    // streamdown 内置 CodeBlock 已包含复制按钮 + 高亮，直接透传
-    // 但需要包裹在 group 中以便外部样式控制
-    return (
-      <div className="group relative my-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-[#f5f5f7] dark:bg-surface-primary overflow-x-auto max-w-full">
-        {children}
-      </div>
-    );
-  },
+  pre: ({ children }: any) => (
+    <div className="group relative my-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-[#f5f5f7] dark:bg-surface-primary overflow-x-auto max-w-full">
+      {children}
+    </div>
+  ),
   ul: ({ children }: any) => (
     <ul className="my-2 pl-5 list-disc text-zinc-800 dark:text-zinc-200 text-[13px] leading-relaxed">
       {children}
@@ -72,43 +103,37 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
     </p>
   ),
   a: ({ href, children }: any) => {
-    if (href?.startsWith("file://")) {
-      const title = children ? String(children) : (href.split("/").pop() || "");
-      const isReactFile = title.endsWith(".tsx") || title.endsWith(".jsx") || title.endsWith(".ts") || title.endsWith(".js");
-      // 去掉 file:// 前缀得到相对路径
-      const relativePath = href.replace(/^file:\/\//, "");
-      const handleClick = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (onPreviewFile) {
-          onPreviewFile(relativePath);
-        }
-      };
-      return (
-        <a
-          href={href}
-          onClick={handleClick}
-          className="inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-surface-secondary hover:bg-surface-hover px-1 rounded-sm border border-zinc-200 dark:border-zinc-800 cursor-pointer"
-        >
-          {isReactFile ? <ReactIcon /> : <span className="text-brand-blue dark:text-deepseek-400 inline-flex items-center"><FileCode /></span>}
-          <span className="no-underline">{title}</span>
-        </a>
-      );
+    const linkPath = toLinkPath(href);
+    if (!linkPath) {
+      return <a href={href} className="text-brand-blue hover:underline">{children}</a>;
     }
-    return <a href={href} className="text-brand-blue hover:underline">{children}</a>;
+    // file:// 协议链接（用户主动写的引用）展示 file 风格 UI，其他本地文件保持普通链接样式
+    const isFileUrl = FILE_URL_PREFIX.test(href || "");
+    const title = children ? String(children) : (linkPath.split("/").pop() || "");
+    const isReactFile = /\.(tsx|jsx|ts|js)$/i.test(title);
+    return (
+      <a
+        href="javascript:void(0)"
+        data-file-href={href}
+        onClick={makeFileClickHandler(href, linkPath, onPreviewFile, sourceFilePath)}
+        className={
+          isFileUrl
+            ? "inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-surface-secondary hover:bg-surface-hover px-1 rounded-sm border border-zinc-200 dark:border-zinc-800 cursor-pointer"
+            : "text-brand-blue hover:underline cursor-pointer"
+        }
+      >
+        {isFileUrl && (isReactFile ? <ReactIcon /> : <span className="text-brand-blue dark:text-deepseek-400 inline-flex items-center"><FileCode /></span>)}
+        <span className={isFileUrl ? "no-underline" : ""}>{title}</span>
+      </a>
+    );
   },
   code: ({ className, children }: any) => {
     const match = /language-(\w+)/.exec(className || "");
     const lang = match ? match[1] : "";
-    if (lang === "mermaid") {
-      return <Mermaid chart={String(children).trim()} />;
-    }
-    // block code（有 language-xxx class）：返回 undefined 让 streamdown 走内置 shiki 渲染
-    const isBlock = !!lang || String(children).includes("\n");
-    if (isBlock) {
-      return undefined;
-    }
-    // inline code：用自定义样式
+    if (lang === "mermaid") return <Mermaid chart={String(children).trim()} />;
+    // block code：返回 undefined 让 streamdown 走内置 shiki 渲染
+    if (lang || String(children).includes("\n")) return undefined;
+    // inline code：自定义样式
     return (
       <code className={`${className || ""} bg-deepseek-50 dark:bg-deepseek-900/30 px-1 py-0.5 rounded-sm font-mono text-[11px] border border-deepseek-200/60 dark:border-deepseek-800/80 text-deepseek-500 dark:text-deepseek-300 break-all`}>
         {children}
@@ -123,9 +148,7 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
   hr: () => null,
   table: ({ children }: any) => (
     <div className="overflow-x-auto my-3 border border-zinc-200 dark:border-zinc-800 rounded-md">
-      <table className="w-full text-left border-collapse text-sm">
-        {children}
-      </table>
+      <table className="w-full text-left border-collapse text-sm">{children}</table>
     </div>
   ),
   thead: ({ children }: any) => (
@@ -147,16 +170,35 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
     <tr className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 odd:bg-white even:bg-zinc-50/20 dark:odd:bg-transparent dark:even:bg-zinc-800/10">
       {children}
     </tr>
-  )
+  ),
 });
 
-export function renderMarkdown(text: string, isAnimating: boolean = false, onPreviewFile?: PreviewFile) {
+export function renderMarkdown(
+  text: string,
+  isAnimating: boolean = false,
+  onPreviewFile?: PreviewFile,
+  /** 当前 markdown 所属文件的 workspace 相对路径，用于解析链接 */
+  sourceFilePath?: string,
+) {
+  // 兜底 onClick：捕获 streamdown 没用自定义 a 组件时漏掉的本地文件链接
+  const handleWrapperClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+    const anchor = target.closest("a") as HTMLAnchorElement | null;
+    if (!anchor) return;
+    const realHref = anchor.getAttribute("data-file-href") || anchor.getAttribute("href") || "";
+    const linkPath = toLinkPath(realHref);
+    if (!linkPath) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onPreviewFile?.(linkPath, sourceFilePath);
+  };
   return (
-    <div className="min-w-0 w-full overflow-hidden">
+    <div className="min-w-0 w-full overflow-hidden" onClick={handleWrapperClick}>
       <Streamdown
         isAnimating={isAnimating}
         caret="block"
-        components={buildComponents(onPreviewFile)}
+        components={buildComponents(onPreviewFile, sourceFilePath)}
         shikiTheme={["github-light", "github-dark"]}
       >
         {text}
@@ -166,32 +208,24 @@ export function renderMarkdown(text: string, isAnimating: boolean = false, onPre
 }
 
 /**
- * 用 SDCodeBlock (streamdown shiki) 渲染代码，供面板源码预览使用。
- * 外层需包裹 .sd-panel-code 类（定义在 App.css），以去掉 CodeBlock 自带的
- * 边框、内边距、滚动条和语言标头，使其无缝填充面板。
+ * 用 streamdown shiki 渲染代码，供面板源码预览使用。
+ * 外层需包裹 .sd-panel-code 类（定义在 App.css），去掉 CodeBlock 自带 chrome。
  *
- * 注意：必须用 Streamdown 包裹代码块，这样才能让 Shiki 语法高亮插件
- * （通过 Ve.Provider 注入的 code highlighter）被 CodeBlock 内部的
- * HighlightedCodeBlockBody 获取到。直接使用 CodeBlock 组件会导致
- * 插件上下文缺失，退化为纯文本。
+ * 必须用 Streamdown 包裹 CodeBlock：Shiki 的 code highlighter 通过
+ * Ve.Provider 注入，CodeBlock 内部 HighlightedCodeBlockBody 依赖该上下文。
+ * 直接使用 CodeBlock 组件会导致插件上下文缺失，退化为纯文本。
  */
 export function renderCodeBlock(content: string, language: string) {
-  // 处理代码内容中可能包含 ``` 的情况，用更多的反引号作为 fence
+  // 内容可能含 ```，用更多反引号作为 fence 避免冲突
   let fence = "```";
   const backtickRun = content.match(/`+/g);
   if (backtickRun) {
     const maxLen = Math.max(...backtickRun.map((m) => m.length));
     fence = "`".repeat(Math.max(3, maxLen + 1));
   }
-  const markdownSource = `${fence}${language}\n${content}\n${fence}`;
-
   return (
-    <Streamdown
-      mode="static"
-      shikiTheme={["github-light", "github-dark"]}
-      isAnimating={false}
-    >
-      {markdownSource}
+    <Streamdown mode="static" shikiTheme={["github-light", "github-dark"]} isAnimating={false}>
+      {`${fence}${language}\n${content}\n${fence}`}
     </Streamdown>
   );
 }
@@ -212,13 +246,12 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
     } else if (part.startsWith("[") && part.includes("](file://")) {
       const linkMatch = part.match(/\[(.*?)\]\((file:\/\/.*?)\)/);
       if (linkMatch) {
-        const title = linkMatch[1];
-        const path = linkMatch[2];
-        const isReactFile = title.endsWith(".tsx") || title.endsWith(".jsx") || title.endsWith(".ts") || title.endsWith(".js");
+        const [, title, path] = linkMatch;
+        const isReactFile = /\.(tsx|jsx|ts|js)$/i.test(title);
         parts.push(
-          <a 
-            key={index} 
-            href={path} 
+          <a
+            key={index}
+            href={path}
             className="inline-flex items-center gap-1 mx-0.5 text-inherit no-underline font-mono font-semibold align-middle bg-surface-secondary hover:bg-surface-hover px-1 rounded-sm border border-zinc-200 dark:border-zinc-800"
           >
             {isReactFile ? <ReactIcon /> : <span className="text-brand-blue dark:text-deepseek-400 inline-flex items-center"><FileCode /></span>}

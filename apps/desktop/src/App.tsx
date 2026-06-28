@@ -66,6 +66,8 @@ function MainDashboard() {
   const aguiAdapterRef = useRef<AGUIEventAdapter | null>(null);
   /** Debounced 保存 streaming assistant message 的 timer */
   const saveDraftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 确保 init()（initDb + checkForUpdates）只执行一次，防止 StrictMode 双调用或 effect 重跑 */
+  const initRanRef = useRef(false);
   /** Ref to hold latest streaming state vars (avoid stale closures in visibility handler) */
   const streamStateRef = useRef<{
     assistantMsgId: string; currentContent: string; currentThinking: string;
@@ -215,6 +217,8 @@ function MainDashboard() {
   // --- 初始化：加载数据库、会话、API Key、工作区路径 ---
   useEffect(() => {
     async function init() {
+      if (initRanRef.current) return;
+      initRanRef.current = true;
       try {
         await bridge.initDb();
         await loadSessions();

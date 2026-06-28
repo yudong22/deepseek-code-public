@@ -8,6 +8,7 @@ interface Tab {
   type: string;
   content: string;
   language?: string;
+  sourcePath?: string;
 }
 
 interface RightPanelProps {
@@ -19,7 +20,7 @@ interface RightPanelProps {
   onWidthChange: (w: number) => void;
   isNightMode: boolean;
   /** 点击 markdown 中 file:// 链接时调用（递归预览） */
-  onPreviewFile?: (relativePath: string) => void;
+  onPreviewFile?: (linkPath: string, sourceFilePath?: string) => void;
 }
 
 const MIN_WIDTH = 240;
@@ -104,7 +105,7 @@ export default function RightPanel({
         <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
         {rightPanelMarkdownContent ? (
           <div className="p-5 text-zinc-800 dark:text-label-primary leading-relaxed overflow-y-auto h-full box-border">
-            {renderMarkdown(rightPanelMarkdownContent, false, onPreviewFile)}
+            {renderMarkdown(rightPanelMarkdownContent, false, onPreviewFile, activeTab.sourcePath)}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 text-zinc-400 dark:text-zinc-500 text-xs text-center h-full">
@@ -237,7 +238,7 @@ function MarkdownPanel({
   activeTab: Tab;
   width: number;
   handleMouseDown: (e: React.MouseEvent) => void;
-  onPreviewFile?: (file: any) => void;
+  onPreviewFile?: (linkPath: string, sourceFilePath?: string) => void;
 }) {
   const [activeInnerTab, setActiveInnerTab] = useState<"preview" | "source">("preview");
 
@@ -302,7 +303,7 @@ function MarkdownPanel({
           </div>
         ) : (
           <div className="p-5 text-zinc-800 dark:text-label-primary leading-relaxed overflow-y-auto flex-1">
-            {renderMarkdown(activeTab.content, false, onPreviewFile)}
+            {renderMarkdown(activeTab.content, false, onPreviewFile, activeTab.sourcePath)}
           </div>
         )}
       </div>
