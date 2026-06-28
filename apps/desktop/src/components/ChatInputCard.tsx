@@ -2,6 +2,14 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import * as Icons from "@/components/Icons";
 import FileAutocomplete from "@/components/FileAutocomplete";
 import SlashAutocomplete, { filterSlashCommands } from "@/components/SlashAutocomplete";
+import { fileBaseName } from "./toolUtils";
+
+/** @ 引用文件 chip 数据 */
+interface AttachedFile {
+  fullPath: string;
+  name: string;
+  icon: string;
+}
 
 interface ChatInputCardProps {
   inputText: string;
@@ -11,16 +19,82 @@ interface ChatInputCardProps {
   hasPendingQuestion?: boolean;
   planMode?: boolean;
   onInputChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (attachedFiles?: string[]) => void;
   onCancel?: () => void;
   onToggleModelDropdown: () => void;
   onSelectModel: (model: string) => void;
-  /** 当前工作区路径 */
   workspacePath?: string;
-  /** 列出工作区文件 */
   onListFiles?: () => Promise<string[]>;
-  /** 在右侧面板预览文件 */
   onPreviewFile?: (relativePath: string) => void;
+}
+
+/** 根据文件扩展名返回图标 */
+function getFileIcon(file: string): string {
+  if (file.endsWith(".tsx") || file.endsWith(".ts")) return "📘";
+  if (file.endsWith(".jsx") || file.endsWith(".js")) return "📒";
+  if (file.endsWith(".rs")) return "🦀";
+  if (file.endsWith(".md")) return "📝";
+  if (file.endsWith(".json")) return "📋";
+  if (file.endsWith(".css")) return "🎨";
+  if (file.endsWith(".html")) return "🌐";
+  if (file.endsWith(".toml") || file.endsWith(".yaml") || file.endsWith(".yml")) return "⚙️";
+  if (file.endsWith(".py")) return "🐍";
+  if (file.endsWith(".go")) return "🔷";
+  if (file.endsWith(".sql")) return "🗃️";
+  if (file.endsWith(".sh") || file.endsWith(".bash")) return "💻";
+  if (file.endsWith(".svg") || file.endsWith(".png") || file.endsWith(".jpg") || file.endsWith(".jpeg")) return "🖼️";
+  return "📄";
+}
+
+/** data 属性名，用于标识 chip 节点 */
+const CHIP_DATA_PATH = "data-file-path";
+const CHIP_DATA_NAME = "data-file-name";
+const CHIP_DATA_ICON = "data-file-icon";
+const CHIP_CLASS = "inline-file-chip";
+
+/** 创建 chip DOM 节点 */
+function createChipElement(file: AttachedFile): HTMLSpanElement {
+  const chip = document.createElement("span");
+  chip.className = CHIP_CLASS;
+  chip.setAttribute(CHIP_DATA_PATH, file.fullPath);
+  chip.setAttribute(CHIP_DATA_NAME, file.name);
+  chip.setAttribute(CHIP_DATA_ICON, file.icon);
+  chip.contentEditable = "false";
+  chip.style.cssText =
+    "display:inline-flex;align-items:center;gap:3px;padding:1px 7px;" +
+    "background:var(--dsw-static-deepseek-100,#e4edfd);border:1px solid var(--dsw-static-deepseek-200,#d3e2ff);" +
+    "border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;" +
+    "color:var(--dsw-static-deepseek-700,#2f4c8f);vertical-align:baseline;" +
+    "margin:0 1px;transition:background 0.15s,border-color 0.15s;";
+  chip.title = file.fullPath;
+  chip.innerHTML = `<span style="font-size:12px;line-height:1">${file.icon}</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</span>`;
+  return chip;
+}
+
+/** 从 contenteditable 提取纯文本和 @file 引用 */
+function extractContent(el: HTMLElement): { text: string; files: string[] } {
+  const files: string[] = [];
+  const textParts: string[] = [];
+  const seen = new Set<string>();
+
+  for (const node of Array.from(el.childNodes)) {
+    if (
+      node instanceof HTMLSpanElement &&
+      node.classList.contains(CHIP_CLASS)
+    ) {
+      const path = node.getAttribute(CHIP_DATA_PATH) || "";
+      if (path && !seen.has(path)) {
+        files.push(path);
+        seen.add(path);
+      }
+      textParts.push(`@file://${path}`);
+    } else if (node instanceof HTMLBRElement) {
+      textParts.push("\n");
+    } else {
+      textParts.push(node.textContent || "");
+    }
+  }
+  return { text: textParts.join(""), files };
 }
 
 export default function ChatInputCard({
@@ -39,13 +113,19 @@ export default function ChatInputCard({
   onListFiles,
   onPreviewFile,
 }: ChatInputCardProps) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  // 跟踪是否由程序同步（避免循环）
+  const syncingRef = useRef(false);
 
   // --- @ 文件自动补全状态 ---
   const [allWorkspaceFiles, setAllWorkspaceFiles] = useState<string[]>([]);
   const [filesForAutocomplete, setFilesForAutocomplete] = useState<string[]>([]);
   const [showFileAutocomplete, setShowFileAutocomplete] = useState(false);
   const [fileAutocompleteSelected, setFileAutocompleteSelected] = useState(0);
+
+  // @ 触发检测所需：保存 @query 的 DOM Range 引用（失焦后仍有效）
+  const atQueryRef = useRef<{ start: number; query: string; node: Text } | null>(null);
+  const savedRangeRef = useRef<Range | null>(null);
 
   // 加载工作区文件列表
   useEffect(() => {
@@ -60,7 +140,7 @@ export default function ChatInputCard({
   const [slashQuery, setSlashQuery] = useState("");
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
 
-  // 检测 / 触发（只有输入以 / 开头且在行首输入时才激活）
+  // 检测 / 触发
   useEffect(() => {
     if (inputText.startsWith("/")) {
       const query = inputText.slice(1).toLowerCase();
@@ -77,208 +157,331 @@ export default function ChatInputCard({
   // 选中 slash 命令
   const selectSlashCommand = useCallback(
     (cmd: { name: string; aliases: string[]; description: string; icon: string }) => {
+      syncingRef.current = true;
       onInputChange("/" + cmd.name + " ");
       setShowSlashAutocomplete(false);
-      if (textareaRef.current) {
-        textareaRef.current.focus();
+      // 还原编辑器内容
+      if (editorRef.current) {
+        editorRef.current.textContent = "/" + cmd.name + " ";
+        const range = document.createRange();
+        range.selectNodeContents(editorRef.current);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+        editorRef.current.focus();
       }
+      syncingRef.current = false;
     },
     [onInputChange]
   );
 
-  // 检测 @ 触发并过滤文件
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+  // 从编辑器中光标前找 @query
+  const getAtQuery = useCallback((): { query: string; startNode: Text; startOffset: number } | null => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+    if (range.startContainer.nodeType !== Node.TEXT_NODE) return null;
+    const text = range.startContainer.textContent || "";
+    const cursorPos = range.startOffset;
+    const textBefore = text.slice(0, cursorPos);
+    const atIdx = textBefore.lastIndexOf("@");
+    if (atIdx === -1) return null;
+    const charBefore = atIdx > 0 ? textBefore[atIdx - 1] : " ";
+    if (charBefore !== " " && atIdx !== 0) return null;
+    const q = textBefore.slice(atIdx + 1);
+    if (q.includes(" ") || q.includes("\n")) return null;
+    return { query: q, startNode: range.startContainer as Text, startOffset: atIdx };
+  }, []);
 
-    const cursorPos = textarea.selectionStart;
-    const textBeforeCursor = inputText.slice(0, cursorPos);
+  // 输入事件同步到父组件 + 检测 @ 触发
+  const handleInput = useCallback(() => {
+    const el = editorRef.current;
+    if (!el || syncingRef.current) return;
+    const { text } = extractContent(el);
+    onInputChange(text);
 
-    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
-    const charBefore = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : " ";
-    const isValidTrigger =
-      lastAtIndex >= 0 &&
-      (charBefore === " " || lastAtIndex === 0);
-
-    if (isValidTrigger) {
-      const query = textBeforeCursor.slice(lastAtIndex + 1).toLowerCase();
+    const atQ = getAtQuery();
+    if (atQ) {
+      atQueryRef.current = { start: atQ.startOffset, query: atQ.query, node: atQ.startNode };
+      // 保存当前 Range 以便失焦后恢复
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      }
       const filtered = allWorkspaceFiles.filter((f) =>
-        f.toLowerCase().includes(query)
+        f.toLowerCase().includes(atQ.query.toLowerCase())
       );
       setFilesForAutocomplete(filtered.slice(0, 20));
       setFileAutocompleteSelected(0);
       setShowFileAutocomplete(filtered.length > 0);
     } else {
       setShowFileAutocomplete(false);
+      atQueryRef.current = null;
     }
-  }, [inputText, allWorkspaceFiles]);
+  }, [onInputChange, allWorkspaceFiles, getAtQuery]);
 
-  // 选中自动补全文件
+  // 选中自动补全文件 → 在保存的 Range 位置插入 chip
   const selectAutocompleteFile = useCallback(
     (filePath: string) => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
+      const el = editorRef.current;
+      if (!el) return;
 
-      const cursorPos = textarea.selectionStart;
-      const textBeforeCursor = inputText.slice(0, cursorPos);
-      const lastAtIndex = textBeforeCursor.lastIndexOf("@");
+      const atQ = atQueryRef.current;
+      if (!atQ) return;
 
-      const newText =
-        inputText.slice(0, lastAtIndex) +
-        "@" +
-        filePath +
-        " " +
-        inputText.slice(cursorPos);
+      // 恢复光标位置
+      el.focus();
+      const sel = window.getSelection();
+      if (!sel) return;
 
-      onInputChange(newText);
+      const textNode = atQ.node;
+      if (!textNode || !textNode.parentNode || !el.contains(textNode)) {
+        // textNode 已失效，回退到直接追加
+        const chip = createChipElement({ fullPath: filePath, name: fileBaseName(filePath), icon: getFileIcon(filePath) });
+        el.appendChild(chip);
+        el.appendChild(document.createTextNode(" "));
+      } else {
+        const origText = textNode.textContent || "";
+        const chip = createChipElement({
+          fullPath: filePath,
+          name: fileBaseName(filePath),
+          icon: getFileIcon(filePath),
+        });
+
+        // 用保存的 range 获取光标偏移，否则用 textNode 末尾
+        const cursorOffset = savedRangeRef.current
+          ? (savedRangeRef.current.startContainer === textNode ? savedRangeRef.current.startOffset : origText.length)
+          : origText.length;
+
+        const before = origText.slice(0, atQ.start);
+        const after = origText.slice(cursorOffset);
+
+        const parent = textNode.parentNode;
+
+        if (before) {
+          const beforeNode = document.createTextNode(before);
+          parent.insertBefore(beforeNode, textNode);
+        }
+        parent.insertBefore(chip, textNode);
+
+        // chip 后插入空格 + 原光标后文本（确保 chip 后总有空格分隔）
+        // 使用   防止 contenteditable 吞掉尾部空格
+        const afterText = after.startsWith(" ") ? after : " " + after;
+        const afterNode = document.createTextNode(afterText);
+        parent.insertBefore(afterNode, textNode);
+        parent.removeChild(textNode);
+
+        const newRange = document.createRange();
+        // 光标放在空格之后（position 1）或 after 开头已有空格时 position 0
+        const cursorPos = after.startsWith(" ") ? 0 : 1;
+        newRange.setStart(afterNode, cursorPos);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
+
       setShowFileAutocomplete(false);
+      atQueryRef.current = null;
+      savedRangeRef.current = null;
 
       if (onPreviewFile) {
         onPreviewFile(filePath);
       }
 
-      setTimeout(() => {
-        if (textareaRef.current) {
-          const newCursorPos = lastAtIndex + filePath.length + 2;
-          textareaRef.current.focus();
-          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-        }
-      }, 0);
+      const { text } = extractContent(el);
+      syncingRef.current = true;
+      onInputChange(text);
+      syncingRef.current = false;
     },
-    [inputText, onInputChange, onPreviewFile]
+    [onInputChange, onPreviewFile]
   );
 
-  // Auto-resize height based on text content
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${textarea.scrollHeight}px`;
-    }
-  }, [inputText]);
+  // 键盘事件
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (showSlashAutocomplete && !showFileAutocomplete) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setSlashSelectedIndex((prev) => Math.min(prev + 1, slashCommands.length - 1));
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setSlashSelectedIndex((prev) => Math.max(prev - 1, 0));
+          return;
+        }
+        if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+          e.preventDefault();
+          const selected = slashCommands[slashSelectedIndex];
+          if (selected) selectSlashCommand(selected);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setShowSlashAutocomplete(false);
+          return;
+        }
+      }
+
+      if (showFileAutocomplete) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setFileAutocompleteSelected((prev) => Math.min(prev + 1, filesForAutocomplete.length - 1));
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setFileAutocompleteSelected((prev) => Math.max(prev - 1, 0));
+          return;
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          const selected = filesForAutocomplete[fileAutocompleteSelected];
+          if (selected) selectAutocompleteFile(selected);
+          return;
+        }
+        if (e.key === "Tab") {
+          e.preventDefault();
+          const selected = filesForAutocomplete[fileAutocompleteSelected];
+          if (selected) selectAutocompleteFile(selected);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setShowFileAutocomplete(false);
+          return;
+        }
+      }
+
+      if (e.key === "Escape" && isGenerating && onCancel) {
+        onCancel();
+        return;
+      }
+
+      // Backspace：光标紧邻 chip 前方时删除该 chip
+      if (e.key === "Backspace") {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          if (
+            range.startContainer.nodeType === Node.TEXT_NODE &&
+            range.startOffset === 0
+          ) {
+            // 光标在 text 节点开头，检查前一个兄弟是否是 chip
+            const prev = range.startContainer.previousSibling;
+            if (
+              prev instanceof HTMLSpanElement &&
+              prev.classList.contains(CHIP_CLASS)
+            ) {
+              e.preventDefault();
+              prev.remove();
+              // 同步
+              const el = editorRef.current;
+              if (el) {
+                const { text } = extractContent(el);
+                syncingRef.current = true;
+                onInputChange(text);
+                syncingRef.current = false;
+              }
+              return;
+            }
+          }
+        }
+      }
+
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const el = editorRef.current;
+        if (!el) return;
+        const { text, files } = extractContent(el);
+        onSend(files.length > 0 ? files : undefined);
+        syncingRef.current = true;
+        onInputChange("");
+        el.innerHTML = "";
+        syncingRef.current = false;
+      }
+    },
+    [showSlashAutocomplete, showFileAutocomplete, slashCommands, slashSelectedIndex, filesForAutocomplete, fileAutocompleteSelected, isGenerating, onCancel, onInputChange, onSend, selectSlashCommand, selectAutocompleteFile]
+  );
+
+  // 处理点击 chip
+  const handleEditorClick = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // 检查是否点击了 chip 或 chip 内部
+      const chip = target.closest(`.${CHIP_CLASS}`) as HTMLElement | null;
+      if (chip) {
+        const path = chip.getAttribute(CHIP_DATA_PATH);
+        if (path && onPreviewFile) {
+          e.preventDefault();
+          onPreviewFile(path);
+        }
+      }
+    },
+    [onPreviewFile]
+  );
 
   const handlePlusClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const appendText = inputText.length === 0 || inputText.endsWith(" ") ? "@" : " @";
-    onInputChange(inputText + appendText);
-    if (textareaRef.current) {
-      textareaRef.current.focus();
+    const el = editorRef.current;
+    const { text } = el ? extractContent(el) : { text: inputText };
+    const appendText = text.length === 0 || text.endsWith(" ") ? "@" : " @";
+    syncingRef.current = true;
+    onInputChange(text + appendText);
+    if (el) {
+      el.focus();
+      // 在末尾插入 @
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      document.execCommand("insertText", false, appendText);
     }
+    syncingRef.current = false;
   };
 
-  // 点击 textarea 中的 @文件名 → 预览文件
-  const handleTextareaClick = useCallback(() => {
-    setTimeout(() => {
-      const textarea = textareaRef.current;
-      if (!textarea || !onPreviewFile) return;
-
-      const pos = textarea.selectionStart;
-      const text = textarea.value;
-
-      const atIdx = text.lastIndexOf("@", pos);
-      if (atIdx === -1) return;
-
-      if (atIdx > 0 && text[atIdx - 1] !== " ") return;
-
-      let wordEnd = atIdx + 1;
-      while (wordEnd < text.length && text[wordEnd] !== " " && text[wordEnd] !== "\n") {
-        wordEnd++;
+  // 同步 inputText → contenteditable（仅外部变化时）
+  useEffect(() => {
+    if (syncingRef.current) return;
+    const el = editorRef.current;
+    if (!el) return;
+    // 只在内容确实不同时更新（避免光标跳动）
+    const { text } = extractContent(el);
+    if (text !== inputText) {
+      syncingRef.current = true;
+      // 保持简单：如果 inputText 为空则清空
+      if (!inputText) {
+        el.innerHTML = "";
       }
-
-      if (pos <= atIdx || pos > wordEnd) return;
-
-      const filePath = text.slice(atIdx + 1, wordEnd);
-      if (filePath && (filePath.includes(".") || filePath.includes("/"))) {
-        onPreviewFile(filePath);
-      }
-    }, 0);
-  }, [onPreviewFile]);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showSlashAutocomplete && !showFileAutocomplete) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSlashSelectedIndex((prev) => Math.min(prev + 1, slashCommands.length - 1));
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSlashSelectedIndex((prev) => Math.max(prev - 1, 0));
-        return;
-      }
-      if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
-        e.preventDefault();
-        const selected = slashCommands[slashSelectedIndex];
-        if (selected) {
-          selectSlashCommand(selected);
-        }
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setShowSlashAutocomplete(false);
-        return;
-      }
+      // 其他情况不主动覆盖（避免打断用户输入）
+      syncingRef.current = false;
     }
+  }, [inputText]);
 
-    if (showFileAutocomplete) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setFileAutocompleteSelected((prev) =>
-          Math.min(prev + 1, filesForAutocomplete.length - 1)
-        );
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setFileAutocompleteSelected((prev) => Math.max(prev - 1, 0));
-        return;
-      }
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        const selected = filesForAutocomplete[fileAutocompleteSelected];
-        if (selected) {
-          selectAutocompleteFile(selected);
-        }
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setShowFileAutocomplete(false);
-        return;
-      }
-      if (e.key === "Tab") {
-        e.preventDefault();
-        const selected = filesForAutocomplete[fileAutocompleteSelected];
-        if (selected) {
-          selectAutocompleteFile(selected);
-        }
-        return;
-      }
+  // Auto-resize
+  useEffect(() => {
+    const el = editorRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
     }
-
-    if (e.key === "Escape" && isGenerating && onCancel) {
-      onCancel();
-      return;
-    }
-
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      onSend();
-    }
-  };
+  }, [inputText]);
 
   return (
     <div className="relative flex flex-col bg-white dark:bg-[#2c2c2e] border border-zinc-200 dark:border-zinc-700 rounded-xl w-full transition-all duration-200 shadow-sm focus-within:border-zinc-400 dark:focus-within:border-zinc-500">
-      <textarea
-        ref={textareaRef}
-        className="w-full bg-transparent border-0 outline-none text-[13px] text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-500 resize-none max-h-48 overflow-y-auto px-4 pt-3 pb-2"
-        value={inputText}
-        onChange={(e) => onInputChange(e.target.value)}
+      <div
+        ref={editorRef}
+        className="w-full bg-transparent border-0 outline-none text-[13px] text-zinc-800 dark:text-[#f5f5f7] placeholder-zinc-400 dark:placeholder-zinc-500 overflow-y-auto px-4 pt-3 pb-2.5 min-h-[38px] max-h-48"
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder={planMode ? "规划模式下提问，Agent 仅分析和规划…" : "Ask anything, @ to mention, / for actions"}
+        onInput={handleInput}
         onKeyDown={handleKeyDown}
-        onClick={handleTextareaClick}
-        placeholder={planMode ? "规划模式下提问，Agent 仅分析和规划…" : "Ask anything, @ to mention, / for actions"}
-        rows={1}
+        onClick={handleEditorClick}
+        spellCheck={false}
       />
 
       <SlashAutocomplete
@@ -354,10 +557,19 @@ export default function ChatInputCard({
             >
               <Icons.Stop />
             </button>
-          ) : inputText.trim() || hasPendingQuestion ? (
+          ) : (editorRef.current?.textContent?.trim() || hasPendingQuestion) ? (
             <button
               className="w-7 h-7 flex items-center justify-center bg-zinc-800 dark:bg-zinc-200 hover:bg-zinc-700 dark:hover:bg-white text-white dark:text-zinc-900 rounded-full cursor-pointer border-0 transition-colors"
-              onClick={onSend}
+              onClick={() => {
+                const el = editorRef.current;
+                if (!el) return;
+                const { text, files } = extractContent(el);
+                onSend(files.length > 0 ? files : undefined);
+                syncingRef.current = true;
+                onInputChange("");
+                el.innerHTML = "";
+                syncingRef.current = false;
+              }}
               title="Send"
             >
               <Icons.ArrowRight />

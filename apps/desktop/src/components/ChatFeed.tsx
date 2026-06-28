@@ -4,6 +4,63 @@ import { renderMarkdown } from "@/utils/markdown";
 import * as Icons from "@/components/Icons";
 import { ToolCallGroup } from "@/components/ToolCallCard";
 import QuestionCard from "@/components/QuestionCard";
+import { fileBaseName } from "./toolUtils";
+
+/** 根据文件扩展名返回图标 */
+function getFileIcon(file: string): string {
+  if (file.endsWith(".tsx") || file.endsWith(".ts")) return "📘";
+  if (file.endsWith(".jsx") || file.endsWith(".js")) return "📒";
+  if (file.endsWith(".rs")) return "🦀";
+  if (file.endsWith(".md")) return "📝";
+  if (file.endsWith(".json")) return "📋";
+  if (file.endsWith(".css")) return "🎨";
+  if (file.endsWith(".html")) return "🌐";
+  if (file.endsWith(".toml") || file.endsWith(".yaml") || file.endsWith(".yml")) return "⚙️";
+  if (file.endsWith(".py")) return "🐍";
+  if (file.endsWith(".go")) return "🔷";
+  if (file.endsWith(".sql")) return "🗃️";
+  if (file.endsWith(".sh") || file.endsWith(".bash")) return "💻";
+  if (file.endsWith(".svg") || file.endsWith(".png") || file.endsWith(".jpg") || file.endsWith(".jpeg")) return "🖼️";
+  return "📄";
+}
+
+/** 将用户消息中的 @file://path 渲染为可点击 chip（emoji + 文件名），其余文字保持纯文本 */
+function renderUserContent(content: string, onPreviewFile?: (path: string) => void) {
+  const regex = /@file:\/\/([\S]+)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  while ((match = regex.exec(content)) !== null) {
+    // @file 之前的文字
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+    const path = match[1];
+    const name = fileBaseName(path);
+    const icon = getFileIcon(path);
+    parts.push(
+      <span
+        key={key++}
+        onClick={(e) => { e.stopPropagation(); onPreviewFile?.(path); }}
+        title={path}
+        className="inline-flex items-center gap-1 mx-0.5 px-2 py-0.5 bg-deepseek-50 dark:bg-deepseek-900/30 border border-deepseek-200/60 dark:border-deepseek-800/80 rounded-md text-[11px] font-semibold text-deepseek-600 dark:text-deepseek-300 cursor-pointer hover:bg-deepseek-100 dark:hover:bg-deepseek-800/40 transition-colors align-middle"
+      >
+        <span className="text-xs leading-none">{icon}</span>
+        <span className="max-w-[120px] overflow-hidden text-ellipsis whitespace-nowrap">{name}</span>
+      </span>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  // @file 之后剩余文字
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+
+  return parts;
+}
 
 interface ChatFeedProps {
   messages: Message[];
@@ -14,6 +71,8 @@ interface ChatFeedProps {
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;
   showToast?: (message: string) => void;
+  /** 点击 markdown 中 file:// 链接时调用，仅更新右侧面板预览 */
+  onPreviewFile?: (relativePath: string) => void;
   /** question 工具回答后的回调，参数为用户输入的答案 */
   onAnswerQuestion?: (answer: string) => void;
   /** 当前 Agent 步骤计数（仅在运行中大于 0） */
@@ -90,7 +149,7 @@ function ThinkingBlock({ content, isGenerating, isLastMessage, elapsed }: Thinki
   );
 }
 
-export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast, onAnswerQuestion, activeStep, onFeedbackSave, initialFeedback }: ChatFeedProps) {
+export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, onCancelAgent, readFile, getFileUrl, showToast, onAnswerQuestion, activeStep, onFeedbackSave, initialFeedback, onPreviewFile }: ChatFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserAtBottomRef = useRef(true);
@@ -225,7 +284,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
             >
               {msg.role === "user" ? (
                 <div className="bg-surface-secondary dark:bg-surface-secondary text-label-primary dark:text-label-primary px-3.5 py-2.5 rounded-2xl rounded-tr-sm text-[13px] max-w-full whitespace-pre-wrap leading-relaxed shadow-sm">
-                  {msg.content}
+                  {renderUserContent(msg.content, onPreviewFile)}
                 </div>
               ) : msg.role === "tool" ? (
                 /* tool 角色消息（旧格式兼容，基本不使用） */
@@ -287,7 +346,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                             );
                           }
                           if (sec.type === "text") {
-                            return <div key={si}>{renderMarkdown(sec.content || "", isLastMessage && isGenerating)}</div>;
+                            return <div key={si}>{renderMarkdown(sec.content || "", isLastMessage && isGenerating, onPreviewFile)}</div>;
                           }
                           return null;
                         })}
@@ -331,7 +390,7 @@ export default function ChatFeed({ messages, planMode, onOpenTab, isGenerating, 
                             />
                           </div>
                         )}
-                        {renderMarkdown(msg.content, isLastMessage && isGenerating)}
+                        {renderMarkdown(msg.content, isLastMessage && isGenerating, onPreviewFile)}
                       </>
                     )}
                   </div>

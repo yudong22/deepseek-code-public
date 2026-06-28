@@ -17,6 +17,17 @@ describe("Markdown Renderer Wrapper", () => {
     expect(child.props.children).toBe(markdown);
     expect(child.props.isAnimating).toBe(true);
     expect(child.props.caret).toBe("block");
+    // shikiTheme 应是 light/dark 数组
+    expect(child.props.shikiTheme).toEqual(["github-light", "github-dark"]);
+  });
+
+  test("should accept onPreviewFile callback", () => {
+    const cb = () => {};
+    const element = renderMarkdown("test", false, cb);
+    const child = element.props.children;
+    expect(child.type).toBe(Streamdown);
+    // 验证 components 是函数返回的（不是模块级常量）
+    expect(typeof child.props.components).toBe("object");
   });
 });
 

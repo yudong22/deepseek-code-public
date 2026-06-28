@@ -1,3 +1,5 @@
+import { fileBaseName } from "./toolUtils";
+
 interface FileAutocompleteProps {
   /** 下拉框是否可见 */
   visible: boolean;
@@ -13,19 +15,19 @@ interface FileAutocompleteProps {
 
 /** 根据文件扩展名返回图标 */
 function getFileIcon(file: string): string {
-  if (file.endsWith(".tsx")) return "📘";
-  if (file.endsWith(".ts")) return "📘";
-  if (file.endsWith(".jsx")) return "📒";
-  if (file.endsWith(".js")) return "📒";
+  if (file.endsWith(".tsx") || file.endsWith(".ts")) return "📘";
+  if (file.endsWith(".jsx") || file.endsWith(".js")) return "📒";
   if (file.endsWith(".rs")) return "🦀";
   if (file.endsWith(".md")) return "📝";
   if (file.endsWith(".json")) return "📋";
   if (file.endsWith(".css")) return "🎨";
   if (file.endsWith(".html")) return "🌐";
-  if (file.endsWith(".toml")) return "⚙️";
-  if (file.endsWith(".yaml") || file.endsWith(".yml")) return "⚙️";
-  if (file.endsWith(".svg")) return "🖼️";
-  if (file.endsWith(".png") || file.endsWith(".jpg") || file.endsWith(".jpeg")) return "🖼️";
+  if (file.endsWith(".toml") || file.endsWith(".yaml") || file.endsWith(".yml")) return "⚙️";
+  if (file.endsWith(".py")) return "🐍";
+  if (file.endsWith(".go")) return "🔷";
+  if (file.endsWith(".sql")) return "🗃️";
+  if (file.endsWith(".sh") || file.endsWith(".bash")) return "💻";
+  if (file.endsWith(".svg") || file.endsWith(".png") || file.endsWith(".jpg") || file.endsWith(".jpeg")) return "🖼️";
   return "📄";
 }
 
@@ -39,36 +41,39 @@ export default function FileAutocomplete({
   if (!visible || files.length === 0) return null;
 
   return (
-    <div className="file-autocomplete-dropdown" onClick={(e) => e.stopPropagation()}>
-      {files.map((file, idx) => (
-        <div
-          key={file}
-          className={`file-autocomplete-item ${idx === selectedIndex ? "active" : ""}`}
-          onClick={() => onSelect(file)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            padding: "6px 10px",
-            fontSize: "12px",
-            fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-            cursor: "pointer",
-            borderRadius: "4px",
-            color: idx === selectedIndex ? "#fff" : "inherit",
-            background: idx === selectedIndex ? "var(--dsw-static-deepseek-500)" : "transparent",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          <span style={{ opacity: 0.7, fontSize: "12px", flexShrink: 0 }}>
-            {getFileIcon(file)}
-          </span>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
-            {file}
-          </span>
-        </div>
-      ))}
+    <div
+      className="file-autocomplete-dropdown"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {files.map((file, idx) => {
+        const name = fileBaseName(file);
+        const dir = file.substring(0, file.length - name.length);
+        const isSelected = idx === selectedIndex;
+        return (
+          <div
+            key={file}
+            className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition-colors min-w-0 ${
+              isSelected
+                ? "bg-brand-blue text-white"
+                : "text-zinc-800 dark:text-label-primary hover:bg-zinc-100 dark:hover:bg-surface-secondary"
+            }`}
+            onClick={() => onSelect(file)}
+          >
+            <span className="text-base shrink-0 leading-none">{getFileIcon(file)}</span>
+            <span className="font-semibold truncate shrink-0">{name}</span>
+            {dir && (
+              <span
+                className={`truncate text-[11px] font-mono ml-1 ${
+                  isSelected ? "text-white/70" : "text-zinc-400 dark:text-zinc-500"
+                }`}
+              >
+                {dir}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

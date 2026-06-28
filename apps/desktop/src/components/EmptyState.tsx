@@ -7,7 +7,7 @@ interface EmptyStateProps {
   selectedModel: string;
   isModelDropdownOpen: boolean;
   onInputChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (attachedFiles?: string[]) => void;
   onToggleModelDropdown: () => void;
   onSelectModel: (model: string) => void;
   activeWorkspacePath: string;

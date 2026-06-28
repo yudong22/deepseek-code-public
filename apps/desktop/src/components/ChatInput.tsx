@@ -8,7 +8,7 @@ interface ChatInputProps {
   hasPendingQuestion?: boolean;
   planMode?: boolean;
   onInputChange: (value: string) => void;
-  onSend: () => void;
+  onSend: (attachedFiles?: string[]) => void;
   onCancel?: () => void;
   onToggleModelDropdown: () => void;
   onSelectModel: (model: string) => void;

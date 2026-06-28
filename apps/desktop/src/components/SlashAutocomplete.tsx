@@ -57,7 +57,7 @@ export default function SlashAutocomplete({
   if (!visible || commands.length === 0) return null;
 
   return (
-    <div className="slash-autocomplete-dropdown" onClick={(e) => e.stopPropagation()}>
+    <div className="slash-autocomplete-dropdown" onMouseDown={(e) => e.preventDefault()} onClick={(e) => e.stopPropagation()}>
       {commands.map((cmd, idx) => (
         <div
           key={cmd.name}

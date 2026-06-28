@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Message } from "@/bridge";
-import { renderMarkdown } from "@/utils/markdown";
+import { renderMarkdown, renderCodeBlock, CodeBlockCopyButton, CodeBlockDownloadButton } from "@/utils/markdown";
 
 interface Tab {
   id: string;
@@ -18,6 +18,8 @@ interface RightPanelProps {
   width: number;
   onWidthChange: (w: number) => void;
   isNightMode: boolean;
+  /** 点击 markdown 中 file:// 链接时调用（递归预览） */
+  onPreviewFile?: (relativePath: string) => void;
 }
 
 const MIN_WIDTH = 240;
@@ -31,6 +33,7 @@ export default function RightPanel({
   width,
   onWidthChange,
   isNightMode,
+  onPreviewFile,
 }: RightPanelProps) {
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
@@ -101,7 +104,7 @@ export default function RightPanel({
         <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
         {rightPanelMarkdownContent ? (
           <div className="p-5 text-zinc-800 dark:text-[#f5f5f7] leading-relaxed overflow-y-auto h-full box-border">
-            {renderMarkdown(rightPanelMarkdownContent)}
+            {renderMarkdown(rightPanelMarkdownContent, false, onPreviewFile)}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 text-zinc-400 dark:text-zinc-500 text-xs text-center h-full">
@@ -170,11 +173,12 @@ export default function RightPanel({
   // 3. Markdown file — source/preview toggle
   if (isMarkdown) {
     return (
-      <MarkdownPanel
+    <MarkdownPanel
         isOpen={isOpen}
         activeTab={activeTab}
         width={width}
         handleMouseDown={handleMouseDown}
+        onPreviewFile={onPreviewFile}
       />
     );
   }
@@ -230,17 +234,15 @@ function MarkdownPanel({
   activeTab,
   width,
   handleMouseDown,
+  onPreviewFile,
 }: {
   isOpen: boolean;
   activeTab: Tab;
   width: number;
   handleMouseDown: (e: React.MouseEvent) => void;
+  onPreviewFile?: (file: any) => void;
 }) {
   const [activeInnerTab, setActiveInnerTab] = useState<"preview" | "source">("preview");
-  const codeLines = activeTab.content.split("\n");
-  if (codeLines.length > 1 && codeLines[codeLines.length - 1].trim() === "") {
-    codeLines.pop();
-  }
 
   return (
     <aside
@@ -258,7 +260,7 @@ function MarkdownPanel({
         <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">md</span>
       </div>
 
-      {/* 内部 Tab 栏：Preview / Source */}
+      {/* 内部 Tab 栏：Preview / Source + 复制/下载按钮 */}
       <div className="flex items-center gap-1 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0">
         <button
           className={`px-3 h-6 rounded-md text-xs font-semibold cursor-pointer border-0 bg-transparent transition-colors ${
@@ -280,24 +282,30 @@ function MarkdownPanel({
         >
           Source
         </button>
+        <div className="ml-auto flex items-center gap-1">
+          <CodeBlockDownloadButton
+            code={activeTab.content}
+            language="markdown"
+            className="p-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+            title="下载文件"
+          />
+          <CodeBlockCopyButton
+            code={activeTab.content}
+            className="p-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+            title="复制内容"
+          />
+        </div>
       </div>
 
       {/* 内容区 */}
       <div className="flex-1 overflow-hidden flex flex-col relative">
         {activeInnerTab === "source" ? (
-          <div className="flex-1 overflow-auto flex items-stretch font-mono text-[11px] leading-relaxed bg-[#f9f9fb] dark:bg-[#18181b]">
-            <div className="py-3 px-2 text-right text-zinc-450 dark:text-zinc-650 bg-zinc-50 dark:bg-[#161618] border-r border-[#e3e3e3] dark:border-[#202022] min-w-[32px] select-none">
-              {codeLines.map((_, idx) => (
-                <div key={idx}>{idx + 1}</div>
-              ))}
-            </div>
-            <pre className="py-3 px-4 overflow-x-auto text-zinc-800 dark:text-[#e4e4e7] flex-1 m-0">
-              <code>{activeTab.content}</code>
-            </pre>
+          <div className="sd-panel-code flex-1 overflow-auto">
+            {renderCodeBlock(activeTab.content, "markdown")}
           </div>
         ) : (
           <div className="p-5 text-zinc-800 dark:text-[#f5f5f7] leading-relaxed overflow-y-auto flex-1">
-            {renderMarkdown(activeTab.content)}
+            {renderMarkdown(activeTab.content, false, onPreviewFile)}
           </div>
         )}
       </div>
@@ -318,10 +326,9 @@ function FilePanel({
   width: number;
   handleMouseDown: (e: React.MouseEvent) => void;
 }) {
-  const codeLines = activeTab.content.split("\n");
-  if (codeLines.length > 1 && codeLines[codeLines.length - 1].trim() === "") {
-    codeLines.pop();
-  }
+  // P1-1: 从 title 提取扩展名作为 language fallback
+  const titleExt = (activeTab.title || "").split(".").pop()?.toLowerCase() || "";
+  const language = activeTab.language || titleExt || "text";
 
   return (
     <aside
@@ -331,23 +338,30 @@ function FilePanel({
       style={isOpen ? { width } : undefined}
     >
       <div className="absolute top-0 bottom-0 left-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors" onMouseDown={handleMouseDown} />
-      <div className="flex items-center gap-1.5 px-4 h-8 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0 text-xs text-zinc-500 select-none">
+      {/* 顶部工具栏：文件名 + 语言标签 + 复制/下载按钮 */}
+      <div className="flex items-center gap-1.5 px-4 h-9 bg-[#f6f6f6] dark:bg-[#1c1c1e] border-b border-[#e3e3e3] dark:border-[#2c2c2e] shrink-0 text-xs text-zinc-500 select-none">
         <span className="text-sm">📄</span>
-        <span className="font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[200px]">{activeTab.title}</span>
-        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">{activeTab.language || "text"}</span>
-      </div>
-      <div className="flex-1 overflow-hidden flex flex-col relative">
-        <div className="flex-1 overflow-auto flex items-stretch font-mono text-[11px] leading-relaxed bg-[#f9f9fb] dark:bg-[#18181b]">
-          <div className="py-3 px-2 text-right text-zinc-450 dark:text-zinc-650 bg-zinc-50 dark:bg-[#161618] border-r border-[#e3e3e3] dark:border-[#202022] min-w-[32px] select-none">
-            {codeLines.map((_, idx) => (
-              <div key={idx}>{idx + 1}</div>
-            ))}
-          </div>
-          <pre className="py-3 px-4 overflow-x-auto text-zinc-800 dark:text-[#e4e4e7] flex-1 m-0">
-            <code>{activeTab.content}</code>
-          </pre>
+        <span className="font-semibold text-zinc-800 dark:text-[#f5f5f7] truncate max-w-[180px]">{activeTab.title}</span>
+        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase font-mono bg-[#efeff4] dark:bg-[#2c2c2e] px-1 rounded-sm border border-zinc-200/50 dark:border-zinc-800">{language}</span>
+        <div className="ml-auto flex items-center gap-1">
+          <CodeBlockDownloadButton
+            code={activeTab.content}
+            language={language}
+            className="p-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+            title="下载文件"
+          />
+          <CodeBlockCopyButton
+            code={activeTab.content}
+            className="p-1.5 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+            title="复制代码"
+          />
         </div>
+      </div>
+      {/* 代码内容：直接用 CodeBlock，它自带 shiki 高亮 + 行号 */}
+      <div className="sd-panel-code flex-1 overflow-auto">
+        {renderCodeBlock(activeTab.content, language)}
       </div>
     </aside>
   );
 }
+

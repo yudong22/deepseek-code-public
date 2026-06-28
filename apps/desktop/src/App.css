@@ -28,6 +28,15 @@
   --dsw-static-deepseek-700: #2f4c8f;
   --dsw-static-deepseek-800: #34415b;
   --dsw-static-deepseek-900: #283142;
+
+  /* ── Streamdown design-system tokens (light mode) ── */
+  /* These map streamdown's shadcn-style variables to our palette */
+  --background: #ffffff;
+  --foreground: #111111;
+  --sidebar: #f9f9fb;
+  --border: #e3e3e3;
+  --muted: #f2f2f7;
+  --muted-foreground: #8e8e93;
 }
 
 @theme {
@@ -71,6 +80,89 @@
   --color-label-secondary: #a0a0a5;
   /* label-tertiary 日间夜间同为 #8e8e93，无需覆盖 */
   --color-label-inverse: #111111;
+
+  /* ── Streamdown design-system tokens (dark / night-mode) ── */
+  --background: #1c1c1e;
+  --foreground: #f5f5f7;
+  --sidebar: #18181b;
+  --border: #2c2c2e;
+  --muted: #2c2c2e;
+  --muted-foreground: #8e8e93;
+}
+
+/* ── Full-panel code viewer (.sd-panel-code) ──────────────────────────────
+ * Strip CodeBlock's own container chrome (outer wrapper + inner body border)
+ * so highlighted code fills the panel seamlessly with exactly ONE scrollbar.
+ *
+ * HTML structure produced by SDCodeBlock:
+ *   [data-streamdown="code-block"]          ← outer container (my-4, rounded-xl, border, bg-sidebar, p-2)
+ *     [data-streamdown="code-block-header"] ← language label
+ *     [data-streamdown="code-block-body"]   ← shiki body (overflow-x-auto, border, bg-background, p-4)
+ *       <pre><code> …highlighted lines… </code></pre>
+ */
+.sd-panel-code [data-streamdown="code-block"] {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  gap: 0 !important;
+  /* fill parent height so the body expands properly */
+  min-height: 100%;
+  /* content-visibility can mis-size in a flex parent, reset it */
+  content-visibility: visible !important;
+  contain-intrinsic-size: none !important;
+}
+
+/* Strip the inner body's own border/padding/overflow:
+ * The parent .sd-panel-code div carries overflow-auto (the ONE scrollbar).
+ * We set overflow to visible here so we don't get a second one.
+ * Also override default text-sm (14px) → 13px for a denser code view. */
+.sd-panel-code [data-streamdown="code-block-body"] {
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0.75rem 1rem !important;
+  overflow: visible !important;
+  background: transparent !important;
+  font-size: 13px !important;
+}
+
+/* pre inside body: also no second overflow, and wrap long lines.
+ * pre-wrap 在空白处折行，不主动断开 token 保证代码可读性。
+ * 行号由 span::before 渲染，在 .sd-panel-code 中单独控制颜色和亮度。 */
+.sd-panel-code [data-streamdown="code-block-body"] > pre {
+  overflow: visible !important;
+  white-space: pre-wrap !important;
+}
+
+/* 面板中行号用绝对定位固定在左侧，同时给 span 留出 padding-left，
+ * 使得折行后的内容保持在行号右侧的内容区，不会出现在行号底下。 */
+.sd-panel-code [data-streamdown="code-block-body"] code > span {
+  position: relative;
+  padding-left: 2.5rem;
+}
+.sd-panel-code [data-streamdown="code-block-body"] code > span::before {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  display: block !important;
+  width: 2.5rem !important;
+  margin-right: 0 !important;
+  text-align: right !important;
+  padding-right: 0.5rem;
+  box-sizing: border-box;
+  color: #666 !important;
+  opacity: 1 !important;
+}
+
+/* Hide CodeBlock's built-in language header (we show our own in the top bar) */
+.sd-panel-code [data-streamdown="code-block-header"] {
+  display: none !important;
+}
+
+/* Hide CodeBlock's built-in copy/download button group (shown in our top bar) */
+.sd-panel-code [data-streamdown="code-block-actions"] {
+  display: none !important;
 }
 
 ::-webkit-scrollbar {
@@ -127,6 +219,16 @@
 @keyframes blink-caret {
   from, to { background-color: transparent }
   50% { background-color: currentColor }
+}
+
+/* contenteditable placeholder */
+[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #a1a1aa;
+  pointer-events: none;
+}
+.night-mode [data-placeholder]:empty::before {
+  color: #71717a;
 }
 
 /* Toast slide-in animation */

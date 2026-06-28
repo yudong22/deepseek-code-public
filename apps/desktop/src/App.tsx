@@ -14,6 +14,7 @@ import LeftSidebar from "@/components/LeftSidebar";
 import RightPanel from "@/components/RightPanel";
 import ChatFeed from "@/components/ChatFeed";
 import ChatInput from "@/components/ChatInput";
+import { fileBaseName } from "@/components/toolUtils";
 import EmptyState from "@/components/EmptyState";
 
 import { useToast } from "@/hooks/useToast";
@@ -613,14 +614,21 @@ function MainDashboard() {
   };
 
   // --- 发送消息并触发 Agent 循环 ---
-  async function handleSend() {
+  async function handleSend(attachedFiles?: string[]) {
     const userText = inputText.trim();
-    if (!userText) return;
+    if (!userText && (!attachedFiles || attachedFiles.length === 0)) return;
+
+    // contenteditable 提取的文本已包含 @file://path，无需再拼
+    // 但若只有 attachedFiles 没有 text（兼容旧路径），则拼接
+    const hasInlineRefs = userText.includes("@file://");
+    const fullText = hasInlineRefs || !attachedFiles?.length
+      ? userText
+      : attachedFiles.map((p) => `@file://${p}`).join(" ") + (userText ? " " + userText : "");
 
     setInputText("");
 
-    if (userText.startsWith("/")) {
-      await handleLocalSlashCommand(userText);
+    if (fullText.startsWith("/")) {
+      await handleLocalSlashCommand(fullText);
       return;
     }
 
@@ -634,11 +642,12 @@ function MainDashboard() {
         currentProjName = parts[parts.length - 1] || "";
       }
 
+      const titleText = fullText.replace(/@file:\/\/[\S]+/g, "").trim() || (attachedFiles || []).map((p) => fileBaseName(p)).join(", ");
       currentSessionId = crypto.randomUUID();
       const newSession: Session = {
         id: currentSessionId,
-        title: userText.length > 25 ? userText.substring(0, 25) + "..." : userText,
-        lastMessage: userText,
+        title: titleText.length > 25 ? titleText.substring(0, 25) + "..." : titleText,
+        lastMessage: fullText,
         updatedAt: new Date().toISOString(),
         projectName: currentProjName || undefined,
       };
@@ -646,13 +655,13 @@ function MainDashboard() {
       navigate(`/chat/s/${currentSessionId}`);
     }
 
-    // 2. 保存用户消息
+    // 2. 保存用户消息（包含 @file:// 引用）
     const userMsgId = `msg-user-${Date.now()}`;
     const userMsg: Message = {
       id: userMsgId,
       sessionId: currentSessionId,
       role: "user",
-      content: userText,
+      content: fullText,
       createdAt: new Date().toISOString(),
     };
     await bridge.saveMessage(userMsg);
@@ -661,7 +670,7 @@ function MainDashboard() {
     const dbSessions = await bridge.getSessions();
     const currentSession = dbSessions.find((s) => s.id === currentSessionId);
     if (currentSession) {
-      currentSession.lastMessage = userText;
+      currentSession.lastMessage = fullText;
       currentSession.updatedAt = new Date().toISOString();
       await bridge.saveSession(currentSession);
     }
@@ -1236,6 +1245,7 @@ function MainDashboard() {
                 readFile={(path) => bridge.readFile(path)}
                 getFileUrl={(path) => bridge.getFileUrl(path)}
                 showToast={showToast}
+                onPreviewFile={readAndPreviewFile}
                 initialFeedback={messageFeedback}
                 onFeedbackSave={handleFeedbackSave}
                 onAnswerQuestion={async (answer) => {
@@ -1308,6 +1318,7 @@ function MainDashboard() {
           width={rightPanelWidth}
           onWidthChange={setRightPanelWidth}
           isNightMode={isNightMode}
+          onPreviewFile={readAndPreviewFile}
         />
       </div>
     </div>
