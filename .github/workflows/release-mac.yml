@@ -315,6 +315,13 @@ jobs:
               const up = JSON.parse(fs.readFileSync('update.json', 'utf-8'));
               up.version = process.env.RELEASE_VERSION;
               up.pub_date = new Date().toISOString().replace(/\.\d{3}Z/, 'Z');
+              // 同步 .release-notes.md（Generate changelog step 生成的 AI changelog）→ up.notes
+              if (fs.existsSync('.release-notes.md')) {
+                up.notes = fs.readFileSync('.release-notes.md', 'utf-8').trim();
+                console.log('updated notes from .release-notes.md (' + up.notes.length + ' chars)');
+              } else {
+                console.log('::warning::.release-notes.md not found, notes unchanged');
+              }
               const plat = process.env.PLATFORM;
               if (up.platforms && up.platforms[plat]) {
                 up.platforms[plat].signature = process.env.SIGNATURE.trim();
