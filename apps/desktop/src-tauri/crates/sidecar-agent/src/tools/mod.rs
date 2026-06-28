@@ -150,7 +150,9 @@ pub fn default_registry() -> ToolRegistry {
     registry.register(Box::new(question::QuestionTool));
     registry.register(Box::new(todowrite::TodoWriteTool));
     registry.register(Box::new(webfetch::WebFetchTool));
-    registry.register(Box::new(websearch::WebSearchTool));
+    // websearch disabled for now: DeepSeek enable_search hallucinates URLs.
+    // Re-enable when a provider with true web search (e.g. Brave API) is integrated.
+    // registry.register(Box::new(websearch::WebSearchTool));
     registry
 }
 
