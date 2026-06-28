@@ -15,6 +15,37 @@ use std::time::Duration;
 
 pub struct WebSearchTool;
 
+/// Minimal date helper — returns "(month year)" for the system prompt.
+/// Avoids pulling in chrono just for one string.
+fn current_month_year() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let days = secs / 86400;
+    let mut year = 1970i64;
+    let mut remaining = days;
+    loop {
+        let days_in_year = if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 { 366 } else { 365 };
+        if remaining < days_in_year { break; }
+        remaining -= days_in_year;
+        year += 1;
+    }
+    let month_days: &[i64] = if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 {
+        &[31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        &[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let months = ["1月", "2月", "3月", "4月", "5月", "6月",
+                   "7月", "8月", "9月", "10月", "11月", "12月"];
+    let mut month_idx = 0usize;
+    for (i, &md) in month_days.iter().enumerate() {
+        if remaining < md { month_idx = i; break; }
+        remaining -= md;
+    }
+    format!("{}年{}", year, months[month_idx.min(11)])
+}
+
 /// Parse search results from the provider's response.
 /// Supports multiple formats used by different LLM providers.
 fn extract_search_results(text: &str) -> Vec<Value> {
@@ -145,6 +176,10 @@ impl Tool for WebSearchTool {
                     "type": "array",
                     "items": { "type": "string" },
                     "description": "Never include search results from these domains"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return (default 8, max 8)"
                 }
             },
             "required": ["query"]
@@ -177,11 +212,18 @@ impl Tool for WebSearchTool {
             .filter_map(|v| v.as_str().map(|s| s.to_lowercase()))
             .collect();
 
+        let max_results = input
+            .get("max_results")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(8)
+            .min(8) as usize;
+
         // ── Phase 1: Call provider API for search ──
         // Claude Code pattern: the web_search tool delegates to the LLM API.
         // We send a minimal request — no excess context, just the query.
         let provider = &ctx.provider_config;
         let start = std::time::Instant::now();
+        let date_str = current_month_year();
 
         // Build domain constraints into the query if present
         let mut search_query = query.to_string();
@@ -198,16 +240,20 @@ impl Tool for WebSearchTool {
                 .build()
                 .map_err(|e| format!("Failed to build client: {}", e))?;
 
-            // Minimal context: system prompt only says "search and list results".
+            // Minimal context: system prompt with date hint + format instruction.
             // No user conversation history, no tool outputs, no extra context.
+            let sys_prompt = format!(
+                "You are a web search assistant. The current date is {}.\n\
+                 Search the query and list up to {} results, each on a new line as: \
+                 \"- Title URL\". Do not add any commentary, introduction, or summary.",
+                date_str, max_results
+            );
             let request_body = &SearchRequest {
                 model: provider.model.clone(),
                 messages: vec![
                     SearchMessage {
                         role: "system".to_string(),
-                        content: "You are a web search assistant. Search the query and list \
-                                  each result on a new line as: \"- Title URL\". \
-                                  Do not add any commentary, introduction, or summary.".to_string(),
+                        content: sys_prompt,
                     },
                     SearchMessage {
                         role: "user".to_string(),
@@ -260,14 +306,16 @@ impl Tool for WebSearchTool {
         let content = match search_result {
             Ok(c) => c,
             Err(e) => {
-                return self.fallback_ddg(query, &allowed_domains, &blocked_domains, &e);
+                return self.fallback_ddg(query, &allowed_domains, &blocked_domains, max_results, &e);
             }
         };
 
         // ── Phase 2: Parse and format results ──
         // Matches Claude Code's mapToolResultToToolResultBlockParam:
         // results → formatted output → REMINDER about citing sources.
-        let results = extract_search_results(&content);
+        let mut results = extract_search_results(&content);
+        // Enforce max_results (default 8, aligned with Claude Code's max_uses: 8)
+        results.truncate(max_results);
 
         // Build the tool result message that the LLM will see.
         // Claude Code format: "Web search results for query: \"...\"\n\nLinks: [...]"
@@ -308,6 +356,7 @@ impl WebSearchTool {
         query: &str,
         allowed_domains: &[String],
         blocked_domains: &[String],
+        max_results: usize,
         provider_error: &str,
     ) -> ToolResult {
         let encoded: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
@@ -407,7 +456,7 @@ impl WebSearchTool {
                 "snippet": snippet
             }));
 
-            if results.len() >= 8 { break; }
+            if results.len() >= max_results { break; }
         }
 
         let mut formatted = format!("Web search results for query: \"{}\"\n\n", query);
