@@ -65,7 +65,7 @@ function renderUserContent(content: string, onPreviewFile?: (path: string) => vo
 interface ChatFeedProps {
   messages: Message[];
   planMode?: boolean;
-  onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
+  onOpenTab: (tab: { id: string; title: string; type: "overview" | "image" | "markdown" | "bash" | "tool_result"; content: string; language?: string }) => void;
   isGenerating?: boolean;
   onCancelAgent?: () => void;
   readFile?: (relativePath: string) => Promise<string>;

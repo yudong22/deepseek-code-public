@@ -8,12 +8,13 @@ import TodoListCard from "./TodoListCard";
 import EditDiffCard from "./EditDiffCard";
 import FileToolCard from "./FileToolCard";
 import ExpandableToolCard from "./ExpandableToolCard";
+import type { Tab } from "./RightPanel/PanelShell";
 
 interface ToolCallCardProps {
   toolCall: ToolCallData;
   messageId: string;
   index: number;
-  onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
+  onOpenTab: (tab: Tab) => void;
   onCancel?: () => void;
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;
@@ -68,7 +69,7 @@ export default function ToolCallCard({
 interface ToolCallGroupProps {
   toolCalls: ToolCallData[];
   messageId: string;
-  onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
+  onOpenTab: (tab: Tab) => void;
   onCancel?: () => void;
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;

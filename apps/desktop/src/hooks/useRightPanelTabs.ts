@@ -1,15 +1,7 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { bridge } from "@/bridge";
-
-export interface Tab {
-  id: string;
-  title: string;
-  type: string;
-  content: string;
-  language?: string;
-  /** 文件在 workspace 下的相对路径，用于解析内嵌的 file:// 相对链接 */
-  sourcePath?: string;
-}
+import type { Tab } from "@/components/RightPanel/PanelShell";
+export type { Tab };
 
 interface UseRightPanelTabsProps {
   setIsRightSidebarOpen: (open: boolean) => void;

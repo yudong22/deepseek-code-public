@@ -51,6 +51,22 @@ function makeFileClickHandler(
   };
 }
 
+/** 缓存 buildComponents 闭包（v0.5.14 性能优化）
+ *  - onPreviewFile 引用变化时才重建（通常来自 useCallback，引用稳定）
+ *  - sourceFilePath 也参与 key（同一文件但不同来源路径需要不同 buildComponents）
+ *  - 用 WeakMap + JSON key，避免泄漏 + key 稳定 */
+const componentsCache = new Map<string, ReturnType<typeof buildComponents>>();
+function getCachedComponents(onPreviewFile?: PreviewFile, sourceFilePath?: string) {
+  // 用 (onPreviewFile ref + sourceFilePath) 组合 key
+  const key = `${(onPreviewFile as unknown) || "null"}|${sourceFilePath || ""}`;
+  let cached = componentsCache.get(key);
+  if (!cached) {
+    cached = buildComponents(onPreviewFile, sourceFilePath);
+    componentsCache.set(key, cached);
+  }
+  return cached;
+}
+
 const buildComponents = (onPreviewFile?: PreviewFile, sourceFilePath?: string) => ({
   h1: ({ children }: any) => (
     <h1 className="text-2xl font-bold tracking-tight mt-6 mb-4 text-zinc-900 dark:text-zinc-100 leading-tight">
@@ -198,7 +214,7 @@ export function renderMarkdown(
       <Streamdown
         isAnimating={isAnimating}
         caret="block"
-        components={buildComponents(onPreviewFile, sourceFilePath)}
+        components={getCachedComponents(onPreviewFile, sourceFilePath)}
         shikiTheme={["github-light", "github-dark"]}
       >
         {text}

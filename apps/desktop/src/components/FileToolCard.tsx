@@ -8,12 +8,13 @@ import {
   useElapsed,
   detectError,
 } from "./toolUtils";
+import type { Tab } from "./RightPanel/PanelShell";
 
 interface FileToolCardProps {
   tc: ToolCallData;
   messageId: string;
   index: number;
-  onOpenTab: (tab: { id: string; title: string; type: string; content: string; language?: string }) => void;
+  onOpenTab: (tab: Tab) => void;
   onCancel?: () => void;
   readFile?: (relativePath: string) => Promise<string>;
   getFileUrl?: (relativePath: string) => Promise<string>;

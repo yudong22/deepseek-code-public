@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState } from "react";
 import { Session } from "@/bridge";
 import * as Icons from "@/components/Icons";
+import { useResizable } from "@/hooks/useResizable";
 
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 400;
@@ -63,46 +64,14 @@ export default function LeftSidebar({
   onSelectProject,
 }: LeftSidebarProps) {
   const [expandedProjectsAll, setExpandedProjectsAll] = useState<Record<string, boolean>>({});
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH);
 
-  // --- 可拖拽调整宽度 ---
-  const isDragging = useRef(false);
-  const startX = useRef(0);
-  const startWidth = useRef(DEFAULT_WIDTH);
-
-  const handleResizeMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isOpen) return;
-      isDragging.current = true;
-      startX.current = e.clientX;
-      startWidth.current = sidebarWidth;
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    },
-    [isOpen, sidebarWidth]
-  );
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current) return;
-      const delta = e.clientX - startX.current; // 向右拖 = 变宽
-      const newW = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth.current + delta));
-      setSidebarWidth(newW);
-    };
-    const handleMouseUp = () => {
-      if (isDragging.current) {
-        isDragging.current = false;
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    };
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, []);
+  // --- 可拖拽调整宽度 (v0.5.14 改用 useResizable hook) ---
+  const resizable = useResizable({
+    initial: DEFAULT_WIDTH,
+    min: MIN_WIDTH,
+    max: MAX_WIDTH,
+    anchor: "left", // 容器靠左，handle 在右，drag right = wider
+  });
 
   const toggleExpandAll = (projectName: string) => {
     setExpandedProjectsAll(prev => ({
@@ -174,8 +143,9 @@ export default function LeftSidebar({
 
   return (
     <aside
-      className={`bg-surface-primary border-r border-border-primary flex flex-col h-full shrink-0 overflow-hidden relative ${isOpen ? "" : "w-0 border-r-transparent"}`}
-      style={isOpen ? { width: sidebarWidth, transition: "width 200ms" } : undefined}
+      ref={resizable.containerRef}
+      className={`bg-surface-primary border-r border-border-primary flex flex-col h-full shrink-0 overflow-hidden relative transition-[width] duration-200 ${isOpen ? "" : "w-0 border-r-transparent"}`}
+      style={isOpen ? { width: `${resizable.width}px` } : undefined}
     >
       {/* 新建对话按钮 */}
       <div className="p-4 shrink-0">
@@ -333,8 +303,8 @@ export default function LeftSidebar({
       {/* 拖拽调整宽度的把手 — 仅在侧边栏打开时显示 */}
       {isOpen && (
         <div
-          className="absolute top-0 bottom-0 right-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 transition-colors"
-          onMouseDown={handleResizeMouseDown}
+          className="absolute top-0 bottom-0 right-0 w-1.5 cursor-col-resize z-50 hover:bg-brand-blue/30 active:bg-brand-blue/50 transition-colors"
+          onMouseDown={resizable.onResizeStart}
         />
       )}
     </aside>
