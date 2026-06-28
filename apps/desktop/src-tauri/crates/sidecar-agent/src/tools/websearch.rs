@@ -219,129 +219,30 @@ impl Tool for WebSearchTool {
             .unwrap_or(8)
             .min(8) as usize;
 
-        // ── Phase 1: Call provider API for search ──
-        // Claude Code pattern: the web_search tool delegates to the LLM API.
-        // We send a minimal request — no excess context, just the query.
+        // ── Phase 1: DuckDuckGo Lite (real search, no hallucinations) ──
+        // DDG returns real scraped results — URLs actually exist.
         let provider = &ctx.provider_config;
         let start = std::time::Instant::now();
-        let date_str = current_month_year();
-
-        // Build domain constraints into the query if present
-        let mut search_query = query.to_string();
-        if !allowed_domains.is_empty() {
-            search_query.push_str(&format!(" site:{}", allowed_domains.join(" OR site:")));
-        }
-        if !blocked_domains.is_empty() {
-            search_query.push_str(&format!(" -site:{}", blocked_domains.join(" -site:")));
-        }
-
-        let fut = async {
-            let client = reqwest::Client::builder()
-                .timeout(Duration::from_secs(15))
-                .build()
-                .map_err(|e| format!("Failed to build client: {}", e))?;
-
-            // Minimal context: system prompt with date hint + format instruction.
-            // No user conversation history, no tool outputs, no extra context.
-            let sys_prompt = format!(
-                "You are a web search assistant. The current date is {}.\n\
-                 Search the query and list up to {} results, each on a new line as: \
-                 \"- Title URL\". Do not add any commentary, introduction, or summary.",
-                date_str, max_results
-            );
-            let request_body = &SearchRequest {
-                model: provider.model.clone(),
-                messages: vec![
-                    SearchMessage {
-                        role: "system".to_string(),
-                        content: sys_prompt,
-                    },
-                    SearchMessage {
-                        role: "user".to_string(),
-                        content: search_query.clone(),
-                    },
-                ],
-                stream: false,
-                enable_search: Some(true),
-            };
-
-            let response = client
-                .post(&provider.endpoint_url)
-                .header("Authorization", format!("Bearer {}", provider.api_key))
-                .header("Content-Type", "application/json")
-                .json(request_body)
-                .send()
-                .await
-                .map_err(|e| format!("Provider search request failed: {}", e))?;
-
-            if !response.status().is_success() {
-                let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                return Err(format!("Provider returned error {}: {}", status, body));
-            }
-
-            let resp: SearchResponse = response
-                .json()
-                .await
-                .map_err(|e| format!("Failed to parse search response: {}", e))?;
-
-            let content = resp
-                .choices
-                .first()
-                .map(|c| c.message.content.clone())
-                .unwrap_or_default();
-
-            Ok(content)
-        };
-
-        let search_result = match tokio::runtime::Handle::try_current() {
-            Ok(handle) => handle.block_on(fut),
-            Err(_) => {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(fut)
-            }
-        };
-
+        let ddg_result = self.do_ddg_search(query, &allowed_domains, &blocked_domains, max_results);
         let duration_ms = start.elapsed().as_millis() as u64;
 
-        let content = match search_result {
-            Ok(c) => c,
-            Err(e) => {
-                return self.fallback_ddg(query, &allowed_domains, &blocked_domains, max_results, &e);
+        let (results, note): (Vec<Value>, Option<String>) = match ddg_result {
+            Ok(r) if !r.is_empty() => (r, None),
+            ddg_outcome => {
+                let ddg_err = ddg_outcome.as_ref().err().map(|e| e.as_str()).unwrap_or("no results");
+                // Fall back to provider search
+                match self.do_provider_search(query, &allowed_domains, &blocked_domains, max_results, provider) {
+                    Ok(r) if !r.is_empty() => (r, Some(format!("DDG: {} — using provider results", ddg_err))),
+                    Ok(_) => (vec![], Some(format!("DDG: {} — provider also returned no results", ddg_err))),
+                    Err(pe) => (vec![], Some(format!("DDG: {} — provider: {}", ddg_err, pe))),
+                }
             }
         };
 
-        // ── Phase 2: Parse and format results ──
-        // Matches Claude Code's mapToolResultToToolResultBlockParam:
-        // results → formatted output → REMINDER about citing sources.
-        let results = extract_search_results(&content);
-        let display_results: Vec<_> = results.into_iter().take(max_results).collect();
+        let display_results: Vec<Value> = results.into_iter().take(max_results).collect();
 
-        // ── Claude Code format: clean text, no JSON duplication ──
-        // mapToolResultToToolResultBlockParam returns a flat string:
-        // "Web search results for query: \"...\"\n\nLinks: [...]\n\nREMINDER: ..."
-        let formatted = if display_results.is_empty() {
-            format!(
-                "Web search results for query: \"{}\"\n\nNo results found.\n\n\
-                 REMINDER: You MUST cite any sources you reference using markdown \
-                 hyperlinks, e.g. [Source Title](URL).",
-                query
-            )
-        } else {
-            let links: Vec<String> = display_results.iter().map(|r| {
-                let t = r["title"].as_str().unwrap_or("");
-                let u = r["url"].as_str().unwrap_or("");
-                format!("{{\"title\":\"{}\",\"url\":\"{}\"}}", t, u)
-            }).collect();
-            format!(
-                "Web search results for query: \"{}\"\n\n\
-                 Links: [{}]\n\n\
-                 REMINDER: You MUST cite the sources above in your response to the \
-                 user using markdown hyperlinks, e.g. [Source Title](URL).",
-                query,
-                links.join(", ")
-            )
-        };
+        // ── Format output (Claude Code style) ──
+        let formatted = format_search_output(query, &display_results, note.as_deref());
 
         ToolResult::success(serde_json::json!({
             "message": formatted
@@ -350,15 +251,14 @@ impl Tool for WebSearchTool {
 }
 
 impl WebSearchTool {
-    /// Fallback to DuckDuckGo Lite when the provider doesn't support search.
-    fn fallback_ddg(
+    /// Primary: DuckDuckGo Lite — real scraped results, no hallucinations.
+    fn do_ddg_search(
         &self,
         query: &str,
         allowed_domains: &[String],
         blocked_domains: &[String],
         max_results: usize,
-        provider_error: &str,
-    ) -> ToolResult {
+    ) -> Result<Vec<serde_json::Value>, String> {
         let encoded: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
         let ddg_url = format!("https://lite.duckduckgo.com/lite/?q={}", encoded);
 
@@ -389,15 +289,7 @@ impl WebSearchTool {
             }
         };
 
-        let html = match fetch_result {
-            Ok(h) => h,
-            Err(e) => {
-                return ToolResult::error(format!(
-                    "Provider search failed ({}), and DDG fallback also failed: {}",
-                    provider_error, e
-                ))
-            }
-        };
+        let html = fetch_result.map_err(|e| format!("DDG fetch failed: {}", e))?;
 
         // Parse DDG Lite results
         let re_link = regex::Regex::new(
@@ -456,34 +348,100 @@ impl WebSearchTool {
             if results.len() >= max_results { break; }
         }
 
-        let formatted = if results.is_empty() {
-            format!(
-                "Web search results for query: \"{}\"\n\nNo results found.\n\n\
-                 REMINDER: You MUST cite any sources you reference using markdown \
-                 hyperlinks, e.g. [Source Title](URL).",
-                query
-            )
-        } else {
-            let links: Vec<String> = results.iter().map(|r| {
-                let t = r["title"].as_str().unwrap_or("");
-                let u = r["url"].as_str().unwrap_or("");
-                format!("{{\"title\":\"{}\",\"url\":\"{}\"}}", t, u)
-            }).collect();
-            format!(
-                "Web search results for query: \"{}\"\n\n\
-                 Links: [{}]\n\n\
-                 REMINDER: You MUST cite the sources above in your response to the \
-                 user using markdown hyperlinks, e.g. [Source Title](URL).",
-                query,
-                links.join(", ")
-            )
+        Ok(results)
+    }
+
+    /// Fallback: provider API search (DeepSeek enable_search).
+    fn do_provider_search(
+        &self,
+        query: &str,
+        allowed_domains: &[String],
+        blocked_domains: &[String],
+        max_results: usize,
+        provider: &crate::provider::ProviderConfig,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let date_str = current_month_year();
+        let mut search_query = query.to_string();
+        if !allowed_domains.is_empty() {
+            search_query.push_str(&format!(" site:{}", allowed_domains.join(" OR site:")));
+        }
+        if !blocked_domains.is_empty() {
+            search_query.push_str(&format!(" -site:{}", blocked_domains.join(" -site:")));
+        }
+
+        let fut = async {
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(15))
+                .build()
+                .map_err(|e| format!("Failed to build client: {}", e))?;
+
+            let sys_prompt = format!(
+                "You are a web search assistant. The current date is {}.\n\
+                 Search the query and list up to {} results, each on a new line as: \
+                 \"- Title URL\". Do not add any commentary, introduction, or summary.",
+                date_str, max_results
+            );
+            let request_body = &SearchRequest {
+                model: provider.model.clone(),
+                messages: vec![
+                    SearchMessage { role: "system".to_string(), content: sys_prompt },
+                    SearchMessage { role: "user".to_string(), content: search_query },
+                ],
+                stream: false,
+                enable_search: Some(true),
+            };
+
+            let response = client
+                .post(&provider.endpoint_url)
+                .header("Authorization", format!("Bearer {}", provider.api_key))
+                .header("Content-Type", "application/json")
+                .json(request_body)
+                .send()
+                .await
+                .map_err(|e| format!("Provider request failed: {}", e))?;
+
+            if !response.status().is_success() {
+                return Err(format!("Provider returned {}", response.status()));
+            }
+
+            let resp: SearchResponse = response.json().await.map_err(|e| format!("Parse error: {}", e))?;
+            let content = resp.choices.first().map(|c| c.message.content.clone()).unwrap_or_default();
+            Ok(content)
         };
 
-        ToolResult::success(serde_json::json!({
-            "message": formatted,
-            "note": format!("Provider search unavailable: {}", provider_error)
-        }))
+        let content = match tokio::runtime::Handle::try_current() {
+            Ok(h) => h.block_on(fut),
+            Err(_) => tokio::runtime::Runtime::new().unwrap().block_on(fut),
+        }?;
+
+        Ok(extract_search_results(&content))
     }
+}
+
+/// Format search results into the Claude Code-style output message.
+fn format_search_output(query: &str, results: &[serde_json::Value], note: Option<&str>) -> String {
+    let mut out = format!("Web search results for query: \"{}\"\n\n", query);
+
+    if let Some(n) = note {
+        out.push_str(&format!("Note: {}\n\n", n));
+    }
+
+    if results.is_empty() {
+        out.push_str("No results found.\n");
+    } else {
+        let links: Vec<String> = results.iter().map(|r| {
+            let t = r["title"].as_str().unwrap_or("");
+            let u = r["url"].as_str().unwrap_or("");
+            format!("{{\"title\":\"{}\",\"url\":\"{}\"}}", t, u)
+        }).collect();
+        out.push_str(&format!("Links: [{}]\n", links.join(", ")));
+    }
+
+    out.push_str(
+        "\nREMINDER: You MUST cite the sources above in your response to the \
+         user using markdown hyperlinks, e.g. [Source Title](URL)."
+    );
+    out
 }
 
 #[cfg(test)]
