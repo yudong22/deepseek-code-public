@@ -47,7 +47,7 @@ const buildComponents = (onPreviewFile?: PreviewFile) => ({
       {children}
     </h6>
   ),
-  pre: ({ children, ...rest }: any) => {
+  pre: ({ children }: any) => {
     // streamdown 内置 CodeBlock 已包含复制按钮 + 高亮，直接透传
     // 但需要包裹在 group 中以便外部样式控制
     return (

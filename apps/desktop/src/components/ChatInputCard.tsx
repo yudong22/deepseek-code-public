@@ -394,7 +394,7 @@ export default function ChatInputCard({
         e.preventDefault();
         const el = editorRef.current;
         if (!el) return;
-        const { text, files } = extractContent(el);
+        const { files } = extractContent(el);
         onSend(files.length > 0 ? files : undefined);
         syncingRef.current = true;
         onInputChange("");
@@ -563,7 +563,7 @@ export default function ChatInputCard({
               onClick={() => {
                 const el = editorRef.current;
                 if (!el) return;
-                const { text, files } = extractContent(el);
+                const { files } = extractContent(el);
                 onSend(files.length > 0 ? files : undefined);
                 syncingRef.current = true;
                 onInputChange("");
