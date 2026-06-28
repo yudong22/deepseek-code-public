@@ -188,7 +188,9 @@ export default function ChatInputCard({
     const atIdx = textBefore.lastIndexOf("@");
     if (atIdx === -1) return null;
     const charBefore = atIdx > 0 ? textBefore[atIdx - 1] : " ";
-    if (charBefore !== " " && atIdx !== 0) return null;
+    // Accept regular space, non-breaking space (&nbsp;), or start of text node
+    const isSeparator = charBefore === " " || charBefore === " " || atIdx === 0;
+    if (!isSeparator) return null;
     const q = textBefore.slice(atIdx + 1);
     if (q.includes(" ") || q.includes("\n")) return null;
     return { query: q, startNode: range.startContainer as Text, startOffset: atIdx };
