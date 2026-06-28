@@ -62,9 +62,9 @@ function createChipElement(file: AttachedFile): HTMLSpanElement {
   chip.contentEditable = "false";
   chip.style.cssText =
     "display:inline-flex;align-items:center;gap:3px;padding:1px 7px;" +
-    "background:var(--dsw-static-deepseek-100,#e4edfd);border:1px solid var(--dsw-static-deepseek-200,#d3e2ff);" +
+    "background:var(--color-surface-secondary,#f2f2f7);border:1px solid var(--color-border-primary,#e3e3e3);" +
     "border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;" +
-    "color:var(--dsw-static-deepseek-700,#2f4c8f);vertical-align:baseline;" +
+    "color:var(--color-label-primary,#111);vertical-align:baseline;" +
     "margin:0 1px;transition:background 0.15s,border-color 0.15s;";
   chip.title = file.fullPath;
   chip.innerHTML = `<span style="font-size:12px;line-height:1">${file.icon}</span><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</span>`;
