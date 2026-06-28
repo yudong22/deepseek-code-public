@@ -77,7 +77,6 @@ interface TitleBarProps {
   onToggleLeftSidebar: () => void;
   onToggleRightSidebar: () => void;
   onNavigate: (delta: number) => void;
-  onSettingsOpen: () => void;
   onTabClick: (tabId: string) => void;
   onTabClose: (tabId: string, e: React.MouseEvent) => void;
   isNightMode: boolean;
@@ -102,7 +101,6 @@ export default function TitleBar({
   onToggleLeftSidebar,
   onToggleRightSidebar,
   onNavigate,
-  onSettingsOpen,
   onTabClick,
   onTabClose,
   isNightMode,

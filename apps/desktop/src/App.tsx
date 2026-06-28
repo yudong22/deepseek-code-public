@@ -938,7 +938,6 @@ function MainDashboard() {
         onToggleLeftSidebar={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
         onToggleRightSidebar={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
         onNavigate={(delta) => navigate(delta)}
-        onSettingsOpen={() => setIsSettingsOpen(true)}
         onTabClick={setActiveTabId}
         onTabClose={closeTab}
         isNightMode={isNightMode}
