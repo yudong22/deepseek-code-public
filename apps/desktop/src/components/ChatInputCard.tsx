@@ -471,7 +471,7 @@ export default function ChatInputCard({
   }, [inputText]);
 
   return (
-    <div className="relative flex flex-col bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-700 rounded-xl w-full transition-all duration-200 shadow-sm focus-within:border-zinc-400 dark:focus-within:border-zinc-500">
+    <div className="relative flex flex-col bg-surface-secondary rounded-xl w-full transition-all duration-200 shadow-sm">
       <div
         ref={editorRef}
         className="w-full bg-transparent border-0 outline-none text-[13px] text-zinc-800 dark:text-label-primary placeholder-zinc-400 dark:placeholder-zinc-500 overflow-y-auto px-4 pt-3 pb-2.5 min-h-[38px] max-h-48"
@@ -504,7 +504,7 @@ export default function ChatInputCard({
       <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
         <div className="flex items-center gap-1.5">
           <button
-            className="bg-transparent border-0 cursor-pointer text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-md transition-colors flex items-center justify-center"
+            className="bg-surface-secondary hover:bg-surface-hover border-0 cursor-pointer text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-md transition-colors flex items-center justify-center"
             onClick={handlePlusClick}
             title="Add Context"
           >
@@ -512,14 +512,14 @@ export default function ChatInputCard({
           </button>
           <div className="relative flex items-center">
             <button
-              className="flex items-center gap-1 bg-transparent hover:bg-zinc-100 hover:bg-surface-hover text-[12px] font-medium text-zinc-500 dark:text-zinc-400 px-2 py-1 rounded-md transition-colors border-0 cursor-pointer"
+              className="flex items-center gap-1 bg-surface-secondary hover:bg-surface-hover text-[12px] font-medium text-[#333] dark:text-[#d0d0d0] px-2 py-1 rounded-md transition-colors border-0 cursor-pointer"
               onClick={(e) => { e.stopPropagation(); onToggleModelDropdown(); }}
             >
               <span>{selectedModel}</span>
               <Icons.ChevronDown />
             </button>
             {isModelDropdownOpen && (
-              <div className="absolute bottom-full left-0 mb-1 bg-white dark:bg-surface-secondary border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 py-1 w-44 flex flex-col overflow-hidden">
+              <div className="absolute bottom-full left-0 mb-1 bg-surface-secondary rounded-lg shadow-lg z-50 py-1 w-44 flex flex-col overflow-hidden">
                 <div
                   className={`px-3 py-1.5 text-[13px] hover:bg-surface-secondary hover:bg-surface-hover cursor-pointer transition-colors ${
                     selectedModel === "deepseek-v4-flash" ? "text-brand-blue font-medium" : "text-zinc-700 dark:text-zinc-300"
@@ -551,7 +551,7 @@ export default function ChatInputCard({
           </button>
           {isGenerating && !hasPendingQuestion ? (
             <button
-              className="w-7 h-7 flex items-center justify-center bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-600 dark:text-zinc-300 rounded-full cursor-pointer border-0 transition-colors"
+              className="w-7 h-7 flex items-center justify-center bg-surface-secondary hover:bg-surface-hover text-[#333] dark:text-[#d0d0d0] rounded-full cursor-pointer border-0 transition-colors"
               onClick={onCancel}
               title="Stop"
             >
@@ -559,7 +559,7 @@ export default function ChatInputCard({
             </button>
           ) : (editorRef.current?.textContent?.trim() || hasPendingQuestion) ? (
             <button
-              className="w-7 h-7 flex items-center justify-center bg-zinc-800 dark:bg-zinc-200 hover:bg-zinc-700 dark:hover:bg-white text-white dark:text-zinc-900 rounded-full cursor-pointer border-0 transition-colors"
+              className="w-7 h-7 flex items-center justify-center bg-brand-blue hover:bg-brand-blue-hover text-white rounded-full cursor-pointer border-0 transition-colors"
               onClick={() => {
                 const el = editorRef.current;
                 if (!el) return;
