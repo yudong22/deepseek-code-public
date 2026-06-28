@@ -299,6 +299,12 @@ pub enum AgentEvent {
         pattern: String,
         severity: String,
     },
+
+    // ── TodoWrite (1 variant) ──
+    #[serde(rename = "TodoUpdated")]
+    TodoUpdated {
+        todos: serde_json::Value,
+    },
 }
 
 impl serde::Serialize for AgentEvent {
@@ -436,6 +442,12 @@ impl serde::Serialize for AgentEvent {
                     severity: &'a str,
                 }
                 map.serialize_entry("payload", &PolicyConfirmPayload { call_id, command, pattern, severity })?;
+            }
+
+            // ── TodoUpdated ──
+            AgentEvent::TodoUpdated { todos } => {
+                map.serialize_entry("type", "TodoUpdated")?;
+                map.serialize_entry("payload", todos)?;
             }
         }
 

@@ -43,6 +43,9 @@ pub struct Agent {
     total_tokens_output: i64,
     total_tokens_reasoning: i64,
     step_count: usize,
+    /// Set to true when the current turn was primed by WebFetch/WebSearch
+    /// (untrusted external content). Dangerous mutating tools are blocked.
+    primed_by_untrusted: bool,
 }
 
 impl Agent {
@@ -84,6 +87,7 @@ impl Agent {
             total_tokens_output: 0,
             total_tokens_reasoning: 0,
             step_count: 0,
+            primed_by_untrusted: false,
         }
     }
 
@@ -277,6 +281,7 @@ impl Agent {
 
             let mut read_only_calls: Vec<PendingCall> = Vec::new();
             let mut mutating_calls: Vec<PendingCall> = Vec::new();
+            let mut just_got_untrusted = false; // web cache/webfetch was called this turn
 
             for (call_id, name, args_str) in &tool_calls_this_turn {
                 let args: serde_json::Value =
@@ -291,6 +296,11 @@ impl Agent {
                     read_only_calls.push(entry);
                 } else {
                     mutating_calls.push(entry);
+                }
+
+                // Detect untrusted sources — mark after this turn completes
+                if name == "webfetch" || name == "websearch" {
+                    just_got_untrusted = true;
                 }
             }
 
@@ -453,6 +463,36 @@ impl Agent {
                         }
                     }
                 } else {
+                    // ── Untrusted source priming: block dangerous mutating tools ──
+                    if self.primed_by_untrusted {
+                        let dangerous_after_untrusted = ["bash", "file_write", "file_edit"];
+                        if dangerous_after_untrusted.contains(&call.name.as_str()) {
+                            self.emit(AgentEvent::ToolFailed {
+                                name: call.name.clone(),
+                                error: format!(
+                                    "Tool '{}' blocked: mutating tool not allowed in turn \
+                                     following external content (WebFetch/WebSearch). \
+                                     User confirmation required for safety.",
+                                    call.name
+                                ),
+                                call_id: call.call_id.clone(),
+                            })?;
+                            self.messages.push(ChatMessage {
+                                role: "tool".to_string(),
+                                content: Some(format!(
+                                    "Error: Tool '{}' blocked due to untrusted content priming",
+                                    call.name
+                                )),
+                                tool_call_id: Some(call.call_id.clone()),
+                                tool_calls: None,
+                            });
+                            self.emit(AgentEvent::ToolEnded {
+                                call_id: call.call_id.clone(),
+                            })?;
+                            continue;
+                        }
+                    }
+
                     // Safety check for Bash tool
                     if call.name == "bash" {
                         let command_str = call.args.get("command").and_then(|v| v.as_str()).unwrap_or("");
@@ -550,6 +590,14 @@ impl Agent {
                                     tool_call_id: Some(call.call_id.clone()),
                                     tool_calls: None,
                                 });
+                                // Emit TodoUpdated event for TodoWrite tool
+                                if call.name == "todowrite" {
+                                    if let Some(todos) = enriched.get("todos") {
+                                        let _ = self.emit(AgentEvent::TodoUpdated {
+                                            todos: todos.clone(),
+                                        });
+                                    }
+                                }
                             }
                             ToolResult::Error { message } => {
                                 self.emit(AgentEvent::ToolFailed {
@@ -580,6 +628,8 @@ impl Agent {
                 })?;
             }
 
+            // After all tools complete this turn: set untrusted priming for NEXT turn
+            self.primed_by_untrusted = just_got_untrusted;
             self.emit(AgentEvent::StepEnded)?;
         }
 

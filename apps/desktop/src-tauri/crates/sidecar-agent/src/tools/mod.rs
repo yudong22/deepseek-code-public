@@ -133,10 +133,11 @@ pub mod file_write;
 pub mod glob;
 pub mod grep;
 pub mod question;
+pub mod todowrite;
 pub mod webfetch;
 pub mod websearch;
 
-/// Create the default tool registry with all 9 tools.
+/// Create the default tool registry with all 10 tools.
 /// The question tool answer flow is handled at the agent loop level.
 pub fn default_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
@@ -147,6 +148,7 @@ pub fn default_registry() -> ToolRegistry {
     registry.register(Box::new(grep::GrepTool));
     registry.register(Box::new(glob::GlobTool));
     registry.register(Box::new(question::QuestionTool));
+    registry.register(Box::new(todowrite::TodoWriteTool));
     registry.register(Box::new(webfetch::WebFetchTool));
     registry.register(Box::new(websearch::WebSearchTool));
     registry

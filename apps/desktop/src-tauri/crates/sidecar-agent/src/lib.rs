@@ -16,3 +16,4 @@ pub mod provider;
 pub mod tools;
 pub mod agent;
 pub mod session;
+pub mod safety;

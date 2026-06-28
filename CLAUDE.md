@@ -143,7 +143,7 @@ The frontend never calls Tauri APIs directly. All backend communication goes thr
 - **`tools/mod.rs`** — Tool trait 新增 `is_read_only()` 方法；ToolRegistry 改用 `Arc<dyn Tool>` 支持跨线程共享
 - **`protocol.rs`** — 17 AgentEvent 类型（自定义 Serialize 确保 `"payload": null`），stdin 解析，工具结果增强
 - **`provider.rs`** — 4 供应商 SSE 流（OpenAI-compatible），`ChatCompletionRequest` 序列化，SSE chunk 解析
-- **`tools/`** — 7 工具：`bash`(mutating)/`file_read`(read-only)/`file_write`(mutating)/`file_edit`(mutating)/`grep`(read-only)/`glob`(read-only)/`question`(serial)
+- **`tools/`** — 10 工具：`bash`(mutating)/`file_read`(read-only)/`file_write`(mutating)/`file_edit`(mutating)/`grep`(read-only)/`glob`(read-only)/`question`(serial)/`todowrite`(mutating)/`webfetch`(read-only)/`websearch`(read-only)
 - **`session.rs`** — SQLite 会话管理（`.opencode/opencode.db`）
 
 `apps/desktop/src-tauri/src/lib.rs`:

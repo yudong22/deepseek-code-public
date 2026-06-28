@@ -89,14 +89,17 @@ apps/desktop/src-tauri/
             ├── provider.rs  # SSE 流解析、ChatCompletionRequest、多 provider 路由
             ├── session.rs   # SQLite 会话管理（.opencode/opencode.db）
             └── tools/
-                ├── mod.rs   # Tool trait（含 is_read_only）、ToolRegistry（Arc 共享）
-                ├── bash.rs
+                ├── mod.rs   # Tool trait（含 is_read_only/cancel_flag）、ToolRegistry（Arc 共享）
+                ├── bash.rs        # 写入 — 串行，含 timeout/cancel/env_clear
                 ├── file_read.rs   # 只读 — 可并行
-                ├── file_write.rs  # 写入 — 串行
-                ├── file_edit.rs   # 写入 — 串行
-                ├── grep.rs        # 只读 — 可并行
-                ├── glob.rs        # 只读 — 可并行
-                └── question.rs    # 交互式 Q&A — 串行
+                ├── file_write.rs  # 写入 — 串行（原子写 tmp+rename）
+                ├── file_edit.rs   # 写入 — 串行（replace_all 可选）
+                ├── grep.rs        # 只读 — 可并行（支持 context 参数）
+                ├── glob.rs        # 只读 — 可并行（ignore crate）
+                ├── question.rs    # 交互式 Q&A — 串行
+                ├── todowrite.rs   # 写入 — session todo 列表 + TodoUpdated 事件
+                ├── webfetch.rs    # 只读 — HTTP(S) 拉取，SSRF 检查，html2md 转换
+                └── websearch.rs   # 只读 — DuckDuckGo HTML 搜索 + 过滤
 ```
 
 ---

@@ -12,11 +12,11 @@
 | 主线 | 版本 | 主题 | 状态 |
 |---|---|---|---|
 | **v0.6.0** Coding + 治理同步 | | | |
-| Coding 能力 | v0.6.0 | 工具集对齐：TodoWrite / WebFetch / WebSearch / SubAgent | UI 占位已有 |
-| Coding 能力 | v0.6.0 | Tool 工具调用基建升级（流式、超时、取消、原子写） | 串行执行 |
-| Coding 能力 | v0.6.0 | Bash 安全护栏（超时、危险命令确认、env 清理） | 无任何保护 |
-| 治理与可信 | v0.6.0 | Prompt injection 防护（WebFetch 强依赖） | 无 |
-| 治理与可信 | v0.6.0 | 人机协作边界（plan-then-confirm + diff review） | 无 |
+| Coding 能力 | v0.6.0 | 工具集对齐：TodoWrite / WebFetch / WebSearch (SubAgent 推 v0.6.1) | ✅ 已实现 |
+| Coding 能力 | v0.6.0 | Tool 工具调用基建升级（超时取消轮询、原子写、replace_all、越界检查） | ✅ 已实现 |
+| Coding 能力 | v0.6.0 | Bash 安全护栏（超时、危险命令黑名单+PolicyConfirm、env 清理） | ✅ 已实现 |
+| 治理与可信 | v0.6.0 | Prompt injection 防护（EXTERNAL_UNTRUSTED_CONTENT 包装 + secret 过滤） | ✅ 已实现 |
+| 治理与可信 | v0.6.0 | 人机协作边界（plan-then-confirm + diff review） | 推 v0.6.1 |
 | **v0.6.1 / v0.6.2** Bug 修复 | | | |
 | Coding 能力 | v0.6.1 | `openhands run` 自愈流水线正式启用 + 端到端集成测试 | 局部就绪 |
 | Coding 能力 | v0.6.2 | fastValidate fail-fast、callAgent 失败推进预算、--task-id 校验 | 调研完成 |
