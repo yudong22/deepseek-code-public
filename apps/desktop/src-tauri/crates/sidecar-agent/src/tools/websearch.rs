@@ -239,8 +239,9 @@ impl Tool for WebSearchTool {
 }
 
 impl WebSearchTool {
-    /// Primary: DuckDuckGo Instant Answer API (api.duckduckgo.com).
-    /// Returns JSON — no HTML parsing, no anti-bot blocking.
+    /// Primary: SearXNG public instance — real search results via JSON API.
+    /// SearXNG is an open-source metasearch engine. Public instances are free.
+    /// Fallback instance list if primary fails.
     fn do_ddg_search(
         &self,
         query: &str,
@@ -249,86 +250,56 @@ impl WebSearchTool {
         max_results: usize,
     ) -> Result<Vec<serde_json::Value>, String> {
         let encoded: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
-        let api_url = format!("https://api.duckduckgo.com/?q={}&format=json&no_html=1&skip_disambig=1", encoded);
 
-        let fetch_ddg = || -> Result<serde_json::Value, String> {
-            let client = reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(10))
-                .build()
-                .map_err(|e| format!("Failed to build client: {}", e))?;
+        // Try multiple public SearXNG instances
+        let instances = [
+            "https://search.sapti.me/search",
+            "https://searx.be/search",
+            "https://search.bus-hit.me/search",
+        ];
 
-            client
-                .get(&api_url)
-                .header("User-Agent", "deepseek-code/0.6.0")
-                .send()
-                .map_err(|e| format!("API request failed: {}", e))?
-                .json()
-                .map_err(|e| format!("JSON parse failed: {}", e))
-        };
+        let mut last_err = String::new();
+        for base_url in &instances {
+            let api_url = format!("{}?q={}&format=json&categories=general&language=zh-CN", base_url, encoded);
+            let result = (|| -> Result<Vec<serde_json::Value>, String> {
+                let client = reqwest::blocking::Client::builder()
+                    .timeout(Duration::from_secs(12))
+                    .build()
+                    .map_err(|e| format!("client: {}", e))?;
 
-        let json = fetch_ddg().map_err(|e| format!("DDG API failed: {}", e))?;
+                let resp: serde_json::Value = client
+                    .get(&api_url)
+                    .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+                    .send()
+                    .map_err(|e| format!("fetch: {}", e))?
+                    .json()
+                    .map_err(|e| format!("json: {}", e))?;
 
-        let mut results = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-
-        // Extract from Abstract (best match)
-        if let Some(url) = json.get("AbstractURL").and_then(|v| v.as_str()) {
-            if !url.is_empty() {
-                let title = json.get("AbstractText").and_then(|v| v.as_str()).unwrap_or("");
-                if !title.is_empty() && seen.insert(url.to_string()) {
-                    results.push(serde_json::json!({"title": title, "url": url, "snippet": ""}));
-                }
-            }
-        }
-
-        // Extract from RelatedTopics
-        if let Some(topics) = json.get("RelatedTopics").and_then(|v| v.as_array()) {
-            for topic in topics {
-                if results.len() >= max_results { break; }
-                let url = topic.get("FirstURL").and_then(|v| v.as_str()).unwrap_or("");
-                let title = topic.get("Text").and_then(|v| v.as_str()).unwrap_or("");
-                if url.is_empty() || title.is_empty() { continue; }
-                if !seen.insert(url.to_string()) { continue; }
-
-                // Domain filtering
-                if !allowed_domains.is_empty() || !blocked_domains.is_empty() {
-                    if let Ok(parsed) = url::Url::parse(url) {
-                        if let Some(host) = parsed.host_str().map(|h| h.to_lowercase()) {
-                            if !allowed_domains.is_empty() {
-                                let a = allowed_domains.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
-                                if !a { continue; }
-                            }
-                            if !blocked_domains.is_empty() {
-                                let b = blocked_domains.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
-                                if b { continue; }
-                            }
-                        }
+                let mut results = Vec::new();
+                let mut seen = std::collections::HashSet::new();
+                if let Some(items) = resp.get("results").and_then(|v| v.as_array()) {
+                    for item in items {
+                        if results.len() >= max_results { break; }
+                        let url = item.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                        let title = item.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                        if url.is_empty() || title.is_empty() { continue; }
+                        if !seen.insert(url.to_string()) { continue; }
+                        results.push(serde_json::json!({"title": title, "url": url, "snippet": ""}));
                     }
                 }
+                if results.is_empty() {
+                    return Err("no results in response".to_string());
+                }
+                Ok(results)
+            })();
 
-                results.push(serde_json::json!({"title": title, "url": url, "snippet": ""}));
+            match result {
+                Ok(r) => return Ok(r),
+                Err(e) => { last_err = format!("{}: {}", base_url, e); }
             }
         }
 
-        // Extract from Results (if present)
-        if let Some(items) = json.get("Results").and_then(|v| v.as_array()) {
-            for item in items {
-                if results.len() >= max_results { break; }
-                let url = item.get("FirstURL").and_then(|v| v.as_str()).unwrap_or("");
-                let title = item.get("Text").and_then(|v| v.as_str()).unwrap_or("");
-                if url.is_empty() || title.is_empty() { continue; }
-                if !seen.insert(url.to_string()) { continue; }
-                results.push(serde_json::json!({"title": title, "url": url, "snippet": ""}));
-            }
-        }
-
-        // Include raw API response in error for debugging
-        if results.is_empty() {
-            let raw = serde_json::to_string(&json).unwrap_or_default();
-            return Err(format!("DDG API returned no results. Raw: {}", &raw[..raw.len().min(500)]));
-        }
-
-        Ok(results)
+        Err(format!("All SearXNG instances failed: {}", last_err))
     }
 
     /// Fallback: provider API search (DeepSeek enable_search).
