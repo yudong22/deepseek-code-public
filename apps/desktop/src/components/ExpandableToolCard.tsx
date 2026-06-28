@@ -21,6 +21,7 @@ export default function ExpandableToolCard({ tc, onCancel }: ExpandableToolCardP
   const name = normalizeToolName(tc.name);
   const argsPreview = getArgsPreview(tc);
   const { content } = getToolResultDisplay(tc);
+  const progressText = (tc as any)._progress as string | undefined;
 
   const [expanded, setExpanded] = useState(!isDone);
 
@@ -93,6 +94,11 @@ export default function ExpandableToolCard({ tc, onCancel }: ExpandableToolCardP
               </span>
             )}
           </span>
+          {progressText && (
+            <pre className="m-0 mt-1 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all opacity-70 max-h-60 overflow-y-auto bg-transparent border-none p-0 pl-4">
+              {progressText.trim()}
+            </pre>
+          )}
         </div>
       )}
     </div>

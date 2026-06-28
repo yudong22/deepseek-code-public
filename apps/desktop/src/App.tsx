@@ -654,6 +654,27 @@ function MainDashboard() {
                 saveDraft();
               }
             }
+          } else if (event.type === "ToolProgress") {
+            // SubAgent 实时进度
+            const progressCallId = event.payload?.call_id;
+            const progressOutput = event.payload?.output;
+            if (progressCallId && progressOutput) {
+              const tc = currentToolCalls.find(t => t.call_id === progressCallId);
+              if (tc) {
+                (tc as any)._progress = ((tc as any)._progress || "") + progressOutput + "\n";
+                syncSections();
+                setMessages((prev) => {
+                  const idx = prev.findIndex((m) => m.id === assistantMsgId);
+                  if (idx > -1) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], toolCalls: [...currentToolCalls], sections: [...sections] };
+                    return updated;
+                  }
+                  return prev;
+                });
+                saveDraft();
+              }
+            }
           } else if (event.type === "ToolStarted") {
             const callId = event.payload.call_id || "";
             const execIdx = currentToolCalls.findIndex(tc => tc.call_id === callId && tc.result === undefined);
