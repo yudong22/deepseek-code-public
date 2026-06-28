@@ -195,7 +195,7 @@ fn builtin_definitions() -> Vec<AgentDefinition> {
 /// System prompt content here...
 /// ```
 fn load_custom_agents(workspace_path: &std::path::Path) -> Vec<AgentDefinition> {
-    let agents_dir = workspace_path.join(".claude").join("agents");
+    let agents_dir = workspace_path.join(".deepseek-code").join("agents");
     if !agents_dir.is_dir() {
         return vec![];
     }
@@ -488,6 +488,9 @@ impl Tool for SubAgentTool {
         let provider = ctx.provider_config.clone();
         let cancel = ctx.cancel_flag.clone();
         let def_clone = definition.clone();
+        let call_id = ctx.call_id.clone();
+        let event_tx = ctx.event_tx.clone();
+
         let (tx, rx) = mpsc::channel();
 
         std::thread::spawn(move || {
@@ -499,15 +502,26 @@ impl Tool for SubAgentTool {
                 &cancel,
                 &def_clone,
                 model,
+                &tx,
             );
-            let _ = tx.send(result);
+            let _ = tx.send(SubAgentMsg::Done(result));
         });
 
-        let result = match rx.recv() {
-            Ok(r) => r,
-            Err(_) => Err("Sub-agent thread panicked".to_string()),
+        // Poll for progress, emit ToolProgress events
+        let result = loop {
+            match rx.recv() {
+                Ok(SubAgentMsg::Progress { step, text }) => {
+                    if let Some(ref tx) = event_tx {
+                        let _ = tx.send(crate::protocol::AgentEvent::ToolProgress {
+                            call_id: call_id.clone(),
+                            output: format!("[step {}] {}", step, text),
+                        });
+                    }
+                }
+                Ok(SubAgentMsg::Done(r)) => break r,
+                Err(_) => break Err("Sub-agent thread panicked".to_string()),
+            }
         };
-
         match result {
             Ok(text_output) => ToolResult::success(serde_json::json!({
                 "status": "ok",
@@ -524,6 +538,14 @@ impl Tool for SubAgentTool {
 
 const DEFAULT_MAX_CONTINUATIONS: usize = 3;
 
+/// Messages sent from the sub-agent OS thread to the parent.
+enum SubAgentMsg {
+    /// Progress update: step number + brief description
+    Progress { step: usize, text: String },
+    /// Final result
+    Done(Result<String, String>),
+}
+
 fn run_subagent_loop(
     mut messages: Vec<crate::provider::ChatMessage>,
     workspace_path: &std::path::Path,
@@ -532,6 +554,7 @@ fn run_subagent_loop(
     cancel_flag: &std::sync::Arc<std::sync::atomic::AtomicBool>,
     definition: &AgentDefinition,
     model: String,
+    progress_tx: &mpsc::Sender<SubAgentMsg>,
 ) -> Result<String, String> {
     let mut text_output = String::new();
     let mut step = 0;
@@ -575,6 +598,18 @@ fn run_subagent_loop(
             .map_err(|e| format!("response read failed: {}", e))?;
 
         let (content, tool_calls) = parse_sse_response(&body)?;
+
+        // Emit progress
+        let preview: String = content.chars().take(80).collect();
+        let tool_names: Vec<&str> = tool_calls.iter().map(|t| t.name.as_str()).collect();
+        let _ = progress_tx.send(SubAgentMsg::Progress {
+            step,
+            text: if tool_names.is_empty() {
+                format!("{} → \"{}\"", definition.agent_type, preview)
+            } else {
+                format!("{} → calling: {}", definition.agent_type, tool_names.join(", "))
+            },
+        });
 
         text_output.push_str(&content);
 
@@ -645,6 +680,7 @@ fn run_subagent_loop(
                 call_id: tc.id.clone(),
                 cancel_flag: cancel_flag.clone(),
                 provider_config: provider_config.clone(),
+                event_tx: None,
             };
 
             let result = tool.execute(args, &tool_ctx);
@@ -753,6 +789,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         }
     }
 

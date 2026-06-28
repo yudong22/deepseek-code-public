@@ -179,6 +179,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
         let result = tool.execute(
             serde_json::json!({"command": "echo hello"}),
@@ -202,6 +203,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
         let result = tool.execute(serde_json::json!({"command": ""}), &ctx);
         assert!(matches!(result, ToolResult::Error { .. }));
@@ -216,6 +218,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
         let result = tool.execute(
             serde_json::json!({"command": "nonexistent_command_xyz_123"}),
@@ -238,6 +241,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
         let start = std::time::Instant::now();
         let result = tool.execute(
@@ -274,6 +278,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag,
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
         let start = std::time::Instant::now();
         let result = tool.execute(

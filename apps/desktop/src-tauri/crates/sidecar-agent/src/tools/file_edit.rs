@@ -167,6 +167,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
 
         let result = tool.execute(
@@ -201,6 +202,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
 
         let result = tool.execute(
@@ -232,6 +234,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
 
         let result = tool.execute(
@@ -258,6 +261,7 @@ mod tests {
             call_id: "c1".to_string(),
             cancel_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             provider_config: crate::provider::config_for_model("dummy", "dummy"),
+            event_tx: None,
         };
 
         // 1. replace_all = false (default)

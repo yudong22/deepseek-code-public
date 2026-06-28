@@ -361,6 +361,7 @@ impl Agent {
                                         call_id: call.call_id.clone(),
                                         cancel_flag,
                                         provider_config,
+                                        event_tx: None,
                                     };
                                     tool.execute(call.args, &ctx)
                                 }
@@ -590,6 +591,7 @@ impl Agent {
                         call_id: call.call_id.clone(),
                         cancel_flag: self.cancel_flag.clone(),
                         provider_config: self.provider_config.clone(),
+                        event_tx: Some(self.event_tx.clone()),
                     };
 
                     match self.tools.find(&call.name) {

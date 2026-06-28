@@ -11,7 +11,7 @@ use std::sync::atomic::AtomicBool;
 // ─── Tool Context ──────────────────────────────────
 
 /// Context passed to every tool execution.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ToolContext {
     /// Absolute path to the workspace root (directory where the agent operates)
     pub workspace_path: PathBuf,
@@ -23,6 +23,10 @@ pub struct ToolContext {
     pub cancel_flag: Arc<AtomicBool>,
     /// Provider configuration for nested LLM queries (e.g. WebFetch summaries)
     pub provider_config: crate::provider::ProviderConfig,
+    /// Optional event sender for tools that emit streaming progress
+    /// (e.g., SubAgent sends ToolProgress events for each step).
+    #[allow(dead_code)]
+    pub event_tx: Option<tokio::sync::mpsc::UnboundedSender<crate::protocol::AgentEvent>>,
 }
 
 /// Result of a tool execution.
