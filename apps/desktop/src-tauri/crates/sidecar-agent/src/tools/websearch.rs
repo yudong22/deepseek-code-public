@@ -70,7 +70,7 @@ fn extract_search_results(text: &str) -> Vec<Value> {
     // Captures title text BEFORE the URL on the same line.
     if results.is_empty() {
         let re_bullet = regex::Regex::new(
-            r"(?m)^[-\d]+[.)]\s+(.*?)\s+(https?://[^\s]+)$"
+            r"(?m)^[-\d]+[.)]?\s+(.+?)\s+(https?://[^\s]+)$"
         ).unwrap();
         for cap in re_bullet.captures_iter(text) {
             let title = cap.get(1).map(|m| m.as_str()).unwrap_or("").trim().to_string();
